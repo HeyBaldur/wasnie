@@ -123,6 +123,19 @@
   </div>
 
   <div class="ds-section">
+    <h2 class="ds-section__title">Guide stepper</h2>
+    <p class="ds-note">
+      Vertical, con descripción y estado por paso. Es el panel de guía — «entendé qué hace cada
+      paso» —, distinto del wizard horizontal, que responde «dónde estoy». Comparten los tokens de
+      estado.
+    </p>
+    <div class="ds-grid-2">
+      <ws-guide-stepper [steps]="guideSteps" (stepSelect)="guidePicked.set($event)" />
+    </div>
+    <p class="ds-note">Selected: {{ guidePicked() }}</p>
+  </div>
+
+  <div class="ds-section">
     <h2 class="ds-section__title">Inputs</h2>
     <div class="ds-grid-2">
       <ws-input label="Text input" placeholder="Enter text…" />

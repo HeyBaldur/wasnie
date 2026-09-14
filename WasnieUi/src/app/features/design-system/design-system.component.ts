@@ -15,6 +15,7 @@ import {
   type SegOption,
   type SelectOption,
 } from '../../shared/ui';
+import { WsGuideStep, WsGuideStepperComponent } from '../../shared/ui';
 import { WsSelectComponent } from '../../shared/ui/ws-select/ws-select.component';
 import { WsPopoverComponent } from '../../shared/ui/ws-popover/ws-popover.component';
 import { WsDatePickerComponent } from '../../shared/ui/ws-date-picker/ws-date-picker.component';
@@ -25,6 +26,7 @@ import { WsDateRangePickerComponent } from '../../shared/ui/ws-date-range-picker
   standalone: true,
   imports: [
     IconComponent,
+    WsGuideStepperComponent,
     WsButtonComponent,
     WsInputComponent,
     WsBadgeComponent,
@@ -56,6 +58,24 @@ export class DesignSystemComponent {
   ];
 
   readonly exportMenuOpen = signal(false);
+
+  readonly guidePicked = signal('plan');
+
+
+  /** Muestra del panel de guía: un paso de cada estado, que es lo que hay que poder comparar. */
+
+  readonly guideSteps: WsGuideStep[] = [
+
+    { id: 'plan', title: 'Create a plan', description: 'The container for the rules that decide what a sale pays.', state: 'done' },
+
+    { id: 'rule', title: 'Add a rule', description: 'The rate table: how much commission a sale generates.', state: 'current' },
+
+    { id: 'payee', title: 'Create a payee', description: 'The person who earns the commission.', state: 'available' },
+
+    { id: 'payrun', title: 'Run a pay run', description: 'Closes the period for everyone at once.', state: 'blocked', blockedReason: 'You need a calculated transaction first.' },
+
+  ];
+
 
   readonly segValue = signal('a');
   readonly modalOpen = signal(false);

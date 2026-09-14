@@ -43,6 +43,17 @@ public static class AuditActions
     public const string PlanRuleRemoved = "PLAN_RULE_REMOVED";
     public const string PlanRuleStopped = "PLAN_RULE_STOPPED";
 
+    /// <summary>
+    /// Un plan real que nació de una configuración probada en el sandbox.
+    /// </summary>
+    /// <remarks>
+    /// ★ SE REGISTRA APARTE DE <see cref="PlanCreated"/>, QUE TAMBIÉN QUEDA. Los dos hechos son
+    /// distintos y los dos importan: que existe un plan nuevo, y que su configuración no la escribió
+    /// alguien en la pantalla real sino que salió de un experimento. El día que un plan pague algo
+    /// raro, saber de dónde vino su escalera es la primera pregunta.
+    /// </remarks>
+    public const string PlanPromotedFromSandbox = "PLAN_PROMOTED_FROM_SANDBOX";
+
     // Quotas
     public const string QuotaCreated = "QUOTA_CREATED";
     public const string QuotaUpdated = "QUOTA_UPDATED";

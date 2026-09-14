@@ -15,6 +15,7 @@ import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { QuotaStatusVariantPipe, QuotaStatusLabelPipe, QuotaPeriodExpiredPipe } from '../../../shared/pipes/quota-status.pipe';
 import { QuotaStatus } from '../models/quota.model';
+import { QuotaPrereqIntroComponent } from './quota-prereq-intro.component';
 import {
   WsButtonComponent,
   WsInputComponent,
@@ -24,7 +25,6 @@ import {
   WsTableComponent,
   WsTableEmptyComponent,
   WsClickableRowDirective,
-  WsEmptyStateComponent,
   WsConfirmationModalComponent,
   WsPaginationComponent,
   type SegOption,
@@ -54,8 +54,8 @@ import {
     WsTableComponent,
     WsTableEmptyComponent,
     WsClickableRowDirective,
-    WsEmptyStateComponent,
     WsConfirmationModalComponent,
+    QuotaPrereqIntroComponent,
     WsPaginationComponent,
   ],
   templateUrl: './quotas-list.component.html',

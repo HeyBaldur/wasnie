@@ -49,8 +49,33 @@ public static class DependencyInjection
                 configuration.GetConnectionString("DefaultConnection"),
                 b => b.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
 
-        services.AddScoped<IApplicationDbContext>(sp =>
-            sp.GetRequiredService<ApplicationDbContext>());
+        // ★ EL SANDBOX LLEVA SU PROPIO HISTORIAL DE MIGRACIONES, dentro de su esquema. Los dos contextos
+        // migran la misma base de datos: con el historial por omisión se pisarían y cada uno creería que
+        // las migraciones del otro son suyas y ya están aplicadas.
+        services.AddDbContext<SandboxDbContext>(options =>
+            options.UseSqlServer(
+                configuration.GetConnectionString("DefaultConnection"),
+                b => b
+                    .MigrationsAssembly(typeof(SandboxDbContext).Assembly.FullName)
+                    .MigrationsHistoryTable(SandboxDbContext.MigrationsHistoryTable, SandboxDbContext.SchemaName)));
+
+        services.AddScoped<ISandboxScope, SandboxScope>();
+        services.AddScoped<ISandboxReset, SandboxReset>();
+        services.AddScoped<ISandboxExperiments, SandboxExperiments>();
+        services.AddScoped<ISandboxPlanSource, SandboxPlanSource>();
+
+        // ★★ TRANSITORIO A PROPÓSITO, Y NO ES UN DETALLE. La interfaz se resuelve al contexto real o al
+        // del sandbox según la marca de la petición; si la resolución se cachara por «scope», bastaría con
+        // que un middleware pidiera la interfaz antes que el controlador para dejar clavado el contexto
+        // real durante toda la petición — y el onboarding escribiría en las tablas de dinero de verdad
+        // sin que nada fallara. Preguntando en cada inyección, el orden deja de importar.
+        //
+        // Los contextos en sí siguen siendo «scoped»: se devuelve siempre la MISMA instancia de EF, así
+        // que el seguimiento de cambios y el `SaveChanges` único de cada operación siguen intactos.
+        services.AddTransient<IApplicationDbContext>(sp =>
+            sp.GetRequiredService<ISandboxScope>().IsSandbox
+                ? sp.GetRequiredService<SandboxDbContext>()
+                : sp.GetRequiredService<ApplicationDbContext>());
 
         // HTTP requests → TenantContext (reads JWT claims from HttpContext).
         // Background job scopes (no HttpContext) → BackgroundJobTenantContext (SetTenant() must be

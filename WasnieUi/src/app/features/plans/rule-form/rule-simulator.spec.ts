@@ -157,7 +157,7 @@ describe('RuleFormComponent — commission simulator', () => {
 
     // The user changes the rate and does NOT save.
     comp.form.patchValue({ rateTable: { type: RateTableType.Flat, flatRate: 0.09 } });
-    comp.onSimInput(1200);
+    comp.def.onSimInput(1200);
     tick(300);
 
     expect(api.simulateRule).toHaveBeenCalled();
@@ -173,7 +173,7 @@ describe('RuleFormComponent — commission simulator', () => {
     comp.form.patchValue({ measurement: { type: MeasurementType.Units } });
     comp.form.patchValue({ rateTable: { type: RateTableType.Flat, flatRate: 5 } });
 
-    comp.onSimInput(3);
+    comp.def.onSimInput(3);
     tick(300);
 
     const [, request] = api.simulateRule.calls.mostRecent().args;
@@ -189,25 +189,25 @@ describe('RuleFormComponent — commission simulator', () => {
     comp.form.patchValue({ name: '' });
     comp.form.updateValueAndValidity();
 
-    comp.onSimInput(1200);
+    comp.def.onSimInput(1200);
     tick(300);
 
-    expect(comp.canSimulate()).toBeFalse();
+    expect(comp.def.canSimulate()).toBeFalse();
     expect(api.simulateRule).not.toHaveBeenCalled();
-    expect(comp.simulation()).toBeNull();
+    expect(comp.def.simulation()).toBeNull();
   }));
 
   it('clearing the box drops the previous answer instead of leaving it on screen', fakeAsync(() => {
     const comp = makeComponent();
     completeForm(comp);
 
-    comp.onSimInput(1200);
+    comp.def.onSimInput(1200);
     tick(300);
-    expect(comp.simulation()).not.toBeNull();
+    expect(comp.def.simulation()).not.toBeNull();
 
-    comp.onSimInput(null);
+    comp.def.onSimInput(null);
     tick(300);
-    expect(comp.simulation()).withContext('a figure for an amount nobody typed').toBeNull();
+    expect(comp.def.simulation()).withContext('a figure for an amount nobody typed').toBeNull();
   }));
 
   // ══ ★★ Out-of-order responses ═════════════════════════════════════════
@@ -222,20 +222,20 @@ describe('RuleFormComponent — commission simulator', () => {
     const fast = new Subject<RuleSimulation>();
 
     api.simulateRule.and.returnValue(slow.asObservable());
-    comp.onSimInput(1200);
+    comp.def.onSimInput(1200);
     tick(300);
 
     api.simulateRule.and.returnValue(fast.asObservable());
-    comp.onSimInput(5000);
+    comp.def.onSimInput(5000);
     tick(300);
 
     // The second question is answered first…
     fast.next(simulation({ commissionAmount: 250 }));
-    expect(comp.simulation()!.commissionAmount).toBe(250);
+    expect(comp.def.simulation()!.commissionAmount).toBe(250);
 
     // …and then the first one finally replies. It must be dropped.
     slow.next(simulation({ commissionAmount: 100 }));
-    expect(comp.simulation()!.commissionAmount)
+    expect(comp.def.simulation()!.commissionAmount)
       .toBe(250, 'the stale answer must not overwrite the current one');
   }));
 
@@ -243,11 +243,11 @@ describe('RuleFormComponent — commission simulator', () => {
     const comp = makeComponent();
     completeForm(comp);
 
-    comp.onSimInput(1);
+    comp.def.onSimInput(1);
     tick(100);
-    comp.onSimInput(12);
+    comp.def.onSimInput(12);
     tick(100);
-    comp.onSimInput(120);
+    comp.def.onSimInput(120);
     tick(300);
 
     expect(api.simulateRule).toHaveBeenCalledTimes(1);
@@ -259,17 +259,17 @@ describe('RuleFormComponent — commission simulator', () => {
     const comp = makeComponent();
     completeForm(comp);
 
-    comp.onSimInput(1200);
+    comp.def.onSimInput(1200);
     tick(300);
-    expect(comp.simulation()).not.toBeNull();
+    expect(comp.def.simulation()).not.toBeNull();
 
     api.simulateRule.and.returnValue(throwError(() => new Error('down')));
-    comp.onSimInput(2400);
+    comp.def.onSimInput(2400);
     tick(300);
 
-    expect(comp.simErrorKey()).toBeTruthy('the failure is visible');
-    expect(comp.simulation()).withContext('never a number from the previous question next to an error').toBeNull();
-    expect(comp.simLoading()).toBeFalse();
+    expect(comp.def.simErrorKey()).toBeTruthy('the failure is visible');
+    expect(comp.def.simulation()).withContext('never a number from the previous question next to an error').toBeNull();
+    expect(comp.def.simLoading()).toBeFalse();
   }));
 
   /**
@@ -295,14 +295,14 @@ describe('RuleFormComponent — commission simulator', () => {
       error: { status: 422, code: 'RateTableRateAboveMaximum', parameters: { rate: 4, maximum: 1 } },
     })));
 
-    comp.onSimInput(50000);
+    comp.def.onSimInput(50000);
     tick(300);
 
-    expect(comp.simErrorKey()).toBe('PLANS.RATE_TABLE_ERR_RATE_TOO_HIGH_FLAT');
-    expect(comp.simErrorKey()).not.toContain('RateTableRateAboveMaximum');
+    expect(comp.def.simErrorKey()).toBe('PLANS.RATE_TABLE_ERR_RATE_TOO_HIGH_FLAT');
+    expect(comp.def.simErrorKey()).not.toContain('RateTableRateAboveMaximum');
 
     // Without the parameters the reader is shown "{{rate}}"; the key alone is not the fix.
-    expect(comp.simErrorParams()).toEqual({ rate: 4, maximum: 1 });
+    expect(comp.def.simErrorParams()).toEqual({ rate: 4, maximum: 1 });
   }));
 
   it('a coded refusal for a TIER names the tier, and its params reach the sentence', fakeAsync(() => {
@@ -318,11 +318,11 @@ describe('RuleFormComponent — commission simulator', () => {
       },
     })));
 
-    comp.onSimInput(50000);
+    comp.def.onSimInput(50000);
     tick(300);
 
-    expect(comp.simErrorKey()).toBe('PLANS.RATE_TABLE_ERR_RATE_TOO_HIGH_TIER');
-    expect(comp.simErrorParams()!['tierNumber']).toBe(2);
+    expect(comp.def.simErrorKey()).toBe('PLANS.RATE_TABLE_ERR_RATE_TOO_HIGH_TIER');
+    expect(comp.def.simErrorParams()!['tierNumber']).toBe(2);
   }));
 
   /**
@@ -339,12 +339,12 @@ describe('RuleFormComponent — commission simulator', () => {
       error: { status: 422, code: 'SomethingThisBuildHasNeverHeardOf', parameters: {} },
     })));
 
-    comp.onSimInput(1200);
+    comp.def.onSimInput(1200);
     tick(300);
 
-    expect(comp.simErrorKey()).toBeTruthy('the failure is still visible');
-    expect(comp.simErrorKey()).not.toContain('SomethingThisBuildHasNeverHeardOf');
-    expect(comp.simErrorParams()).toBeNull();
+    expect(comp.def.simErrorKey()).toBeTruthy('the failure is still visible');
+    expect(comp.def.simErrorKey()).not.toContain('SomethingThisBuildHasNeverHeardOf');
+    expect(comp.def.simErrorParams()).toBeNull();
   }));
 
   it('the parameters are cleared when the error is, so they cannot leak into the next one', fakeAsync(() => {
@@ -355,16 +355,16 @@ describe('RuleFormComponent — commission simulator', () => {
       status: 422,
       error: { status: 422, code: 'RateTableRateAboveMaximum', parameters: { rate: 4, maximum: 1 } },
     })));
-    comp.onSimInput(50000);
+    comp.def.onSimInput(50000);
     tick(300);
-    expect(comp.simErrorParams()).not.toBeNull();
+    expect(comp.def.simErrorParams()).not.toBeNull();
 
     api.simulateRule.and.returnValue(of(simulation()));
-    comp.retrySimulation();
+    comp.def.retrySimulation();
     tick(300);
 
-    expect(comp.simErrorKey()).toBeNull();
-    expect(comp.simErrorParams()).toBeNull();
+    expect(comp.def.simErrorKey()).toBeNull();
+    expect(comp.def.simErrorParams()).toBeNull();
   }));
 
   it('retry re-issues the request', fakeAsync(() => {
@@ -372,16 +372,16 @@ describe('RuleFormComponent — commission simulator', () => {
     completeForm(comp);
 
     api.simulateRule.and.returnValue(throwError(() => new Error('down')));
-    comp.onSimInput(1200);
+    comp.def.onSimInput(1200);
     tick(300);
-    expect(comp.simErrorKey()).toBeTruthy();
+    expect(comp.def.simErrorKey()).toBeTruthy();
 
     api.simulateRule.and.returnValue(of(simulation()));
-    comp.retrySimulation();
+    comp.def.retrySimulation();
     tick(300);
 
-    expect(comp.simErrorKey()).toBeNull();
-    expect(comp.simulation()!.commissionAmount).toBe(100);
+    expect(comp.def.simErrorKey()).toBeNull();
+    expect(comp.def.simulation()!.commissionAmount).toBe(100);
   }));
 
   // ══ ★ The steps are the server's ══════════════════════════════════════
@@ -394,10 +394,10 @@ describe('RuleFormComponent — commission simulator', () => {
     const comp = makeComponent();
     completeForm(comp);
 
-    comp.onSimInput(1200);
+    comp.def.onSimInput(1200);
     tick(300);
 
-    expect(comp.simulation()!.steps.map((s) => s.component)).toEqual([
+    expect(comp.def.simulation()!.steps.map((s) => s.component)).toEqual([
       RuleCalculationComponent.Trigger,
       RuleCalculationComponent.Base,
       RuleCalculationComponent.Rate,
@@ -405,7 +405,7 @@ describe('RuleFormComponent — commission simulator', () => {
       RuleCalculationComponent.Cap,
       RuleCalculationComponent.Floor,
     ]);
-    expect(comp.simulation()!.commissionAmount).toBe(100, 'the floor won over the cap');
+    expect(comp.def.simulation()!.commissionAmount).toBe(100, 'the floor won over the cap');
   }));
 
   it('an attainment rule that the server refuses is reported, not answered', fakeAsync(() => {
@@ -420,12 +420,12 @@ describe('RuleFormComponent — commission simulator', () => {
       steps: [],
     })));
 
-    comp.onSimInput(1200);
+    comp.def.onSimInput(1200);
     tick(300);
 
-    expect(comp.simulation()!.simulated).toBeFalse();
-    expect(comp.simulation()!.blocker).toBe(RuleSimulationBlocker.AttainmentContextRequired);
-    expect(comp.simulation()!.commissionAmount).toBeNull();
+    expect(comp.def.simulation()!.simulated).toBeFalse();
+    expect(comp.def.simulation()!.blocker).toBe(RuleSimulationBlocker.AttainmentContextRequired);
+    expect(comp.def.simulation()!.commissionAmount).toBeNull();
   }));
 
   // ══ ★★ The blocked state names what is missing ═══════════════════════
@@ -439,8 +439,8 @@ describe('RuleFormComponent — commission simulator', () => {
     comp.form.patchValue({ name: '' });
     comp.form.updateValueAndValidity();
 
-    expect(comp.canSimulate()).toBeFalse();
-    expect(comp.simBlockedFieldKey()).toBe('PLANS.FIELD_RULE_NAME');
+    expect(comp.def.canSimulate()).toBeFalse();
+    expect(comp.def.simBlockedFieldKey()).toBe('PLANS.FIELD_RULE_NAME');
   });
 
   it('★ the named field FOLLOWS the form, changing as the invalid control changes', () => {
@@ -449,11 +449,11 @@ describe('RuleFormComponent — commission simulator', () => {
     // to be kept in sync by hand when a field is added or renamed.
     const comp = makeComponent();
     completeForm(comp);
-    expect(comp.simBlockedFieldKey()).toBeNull();
+    expect(comp.def.simBlockedFieldKey()).toBeNull();
 
     comp.form.patchValue({ name: '' });
     comp.form.updateValueAndValidity();
-    expect(comp.simBlockedFieldKey()).toBe('PLANS.FIELD_RULE_NAME');
+    expect(comp.def.simBlockedFieldKey()).toBe('PLANS.FIELD_RULE_NAME');
 
     // Fix the name, break something later in the form: the message must move on.
     //
@@ -464,7 +464,7 @@ describe('RuleFormComponent — commission simulator', () => {
     comp.form.patchValue({ name: 'Named now', hasCap: true });
     comp.form.get('cap.amount')!.setValue(-5);
     comp.form.updateValueAndValidity();
-    expect(comp.simBlockedFieldKey()).toBe('PLANS.FIELD_CAP_AMOUNT');
+    expect(comp.def.simBlockedFieldKey()).toBe('PLANS.FIELD_CAP_AMOUNT');
   });
 
   it('★ the FIRST invalid field wins when several are broken, in form order', () => {
@@ -477,15 +477,15 @@ describe('RuleFormComponent — commission simulator', () => {
     comp.form.get('cap.amount')!.setValue(-5);
     comp.form.updateValueAndValidity();
 
-    expect(comp.simBlockedFieldKey()).toBe('PLANS.FIELD_RULE_NAME', 'name is declared first');
+    expect(comp.def.simBlockedFieldKey()).toBe('PLANS.FIELD_RULE_NAME', 'name is declared first');
   });
 
   it('a complete form names nothing and unblocks the input', () => {
     const comp = makeComponent();
     completeForm(comp);
 
-    expect(comp.canSimulate()).toBeTrue();
-    expect(comp.simBlockedFieldKey()).toBeNull();
+    expect(comp.def.canSimulate()).toBeTrue();
+    expect(comp.def.simBlockedFieldKey()).toBeNull();
   });
 
   // ══ ★★ Read-only is the case that matters most ════════════════════════
@@ -506,8 +506,8 @@ describe('RuleFormComponent — commission simulator', () => {
     comp.readOnly.set(true);
 
     expect(comp.form.valid).withContext('a disabled form is never valid — that was the trap').toBeFalse();
-    expect(comp.canSimulate()).withContext('but the definition is complete, so it simulates').toBeTrue();
-    expect(comp.simBlockedFieldKey()).toBeNull();
+    expect(comp.def.canSimulate()).withContext('but the definition is complete, so it simulates').toBeTrue();
+    expect(comp.def.simBlockedFieldKey()).toBeNull();
   });
 
   it('★ it recomputes when the form is locked, even though disable() emits no value event', () => {
@@ -516,12 +516,12 @@ describe('RuleFormComponent — commission simulator', () => {
     // makes the state settle.
     const comp = makeComponent();
     completeForm(comp);
-    expect(comp.canSimulate()).toBeTrue();
+    expect(comp.def.canSimulate()).toBeTrue();
 
     comp.form.disable({ emitEvent: false });
     comp.readOnly.set(true);
 
-    expect(comp.canSimulate()).toBeTrue();
+    expect(comp.def.canSimulate()).toBeTrue();
   });
 
   it('a read-only rule that is genuinely incomplete still names what is missing', () => {
@@ -532,8 +532,8 @@ describe('RuleFormComponent — commission simulator', () => {
     comp.form.disable({ emitEvent: false });
     comp.readOnly.set(true);
 
-    expect(comp.canSimulate()).toBeFalse();
-    expect(comp.simBlockedFieldKey()).toBe('PLANS.FIELD_FLAT_RATE');
+    expect(comp.def.canSimulate()).toBeFalse();
+    expect(comp.def.simBlockedFieldKey()).toBe('PLANS.FIELD_FLAT_RATE');
   });
 
   // ══ ★ The trigger with no conditions ══════════════════════════════════
@@ -548,8 +548,8 @@ describe('RuleFormComponent — commission simulator', () => {
     comp.form.patchValue({ hasTrigger: true });
     comp.form.updateValueAndValidity();
 
-    expect(comp.canSimulate()).toBeTrue();
-    expect(comp.simBlockedFieldKey()).toBeNull();
+    expect(comp.def.canSimulate()).toBeTrue();
+    expect(comp.def.simBlockedFieldKey()).toBeNull();
   });
 
   it('a trigger condition with no FIELD does block, and says it is the trigger', () => {
@@ -557,10 +557,10 @@ describe('RuleFormComponent — commission simulator', () => {
     const comp = makeComponent();
     completeForm(comp);
     comp.form.patchValue({ hasTrigger: true });
-    comp.addCondition();
+    comp.def.addCondition();
     comp.form.updateValueAndValidity();
 
-    expect(comp.simBlockedFieldKey()).toBe('PLANS.RULE_SECTION_TRIGGER');
+    expect(comp.def.simBlockedFieldKey()).toBe('PLANS.RULE_SECTION_TRIGGER');
   });
 
   // ══ ★ An empty box is not a zero ══════════════════════════════════════
@@ -574,11 +574,11 @@ describe('RuleFormComponent — commission simulator', () => {
     comp.form.get('cap.amount')!.setValue(null as unknown as number);
     comp.form.updateValueAndValidity();
 
-    expect(comp.simBlockedFieldKey()).toBe('PLANS.FIELD_CAP_AMOUNT');
+    expect(comp.def.simBlockedFieldKey()).toBe('PLANS.FIELD_CAP_AMOUNT');
 
     comp.form.get('cap.amount')!.setValue(0);
     comp.form.updateValueAndValidity();
-    expect(comp.simBlockedFieldKey()).withContext('a real zero is a legitimate cap').toBeNull();
+    expect(comp.def.simBlockedFieldKey()).withContext('a real zero is a legitimate cap').toBeNull();
   });
 
   it('every key the blocked message can name actually exists in the bundle', async () => {
@@ -601,7 +601,7 @@ describe('RuleFormComponent — commission simulator', () => {
       breakOne();
       comp.form.updateValueAndValidity();
 
-      const key = comp.simBlockedFieldKey();
+      const key = comp.def.simBlockedFieldKey();
       expect(key).withContext('a broken definition must name something').toBeTruthy();
       expect(bundle.PLANS[key!.slice('PLANS.'.length)])
         .withContext(`${key} is missing from en.json`).toBeDefined();
@@ -617,7 +617,7 @@ describe('RuleFormComponent — commission simulator', () => {
     ];
 
     for (const c of components) {
-      expect(comp.stepLabelKey(c)).toMatch(/^PLANS\./);
+      expect(comp.def.stepLabelKey(c)).toMatch(/^PLANS\./);
     }
   });
 });

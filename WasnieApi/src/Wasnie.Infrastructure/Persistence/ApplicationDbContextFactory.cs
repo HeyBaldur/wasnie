@@ -33,7 +33,9 @@ public sealed class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Ap
 
     /// <summary>Reads ConnectionStrings:DefaultConnection from the Api's appsettings without pulling in the
     /// Microsoft.Extensions.Configuration packages (this project has none). Dev-only best effort.</summary>
-    private static string? ReadConnectionStringFromApiSettings()
+    /// <remarks>Compartido con <see cref="SandboxDbContextFactory"/>: la cadena de conexión es la misma
+    /// base de datos; lo único que cambia entre los dos contextos es el esquema.</remarks>
+    internal static string? ReadConnectionStringFromApiSettings()
     {
         var apiDir = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "Wasnie.Api"));
         foreach (var file in new[] { "appsettings.Development.json", "appsettings.json" })
@@ -56,14 +58,14 @@ public sealed class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Ap
         return null;
     }
 
-    private sealed class DesignTimeTenantContext : ITenantContext
+    internal sealed class DesignTimeTenantContext : ITenantContext
     {
         public static readonly DesignTimeTenantContext Instance = new();
         public Guid TenantId => Guid.Empty;
         public bool IsResolved => false;
     }
 
-    private sealed class DesignTimePublisher : IPublisher
+    internal sealed class DesignTimePublisher : IPublisher
     {
         public static readonly DesignTimePublisher Instance = new();
         public Task Publish(object notification, CancellationToken cancellationToken = default) => Task.CompletedTask;

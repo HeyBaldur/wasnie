@@ -65,17 +65,6 @@
                     }
                   </nav>
                 }
-
-                <div class="manual__aside-actions">
-                  <!--
-                    Re-opens the first-run welcome video. Deliberately does NOT touch the "seen" flag:
-                    watching it again is not starting over, and setting the flag here would rob a user
-                    who lands on the manual first of the automatic showing they never got.
-                  -->
-                  <button type="button" class="manual__link" (click)="welcome.openManually()">
-                    {{ 'MANUAL.VIEW_FLOW' | translate }}
-                  </button>
-                </div>
               </div>
             </ws-card>
           </aside>

@@ -29,12 +29,58 @@ using LegacyTransaction = Wasnie.Domain.Entities.Transaction;
 
 namespace Wasnie.Infrastructure.Persistence;
 
-public sealed class ApplicationDbContext(
-    DbContextOptions<ApplicationDbContext> options,
-    ITenantContext tenantContext,
-    IPublisher publisher)
-    : IdentityDbContext<IdentityUser>(options), IApplicationDbContext
+/// <remarks>
+/// ★★ DEJÓ DE SER `sealed` PARA QUE EL SANDBOX PUEDA HEREDARLO (KAN-68), Y ESA ES LA ÚNICA RAZÓN.
+/// El onboarding guiado necesita que la MISMA lógica escriba en otro juego de tablas. Heredar es lo
+/// que evita duplicar el modelo: `SandboxDbContext` no redefine ni una configuración — sólo declara
+/// otro esquema. Un segundo contexto escrito a mano habría que mantenerlo en paralelo para siempre, y
+/// el día que se olvidara una tabla el onboarding enseñaría algo que el producto ya no hace.
+///
+/// ★★ DOS CONSTRUCTORES, Y NO ES UN CAPRICHO: LO EXIGE EF Y LO DESCUBRIÓ EL ARRANQUE. Con un único
+/// constructor que aceptara `DbContextOptions` a secas, el contenedor inyectaba aquí las opciones del
+/// OTRO contexto — `AddDbContext` registra también el tipo no genérico, y con dos contextos gana el
+/// último registrado. EF lo detecta y se niega a arrancar: «The DbContextOptions passed to the
+/// ApplicationDbContext constructor must be a DbContextOptions&lt;ApplicationDbContext&gt;».
+///
+/// El público lleva el tipo exacto, que es lo que resuelve el contenedor sin ambigüedad; el protegido
+/// existe sólo para que el heredero pueda pasar las SUYAS. Compilaba igual de bien de las dos formas:
+/// la diferencia sólo aparece al levantar la aplicación.
+/// </remarks>
+public class ApplicationDbContext : IdentityDbContext<IdentityUser>, IApplicationDbContext
 {
+    private readonly ITenantContext tenantContext;
+    private readonly IPublisher publisher;
+
+    public ApplicationDbContext(
+        DbContextOptions<ApplicationDbContext> options,
+        ITenantContext tenantContext,
+        IPublisher publisher)
+        : base(options)
+    {
+        this.tenantContext = tenantContext;
+        this.publisher = publisher;
+    }
+
+    /// <summary>Para los contextos derivados, que traen sus propias opciones tipadas.</summary>
+    protected ApplicationDbContext(
+        DbContextOptions options,
+        ITenantContext tenantContext,
+        IPublisher publisher)
+        : base(options)
+    {
+        this.tenantContext = tenantContext;
+        this.publisher = publisher;
+    }
+
+    /// <summary>
+    /// El esquema donde viven las tablas del ciclo de compensación. `null` = el esquema por omisión.
+    ///
+    /// ★★ ES LA FRONTERA ENTRE EL DINERO REAL Y EL DE PRUEBA, Y ES ESTRUCTURAL. Un pay run real
+    /// consulta `Credits`; los créditos del onboarding están en `Sandbox.Credits`. No hay filtro que
+    /// alguien pueda olvidarse de poner — la separación la hace el motor de base de datos, no una
+    /// convención que hay que recordar en cada consulta (§B5: la barrera no se desincroniza).
+    /// </summary>
+    protected virtual string? CompensationSchema => null;
     // Evaluated per-query (not at construction) so background jobs can set tenant before first DB access.
     public Guid CurrentTenantId => tenantContext.TenantId;
 
@@ -155,7 +201,103 @@ public sealed class ApplicationDbContext(
         builder.Entity<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Wasnie.Domain.Integrations.Crm.CrmDriftAlert>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Wasnie.Domain.Integrations.Crm.DealLostAlert>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+
+        // ★★ EL HISTORIAL DE EXPERIMENTOS SÓLO EXISTE EN EL SANDBOX. Se configura dentro de este `if` y no
+        // fuera: mapearlo siempre creaba una tabla `Experiments` en el esquema real para guardar
+        // pruebas que no son de nadie. Lo que es del sandbox vive en el sandbox, también cuando es
+        // una tabla suya y no una copia de una real.
+        //
+        // ★ VA ANTES DEL REPARTO DE ESQUEMAS a propósito: así la vuelta de abajo ya lo ve con su esquema
+        // puesto y no lo excluye de las migraciones por no estar en la lista de tablas duplicadas.
+        if (!string.IsNullOrWhiteSpace(CompensationSchema))
+        {
+            builder.ApplyConfiguration(new Configurations.SandboxExperimentConfiguration());
+            builder.Entity<Wasnie.Domain.Sandbox.SandboxExperiment>()
+                .HasQueryFilter(e => e.TenantId == CurrentTenantId)
+                .ToTable("Experiments", CompensationSchema);
+        }
+
+        ApplyCompensationSchema(builder);
     }
+
+    /// <summary>
+    /// Mueve al esquema del sandbox las tablas del ciclo, y sólo esas.
+    /// </summary>
+    /// <remarks>
+    /// ★★ SE MUEVE EL ESQUEMA, NO SE REDECLARAN LAS TABLAS. Las configuraciones ya dijeron cómo se
+    /// llama cada tabla y no declaran esquema; aquí sólo se les cambia el esquema al vuelo. Duplicar las
+    /// configuraciones para el sandbox habría creado un segundo juego que se separa del original en
+    /// cuanto alguien añada una columna a uno solo.
+    ///
+    /// ★★ LA LISTA ES LA FRONTERA DE SEGURIDAD, Y POR ESO ES EXPLÍCITA. Lo que NO esté aquí lo comparten
+    /// los dos contextos: el tenant, los usuarios, la suscripción, la auditoría. El sandbox tiene que
+    /// leer la empresa y la persona de verdad — lo que no puede es escribir dinero de verdad. Mover una
+    /// entidad de sitio en esta lista cambia esa frontera: no se toca sin pensarlo.
+    ///
+    /// Los tipos propiedad (`OwnsMany`/`OwnsOne`, como las líneas de un payout o las reglas de un plan)
+    /// siguen a su dueño solos: no hace falta nombrarlos.
+    /// </remarks>
+    private void ApplyCompensationSchema(ModelBuilder builder)
+    {
+        var schema = CompensationSchema;
+        if (string.IsNullOrWhiteSpace(schema)) return;
+
+        foreach (var clrType in SandboxedEntities)
+        {
+            builder.Model.FindEntityType(clrType)?.SetSchema(schema);
+        }
+
+        foreach (var entityType in builder.Model.GetEntityTypes())
+        {
+            var owner = entityType.IsOwned() ? entityType.FindOwnership()?.PrincipalEntityType : null;
+            var isSandboxed = SandboxedEntities.Contains(entityType.ClrType)
+                || (owner is not null && SandboxedEntities.Contains(owner.ClrType))
+                // Lo que ya declaró el esquema del sandbox por su cuenta — el historial de experimentos —
+                // también es del sandbox: sin esto quedaba fuera de sus propias migraciones y la tabla no
+                // se creaba nunca. La migración salía vacía y en verde.
+                || string.Equals(entityType.GetSchema(), schema, StringComparison.Ordinal);
+
+            if (isSandboxed)
+            {
+                // Un tipo propiedad vive en la tabla de su dueño: se le da el mismo esquema para que la
+                // separación no tenga rendijas.
+                entityType.SetSchema(schema);
+                continue;
+            }
+
+            // ★★ LO QUE NO ES DEL SANDBOX QUEDA FUERA DE SUS MIGRACIONES. El modelo del sandbox incluye
+            // todo (hereda el del contexto real), pero sus migraciones deben crear ÚNICAMENTE las tablas
+            // del esquema Sandbox. Sin esto, la primera migración del sandbox intentaría crear otra vez
+            // las tablas de identidad, suscripción y auditoría que ya existen — y no crearía nada, porque
+            // fallaría entera.
+            entityType.SetIsTableExcludedFromMigrations(true);
+        }
+    }
+
+    /// <summary>Las entidades del ciclo de compensación: lo único que el sandbox duplica.</summary>
+    private static readonly HashSet<Type> SandboxedEntities =
+    [
+        typeof(Payee),
+        typeof(Plan),
+        // ★★ LAS HIJAS TAMBIÉN, Y ESTAS DOS FALTABAN. `PlanRule` y `PayoutLine` tienen configuración
+        // propia, así que son entidades por derecho y NO las arrastra su padre como haría un tipo
+        // propiedad. Sin ellas, la regla de un plan del sandbox se intentaba escribir en la tabla real
+        // y chocaba contra su clave foránea: «FK_PlanRules_CompensationPlans_PlanId». Salió al primer
+        // intento en pantalla — compilaba, tenía tests en verde y estaba mal.
+        typeof(Wasnie.Domain.Compensation.Plans.Rule),
+        typeof(Wasnie.Domain.Compensation.Payouts.PayoutLine),
+        typeof(Quota),
+        typeof(PlanAssignment),
+        typeof(CompensationTransaction),
+        typeof(Wasnie.Domain.Compensation.Enrichment.CategoryMapping),
+        typeof(Credit),
+        typeof(CompensationPayout),
+        typeof(PayRun),
+        typeof(PayeeLedgerEntry),
+        typeof(PayeeBalance),
+        typeof(PayRunSettlement),
+        typeof(Wasnie.Domain.Compensation.Reconciliation.ReconciliationClosure),
+    ];
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

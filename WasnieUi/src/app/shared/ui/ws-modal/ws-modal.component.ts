@@ -28,9 +28,15 @@ export class WsModalComponent {
   readonly closeOnBackdrop = input(true);
   readonly heroImageUrl = input('');
   readonly heroImageAlt = input('');
+  /**
+   * `hero`: sin cabecera con borde — el contenido (una ilustración a sangre, un título centrado) llega
+   * hasta el borde superior y la X flota encima. Para momentos de bienvenida, no para formularios.
+   */
+  readonly variant = input<'default' | 'hero'>('default');
   readonly closed = output<void>();
 
-  readonly dialogClass = computed(() => `ws-modal__dialog ws-modal__dialog--${this.size()}`);
+  readonly dialogClass = computed(() =>
+    `ws-modal__dialog ws-modal__dialog--${this.size()}` + (this.variant() === 'hero' ? ' ws-modal__dialog--hero' : ''));
 
   constructor() {
     effect(() => {
@@ -60,7 +66,8 @@ export class WsModalComponent {
 
     if (event.key === 'Escape') {
       event.preventDefault();
-      this.close();
+      // Un modal sin botón de cerrar tampoco se cierra con Escape: se sale por sus propias opciones.
+      if (this.closable()) this.close();
       return;
     }
 

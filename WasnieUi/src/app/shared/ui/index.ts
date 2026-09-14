@@ -14,6 +14,7 @@ export { WsModalComponent } from './ws-modal/ws-modal.component';
 export { WsConfirmationModalComponent } from './ws-confirmation-modal/ws-confirmation-modal.component';
 export { WsPopoverComponent } from './ws-popover/ws-popover.component';
 export { WsSegmentedControlComponent, type SegOption } from './ws-segmented-control/ws-segmented-control.component';
+export { WsTabsComponent, type WsTab } from './ws-tabs/ws-tabs.component';
 export { WsBadgeComponent, type BadgeVariant, type BadgeSize } from './ws-badge/ws-badge.component';
 export { WsCopyButtonComponent, CopiedFeedbackMs } from './ws-copy-button/ws-copy-button.component';
 export { WsTooltipDirective } from './ws-tooltip/ws-tooltip.directive';
@@ -28,6 +29,8 @@ export { WsToastService, type WsToastType, type WsToastItem } from './ws-toast/w
 export { WsPageHeaderComponent } from './ws-page-header/ws-page-header.component';
 export { WsPageLayoutComponent, type PageMaxWidth } from './ws-page-layout/ws-page-layout.component';
 export { WsWizardComponent } from './ws-wizard/ws-wizard.component';
+export { WsGuideStepperComponent } from './ws-guide-stepper/ws-guide-stepper.component';
+export type { WsGuideStep, WsGuideStepState } from './ws-guide-stepper/ws-guide-stepper.component';
 export { WsWizardStepComponent } from './ws-wizard/ws-wizard-step.component';
 export { WsStatCardComponent, type StatCardVariant } from './ws-stat-card/ws-stat-card.component';
 export { WsDataTableComponent, type WsColumn } from './ws-data-table/ws-data-table.component';

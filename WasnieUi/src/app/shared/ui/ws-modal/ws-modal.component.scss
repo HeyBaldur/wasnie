@@ -149,6 +149,28 @@
   }
 }
 
+// ── Variante hero: el contenido llega al borde; sin líneas entre zonas ────────────────
+.ws-modal__dialog--hero {
+  .ws-modal__body {
+    padding: 0;
+  }
+
+  .ws-modal__footer {
+    padding: 0 var(--space-6) var(--space-6);
+    border-top: none;
+    background: transparent;
+  }
+}
+
+.ws-modal__close--floating {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 2;
+  background: color-mix(in srgb, var(--color-bg-surface) 72%, transparent);
+  backdrop-filter: blur(4px);
+}
+
 @keyframes ws-modal-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }

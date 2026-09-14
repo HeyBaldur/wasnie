@@ -108,15 +108,15 @@ describe('RuleFormComponent — MeasurementType picker filter (V1)', () => {
   it('measurementTypeOptions contains exactly Revenue and Units', () => {
     configureMinimalModule(makePlan(makeApiRule()));
     const comp = TestBed.createComponent(RuleFormComponent).componentInstance;
-    expect(comp.measurementTypeOptions.length).toBe(2);
-    expect(comp.measurementTypeOptions.map(o => o.value)).toContain(MeasurementType.Revenue);
-    expect(comp.measurementTypeOptions.map(o => o.value)).toContain(MeasurementType.Units);
+    expect(comp.def.measurementTypeOptions.length).toBe(2);
+    expect(comp.def.measurementTypeOptions.map(o => o.value)).toContain(MeasurementType.Revenue);
+    expect(comp.def.measurementTypeOptions.map(o => o.value)).toContain(MeasurementType.Units);
   });
 
   it('measurementTypeOptions does not contain Margin, Attainment, or Custom', () => {
     configureMinimalModule(makePlan(makeApiRule()));
     const comp = TestBed.createComponent(RuleFormComponent).componentInstance;
-    const values = comp.measurementTypeOptions.map(o => o.value);
+    const values = comp.def.measurementTypeOptions.map(o => o.value);
     expect(values).not.toContain(MeasurementType.Margin);
     expect(values).not.toContain(MeasurementType.Attainment);
     expect(values).not.toContain(MeasurementType.Custom);
@@ -169,28 +169,28 @@ describe('RuleFormComponent — floor above cap warning', () => {
   it('warns when the floor is above the cap', () => {
     const comp = makeComponent();
     set(comp, true, 200, true, 500);
-    expect(comp.floorExceedsCap()).toBeTrue();
+    expect(comp.def.floorExceedsCap()).toBeTrue();
   });
 
   it('stays quiet when the floor is below the cap', () => {
     const comp = makeComponent();
     set(comp, true, 500, true, 200);
-    expect(comp.floorExceedsCap()).toBeFalse();
+    expect(comp.def.floorExceedsCap()).toBeFalse();
   });
 
   it('stays quiet when floor and cap are equal — pinned, not contradictory', () => {
     const comp = makeComponent();
     set(comp, true, 300, true, 300);
-    expect(comp.floorExceedsCap()).toBeFalse();
+    expect(comp.def.floorExceedsCap()).toBeFalse();
   });
 
   it('says nothing when either section is switched off', () => {
     const comp = makeComponent();
     set(comp, false, 200, true, 500);
-    expect(comp.floorExceedsCap()).withContext('no cap to contradict').toBeFalse();
+    expect(comp.def.floorExceedsCap()).withContext('no cap to contradict').toBeFalse();
 
     set(comp, true, 200, false, 500);
-    expect(comp.floorExceedsCap()).withContext('no floor to apply').toBeFalse();
+    expect(comp.def.floorExceedsCap()).withContext('no floor to apply').toBeFalse();
   });
 
   it('treats a cap of zero as "no cap set yet" rather than a cap of nothing', () => {
@@ -198,7 +198,7 @@ describe('RuleFormComponent — floor above cap warning', () => {
     // before the user has typed anything.
     const comp = makeComponent();
     set(comp, true, 0, true, 500);
-    expect(comp.floorExceedsCap()).toBeFalse();
+    expect(comp.def.floorExceedsCap()).toBeFalse();
   });
 });
 
@@ -254,13 +254,13 @@ describe('RuleFormComponent — the flat rate protects itself', () => {
     const comp = makeComponent();
 
     setRate(comp, 0.05);
-    expect(comp.flatRatePercent()).toBe(5);
+    expect(comp.def.flatRatePercent()).toBe(5);
 
     setRate(comp, 0.025);
-    expect(comp.flatRatePercent()).toBe(2.5);
+    expect(comp.def.flatRatePercent()).toBe(2.5);
 
     setRate(comp, 1);
-    expect(comp.flatRatePercent()).toBe(100);
+    expect(comp.def.flatRatePercent()).toBe(100);
   });
 
   it('★ warns when the rate would pay out the whole sale or more', () => {
@@ -269,12 +269,12 @@ describe('RuleFormComponent — the flat rate protects itself', () => {
     const comp = makeComponent();
 
     setRate(comp, 100);
-    expect(comp.flatRatePercent()).toBe(10000);
-    expect(comp.flatRateLooksMistaken()).toBeTrue();
+    expect(comp.def.flatRatePercent()).toBe(10000);
+    expect(comp.def.flatRateLooksMistaken()).toBeTrue();
 
     // Exactly 100% is the boundary and it warns: the commission equals the entire transaction.
     setRate(comp, 1);
-    expect(comp.flatRateLooksMistaken()).toBeTrue();
+    expect(comp.def.flatRateLooksMistaken()).toBeTrue();
   });
 
   it('stays quiet for ordinary rates, including generous ones', () => {
@@ -284,7 +284,7 @@ describe('RuleFormComponent — the flat rate protects itself', () => {
 
     for (const rate of [0.05, 0.1, 0.25, 0.5, 0.999]) {
       setRate(comp, rate);
-      expect(comp.flatRateLooksMistaken()).withContext(`${rate * 100}% is legitimate`).toBeFalse();
+      expect(comp.def.flatRateLooksMistaken()).withContext(`${rate * 100}% is legitimate`).toBeFalse();
     }
   });
 
@@ -292,8 +292,8 @@ describe('RuleFormComponent — the flat rate protects itself', () => {
     const comp = makeComponent();
 
     setRate(comp, undefined);
-    expect(comp.flatRatePercent()).withContext('nothing to echo yet').toBeNull();
-    expect(comp.flatRateLooksMistaken()).toBeFalse();
+    expect(comp.def.flatRatePercent()).withContext('nothing to echo yet').toBeNull();
+    expect(comp.def.flatRateLooksMistaken()).toBeFalse();
   });
 
   it('★ WARNS, it does not BLOCK — the unusual value is still saveable', () => {
@@ -302,7 +302,7 @@ describe('RuleFormComponent — the flat rate protects itself', () => {
     const comp = makeComponent();
     setRate(comp, 1.5);
 
-    expect(comp.flatRateLooksMistaken()).toBeTrue();
+    expect(comp.def.flatRateLooksMistaken()).toBeTrue();
     expect(comp.form.get('rateTable.flatRate')?.errors)
       .withContext('advice, not a validation failure').toBeNull();
     expect(comp.form.get('rateTable.flatRate')?.valid).toBeTrue();
@@ -328,9 +328,9 @@ describe('RuleFormComponent — the flat rate protects itself', () => {
     comp.form.patchValue({ measurement: { type: MeasurementType.Units } });
     setRate(comp, 2);
 
-    expect(comp.isUnitsMode()).toBeTrue();
-    expect(comp.flatRatePercent()).withContext('a per-unit amount is not a percentage').toBeNull();
-    expect(comp.flatRateLooksMistaken()).withContext('€2.00 per unit is ordinary').toBeFalse();
+    expect(comp.def.isUnitsMode()).toBeTrue();
+    expect(comp.def.flatRatePercent()).withContext('a per-unit amount is not a percentage').toBeNull();
+    expect(comp.def.flatRateLooksMistaken()).withContext('€2.00 per unit is ordinary').toBeFalse();
   });
 });
 
@@ -415,7 +415,7 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
     comp.ngOnInit();
     tick();
 
-    expect(comp.rateTableType()).toBe(RateTableType.Flat);
+    expect(comp.def.rateTableType()).toBe(RateTableType.Flat);
   }));
 
   it('form control rateTable.type is numeric 0 (Flat) — not string "Flat"', fakeAsync(() => {
@@ -465,7 +465,7 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
     comp.ngOnInit();
     tick();
 
-    expect(comp.rateTableType()).toBe(RateTableType.Tiered);
+    expect(comp.def.rateTableType()).toBe(RateTableType.Tiered);
   }));
 
   it('loads tier rows into tiersArray when rate table is Tiered', fakeAsync(() => {
@@ -489,9 +489,9 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
     comp.ngOnInit();
     tick();
 
-    expect(comp.tiersArray.length).toBe(2);
-    expect(comp.tiersArray.at(0).value).toEqual({ from: 0, to: 500, rate: 0.03 });
-    expect(comp.tiersArray.at(1).value).toEqual({ from: 500, to: null, rate: 0.05 });
+    expect(comp.def.tiersArray.length).toBe(2);
+    expect(comp.def.tiersArray.at(0).value).toEqual({ from: 0, to: 500, rate: 0.03 });
+    expect(comp.def.tiersArray.at(1).value).toEqual({ from: 500, to: null, rate: 0.05 });
   }));
 
   // -------------------------------------------------------------------------
@@ -519,7 +519,7 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
     comp.ngOnInit();
     tick();
 
-    expect(comp.rateTableType()).toBe(RateTableType.AttainmentBased);
+    expect(comp.def.rateTableType()).toBe(RateTableType.AttainmentBased);
   }));
 
   it('loads attainment tier rows into attainmentTiersArray', fakeAsync(() => {
@@ -543,7 +543,7 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
     comp.ngOnInit();
     tick();
 
-    expect(comp.attainmentTiersArray.length).toBe(2);
+    expect(comp.def.attainmentTiersArray.length).toBe(2);
   }));
 
   // -------------------------------------------------------------------------
@@ -710,13 +710,13 @@ describe('RuleFormComponent — category value picker', () => {
     tick();
     flushCatalogs();
 
-    comp.addCondition();
-    comp.conditionsArray.at(0).get('field')?.setValue('category');
+    comp.def.addCondition();
+    comp.def.conditionsArray.at(0).get('field')?.setValue('category');
     tick();
 
-    expect(comp.isCategoryField(0)).toBeTrue();
-    expect(comp.useCategoryPicker(0)).toBeTrue();   // → chips render
-    expect(comp.customValueAt(0)).toBeFalse();       // → not free text by default
+    expect(comp.def.isCategoryField(0)).toBeTrue();
+    expect(comp.def.useCategoryPicker(0)).toBeTrue();   // → chips render
+    expect(comp.def.customValueAt(0)).toBeFalse();       // → not free text by default
   }));
 
   // (e — no regression) A non-category field keeps its existing free-text input.
@@ -726,12 +726,12 @@ describe('RuleFormComponent — category value picker', () => {
     tick();
     flushCatalogs();
 
-    comp.addCondition();
-    comp.conditionsArray.at(0).get('field')?.setValue('productsku');
+    comp.def.addCondition();
+    comp.def.conditionsArray.at(0).get('field')?.setValue('productsku');
     tick();
 
-    expect(comp.isCategoryField(0)).toBeFalse();
-    expect(comp.useCategoryPicker(0)).toBeFalse();   // → existing input path
+    expect(comp.def.isCategoryField(0)).toBeFalse();
+    expect(comp.def.useCategoryPicker(0)).toBeFalse();   // → existing input path
   }));
 
   // (b) With In, the value is a multi-select picker (bound to the CSV `valueSet` the form submits).
@@ -741,18 +741,18 @@ describe('RuleFormComponent — category value picker', () => {
     tick();
     flushCatalogs();
 
-    comp.addCondition();
-    comp.conditionsArray.at(0).get('field')?.setValue('category');
-    comp.conditionsArray.at(0).get('operator')?.setValue(6); // In
+    comp.def.addCondition();
+    comp.def.conditionsArray.at(0).get('field')?.setValue('category');
+    comp.def.conditionsArray.at(0).get('operator')?.setValue(6); // In
     tick();
 
-    expect(comp.usesSet(0)).toBeTrue();          // → ws-select [multiple] path renders
-    expect(comp.useCategoryPicker(0)).toBeTrue();
-    expect(comp.categoryOptions().map(o => o.value)).toEqual(['Laptops', 'Servers', 'Calculators']);
+    expect(comp.def.usesSet(0)).toBeTrue();          // → ws-select [multiple] path renders
+    expect(comp.def.useCategoryPicker(0)).toBeTrue();
+    expect(comp.def.categoryOptions().map(o => o.value)).toEqual(['Laptops', 'Servers', 'Calculators']);
 
     // The picker writes the CSV set the form submits; a stored set round-trips unchanged.
-    comp.conditionsArray.at(0).get('valueSet')?.setValue('Laptops, Calculators');
-    expect(comp.categoryValueUnknown(0)).toBeFalse();   // both are real categories
+    comp.def.conditionsArray.at(0).get('valueSet')?.setValue('Laptops, Calculators');
+    expect(comp.def.categoryValueUnknown(0)).toBeFalse();   // both are real categories
   }));
 
   // (c) A saved value that matches no category is shown with a warning, kept, and not rewritten.
@@ -772,9 +772,9 @@ describe('RuleFormComponent — category value picker', () => {
     flushCatalogs();     // categories arrive → reconcile runs
     tick();
 
-    expect(comp.categoryValueUnknown(0)).toBeTrue();     // warning shown
-    expect(comp.valueRawAt(0)).toBe('Laptps');           // value preserved, never rewritten
-    expect(comp.customValueAt(0)).toBeTrue();            // dropped to free text so it stays visible
+    expect(comp.def.categoryValueUnknown(0)).toBeTrue();     // warning shown
+    expect(comp.def.valueRawAt(0)).toBe('Laptps');           // value preserved, never rewritten
+    expect(comp.def.customValueAt(0)).toBeTrue();            // dropped to free text so it stays visible
   }));
 
   // (d) With no categories yet, the picker is off and the admin can still type a value (escape hatch).
@@ -784,14 +784,14 @@ describe('RuleFormComponent — category value picker', () => {
     tick();
     flushCatalogs([]);   // empty tenant / not synced
 
-    comp.addCondition();
-    comp.conditionsArray.at(0).get('field')?.setValue('category');
+    comp.def.addCondition();
+    comp.def.conditionsArray.at(0).get('field')?.setValue('category');
     tick();
 
-    expect(comp.categoryListEmpty(0)).toBeTrue();
-    expect(comp.useCategoryPicker(0)).toBeFalse();       // free text, not blocked
-    comp.conditionsArray.at(0).get('valueRaw')?.setValue('Laptops');
-    expect(comp.valueRawAt(0)).toBe('Laptops');
+    expect(comp.def.categoryListEmpty(0)).toBeTrue();
+    expect(comp.def.useCategoryPicker(0)).toBeFalse();       // free text, not blocked
+    comp.def.conditionsArray.at(0).get('valueRaw')?.setValue('Laptops');
+    expect(comp.def.valueRawAt(0)).toBe('Laptops');
   }));
 });
 
@@ -843,12 +843,12 @@ describe('RuleFormComponent — rate table type help text', () => {
     tick();
 
     comp.form.get('rateTable.type')!.setValue(RateTableType.Flat);
-    expect(comp.rateTableHintKey()).toBe('PLANS.RATE_TABLE_HINT_FLAT');
+    expect(comp.def.rateTableHintKey()).toBe('PLANS.RATE_TABLE_HINT_FLAT');
 
     comp.form.get('rateTable.type')!.setValue(RateTableType.Tiered);
-    expect(comp.rateTableHintKey()).toBe('PLANS.RATE_TABLE_HINT_TIERED');
+    expect(comp.def.rateTableHintKey()).toBe('PLANS.RATE_TABLE_HINT_TIERED');
 
     comp.form.get('rateTable.type')!.setValue(RateTableType.AttainmentBased);
-    expect(comp.rateTableHintKey()).toBe('PLANS.RATE_TABLE_HINT_ATTAINMENT');
+    expect(comp.def.rateTableHintKey()).toBe('PLANS.RATE_TABLE_HINT_ATTAINMENT');
   }));
 });

@@ -1,0 +1,51 @@
+<!--
+  La estructura es la de la referencia del ticket: lista vertical, y cada paso una columna con el
+  círculo numerado y la línea conectora, al lado del título y su descripción. La línea la dibuja el
+  propio elemento y el último la esconde — así el número de pasos no importa y nadie tiene que
+  acordarse de tratar el último de forma distinta.
+-->
+<ul class="ws-gs">
+  @for (step of numbered(); track step.id; let last = $last) {
+    <li class="ws-gs__step ws-gs__step--{{ step.state }}" [class.ws-gs__step--last]="last">
+      <div class="ws-gs__rail">
+        <span class="ws-gs__circle">
+          @if (step.state === 'done') {
+            <app-icon name="check" [size]="14" />
+          } @else if (step.state === 'blocked') {
+            <app-icon name="lock" [size]="12" />
+          } @else {
+            {{ step.position }}
+          }
+        </span>
+        <span class="ws-gs__line" aria-hidden="true"></span>
+      </div>
+
+      <!--
+        Es un botón porque se pulsa: leer un paso por adelantado es la forma de entender qué falta, y
+        eso tiene que llegarle también a quien navega con teclado. Cuando el panel no es navegable,
+        queda inerte y sin foco.
+      -->
+      <button
+        type="button"
+        class="ws-gs__body"
+        [disabled]="!navigable()"
+        [attr.aria-current]="step.state === 'current' ? 'step' : null"
+        (click)="select(step)"
+      >
+        <span class="ws-gs__title">{{ step.title }}</span>
+
+        @if (step.description) {
+          <span class="ws-gs__description">{{ step.description }}</span>
+        }
+
+        <!-- El motivo sólo existe cuando hay bloqueo: es la salida, no un adorno del estado. -->
+        @if (step.state === 'blocked' && step.blockedReason) {
+          <span class="ws-gs__blocked">
+            <app-icon name="alert-triangle" [size]="12" />
+            {{ step.blockedReason }}
+          </span>
+        }
+      </button>
+    </li>
+  }
+</ul>

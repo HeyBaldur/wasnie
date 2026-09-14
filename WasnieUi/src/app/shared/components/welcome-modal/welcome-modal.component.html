@@ -1,71 +1,93 @@
+<!--
+  ★ SE SALE ELIGIENDO, NO ESQUIVANDO. Sin X, sin cerrar al hacer clic fuera y sin Escape: la bienvenida
+  termina con una de sus dos opciones — el onboarding o empezar —, que es lo único que tiene para decir.
+-->
 <ws-modal
-  size="xl"
+  size="sm"
+  variant="hero"
+  [closable]="false"
+  [closeOnBackdrop]="false"
   [isOpen]="welcome.isOpen()"
   (closed)="welcome.close()"
 >
-  <div slot="header" class="welcome__header">
-    <h2 class="welcome__title">{{ 'WELCOME.TITLE' | translate }}</h2>
-    <p class="welcome__subtitle">{{ 'WELCOME.SUBTITLE' | translate }}</p>
+  <div class="welcome">
+    <!--
+      ★ UNA ILUSTRACIÓN, NO UN VÍDEO. El vídeo pesaba 4.6 MB y pedía atención en el primer segundo de
+      alguien que acaba de llegar. Esto es un SVG en línea: tarjetas del producto que flotan, un gráfico
+      que crece y un pago aprobado. Sin texto dentro (no se traduce) y decorativo para lectores de
+      pantalla — lo que importa está en el título y el párrafo. Colores: tokens, nunca hex.
+    -->
+    <div class="welcome__hero" aria-hidden="true">
+      <svg class="welcome__art" viewBox="0 0 320 176" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="welcome-grad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" class="art-stop-violet" />
+            <stop offset="1" class="art-stop-blue" />
+          </linearGradient>
+        </defs>
+
+        <!-- Destellos -->
+        <g class="art-sparkles">
+          <path class="art-sparkle art-sparkle--1" d="M34 30l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5z" />
+          <path class="art-sparkle art-sparkle--2" d="M290 20l2 4.5 4.5 2-4.5 2-2 4.5-2-4.5-4.5-2 4.5-2z" />
+          <path class="art-sparkle art-sparkle--3" d="M300 128l1.6 3.6 3.6 1.6-3.6 1.6-1.6 3.6-1.6-3.6-3.6-1.6 3.6-1.6z" />
+          <circle class="art-dot art-dot--1" cx="150" cy="18" r="3" />
+          <circle class="art-dot art-dot--2" cx="22" cy="140" r="2.5" />
+        </g>
+
+        <!-- Tarjeta de atrás: un pago aprobado -->
+        <g class="art-card art-card--back">
+          <rect class="art-surface" x="176" y="14" width="118" height="62" rx="10" />
+          <circle class="art-avatar" cx="194" cy="34" r="8" />
+          <rect class="art-line art-line--strong" x="208" y="28" width="46" height="5" rx="2.5" />
+          <rect class="art-line" x="208" y="37" width="30" height="4" rx="2" />
+          <rect class="art-pill-success" x="252" y="22" width="30" height="12" rx="6" />
+          <path class="art-check-success" d="M261 28l3 3 6-6" />
+          <rect class="art-line" x="188" y="52" width="94" height="4" rx="2" />
+          <rect class="art-line" x="188" y="60" width="62" height="4" rx="2" />
+        </g>
+
+        <!-- Tarjeta principal: la bienvenida, con el degradado de marca -->
+        <g class="art-card art-card--main">
+          <rect x="30" y="50" width="136" height="80" rx="12" fill="url(#welcome-grad)" />
+          <circle class="art-on-brand-soft" cx="52" cy="72" r="11" />
+          <path class="art-on-brand-check" d="M46.5 72.5l4 4 7.5-8" />
+          <rect class="art-on-brand" x="70" y="66" width="70" height="6" rx="3" />
+          <rect class="art-on-brand-soft" x="70" y="76" width="48" height="5" rx="2.5" />
+          <rect class="art-on-brand-soft" x="44" y="94" width="108" height="4" rx="2" />
+          <rect class="art-cta" x="44" y="106" width="52" height="14" rx="7" />
+        </g>
+
+        <!-- Tarjeta de delante: la comisión, con barras que crecen y una línea que se dibuja -->
+        <g class="art-card art-card--front">
+          <rect class="art-surface" x="182" y="88" width="120" height="72" rx="10" />
+          <rect class="art-line art-line--strong" x="194" y="98" width="40" height="5" rx="2.5" />
+          <rect class="art-bar art-bar--1" x="196" y="132" width="10" height="18" rx="2" />
+          <rect class="art-bar art-bar--2" x="212" y="124" width="10" height="26" rx="2" />
+          <rect class="art-bar art-bar--3" x="228" y="128" width="10" height="22" rx="2" />
+          <rect class="art-bar art-bar--4" x="244" y="116" width="10" height="34" rx="2" />
+          <path class="art-trend" d="M196 124 L217 114 L233 119 L249 106 L288 98" />
+          <circle class="art-trend-dot" cx="288" cy="98" r="3.5" />
+        </g>
+      </svg>
+    </div>
+
+    <div class="welcome__content">
+      <span class="welcome__eyebrow">{{ 'WELCOME.EYEBROW' | translate }}</span>
+      <h2 class="welcome__title">{{ 'WELCOME.TITLE' | translate }}</h2>
+      <p class="welcome__lead">{{ 'WELCOME.LEAD' | translate }}</p>
+    </div>
   </div>
 
   <!--
-    ws-video, the same primitive the empty states use — but here it is a PLAYER, not scenery.
-
-    ★ `[autoplay]="false"`, ON PURPOSE. An empty state's clip is an illustration that happens to move;
-    this one is the product tour, and a tour that starts talking the instant a modal appears is
-    something you interrupt rather than watch. The viewer presses Play, and it plays once.
-
-    That also makes `playFallback` redundant here and it was dropped: the button is now on screen for
-    everybody, so there is no separate reduced-motion path to opt into.
-
-    ★ THE POSTER IS NOT DECORATION — IT IS WHAT THE 4.6 MB BUYS BACK. Without it the frame sat empty
-    until the whole clip had downloaded, and the fix for that was making the browser download it
-    eagerly on every open, whether or not anyone pressed Play. An 11.8 KB still shows the tour
-    instantly and lets the video wait to be asked for.
-
-    ★ AND IT IS NOT FRAME ZERO, ON PURPOSE. The clip opens on a one-second fade, so its first frames
-    are a half-drawn card — a cover that says "broken", not "watch me". This is 2.5s in: the first
-    step of the tour fully composed. Playback still starts at 0, the way every player behaves.
-    Regenerate with:
-      ffmpeg -ss 2.5 -i icm.mp4 -frames:v 1 -c:v libwebp -quality 88 icm-poster.webp
-
-    Labelled rather than decorative — unlike an empty-state loop, this clip carries the tour, so it is
-    announced to assistive technology instead of being hidden from it.
+    ★ DOS CAMINOS, DEL MISMO PESO VISUAL EN ANCHO. El onboarding guiado (el sandbox: un ciclo completo
+    con datos de práctica) o empezar directamente. Ninguno lleva a algo que un workspace Free no tenga.
   -->
-  <div class="welcome__video">
-    <ws-video
-      src="/videos/icm.mp4"
-      poster="/videos/icm-poster.webp"
-      fit="contain"
-      [autoplay]="false"
-      [ariaLabel]="'WELCOME.VIDEO_LABEL' | translate"
-    />
-  </div>
-
-  <p class="welcome__lead">{{ 'WELCOME.LEAD' | translate }}</p>
-
-  <ul class="welcome__list">
-    @for (item of capabilities; track item.titleKey) {
-      <li class="welcome__item">
-        <span class="welcome__item-icon" aria-hidden="true">
-          <app-icon [name]="item.icon" [size]="16" />
-        </span>
-        <div class="welcome__item-body">
-          <p class="welcome__item-title">{{ item.titleKey | translate }}</p>
-          <p class="welcome__item-desc">{{ item.descKey | translate }}</p>
-        </div>
-      </li>
-    }
-  </ul>
-
   <div slot="footer" class="welcome__footer">
-    <!--
-      ★ ONE BUTTON, AND IT ONLY CLOSES. The assistant is described in the list above as something the
-      product does, never as a control here: the modal is identical for every tenant, and the assistant
-      is not part of the Free plan — a "Open the assistant" button would 403 for exactly the users most
-      likely to be seeing this screen for the first time.
-    -->
-    <ws-button variant="primary" (click)="welcome.close()">
+    <ws-button variant="secondary" [fullWidth]="true" (click)="startTour()">
+      {{ 'WELCOME.START_TOUR' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [fullWidth]="true" (click)="welcome.close()">
       {{ 'WELCOME.START' | translate }}
     </ws-button>
   </div>

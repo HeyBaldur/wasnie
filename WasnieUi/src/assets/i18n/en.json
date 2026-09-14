@@ -225,28 +225,20 @@
     "MANUAL": "User manual",
     "PROFILE": "Profile",
     "RECONCILIATION": "Reconciliation",
-    "AUDIT_LOGS": "Audit logs"
+    "AUDIT_LOGS": "Audit logs",
+    "GUIDED_TOUR": "Sandbox"
   },
   "WELCOME": {
-    "TITLE": "Welcome to Incentra",
-    "SUBTITLE": "A two-minute tour of how commission runs here.",
-    "VIDEO_LABEL": "Introduction to Incentra",
-    "LEAD": "Incentra turns your compensation rules into calculated, auditable payouts — so nobody has to reconcile a spreadsheet at the end of the month.",
-    "CAP_PLANS_TITLE": "Plans with real rules",
-    "CAP_PLANS_DESC": "Build flat, tiered and attainment-based commission, with accelerators and caps.",
-    "CAP_QUOTAS_TITLE": "Quotas and targets",
-    "CAP_QUOTAS_DESC": "Set each rep a target per period and track attainment against it as deals land.",
-    "CAP_DATA_TITLE": "Your data, brought in",
-    "CAP_DATA_DESC": "Import deals from a spreadsheet, or sync closed-won deals straight from your CRM.",
-    "CAP_ASSISTANT_TITLE": "An assistant that explains the maths",
-    "CAP_ASSISTANT_DESC": "Incentra can walk through how any commission figure was reached, step by step.",
-    "START": "Get started"
+    "EYEBROW": "Your workspace is ready",
+    "TITLE": "Welcome to Incentra!",
+    "LEAD": "Everything is set up. Start with the guided onboarding — a full commission cycle on practice data, nothing real is touched — or jump straight in and build your first plan.",
+    "START": "Get started",
+    "START_TOUR": "Go to onboarding"
   },
   "MANUAL": {
     "TITLE": "User manual",
     "SHORTCUTS_TITLE": "Jump straight to",
     "SHORTCUTS_BODY": "The manual is dense and technical. These are the sections of the calculation engine people come looking for.",
-    "VIEW_FLOW": "View system flow",
     "EMPTY_TITLE": "The manual is not available yet",
     "EMPTY_DESC": "This installation does not have the user manual published yet. Once it is added, it will appear here.",
     "LOAD_ERROR": "The manual could not be loaded."
@@ -512,8 +504,13 @@
     "PAGINATION_INFO": "{{from}}–{{to}} of {{total}}",
     "CREATE_TITLE": "Create Plan",
     "CREATE_SUBTITLE": "Define the structure and period for your new compensation plan.",
-    "IMMUTABILITY_TITLE": "Plans cannot be modified after creation",
-    "IMMUTABILITY_BODY": "Once a plan is linked to a payout calculation, it is locked forever. This is intentional: if the rules could change retroactively, every commission already paid under that plan would be incorrect. What you define here is what payees get paid on — permanently.",
+    "LOCK_INTRO": {
+      "EYEBROW": "Before you create it",
+      "TITLE": "Once it pays, a plan is locked for good",
+      "POINT_LOCKED": "As soon as a payout is calculated under this plan, it can no longer be modified — what you define here is what payees get paid on.",
+      "POINT_WHY": "That is intentional: if the rules could change afterwards, every commission already paid under the plan would be wrong.",
+      "POINT_CLONE": "Need a change later? Clone the plan as a new version — the original stays exactly as it was paid."
+    },
     "SECTION_DETAILS": "Plan Details",
     "SECTION_PERIOD": "Effective Period",
     "FIELD_NAME": "Name",
@@ -1175,11 +1172,16 @@
     "COL_STATUS": "Status",
     "EMPTY_TITLE": "No quotas yet",
     "EMPTY_DESCRIPTION": "Set performance targets for your team by creating quotas.",
-    "EMPTY_PREREQ_BEFORE": "To create your first quota you need a",
-    "EMPTY_PREREQ_PLAN": "compensation plan",
-    "EMPTY_PREREQ_BETWEEN": "and then a",
-    "EMPTY_PREREQ_PAYEE": "payee",
-    "EMPTY_PREREQ_AFTER": "to assign it to.",
+    "PREREQ_INTRO": {
+      "EYEBROW": "Before your first quota",
+      "TITLE": "A quota needs a payee and a plan",
+      "STEP_PAYEE_TITLE": "Create a payee",
+      "STEP_PAYEE_DESC": "The person whose performance the quota measures.",
+      "STEP_PLAN_TITLE": "Create a plan and assign the payee to it",
+      "STEP_PLAN_DESC": "The quota belongs to a plan. Without that assignment it does not measure attainment.",
+      "STEP_QUOTA_TITLE": "Set the quota",
+      "STEP_QUOTA_DESC": "Pick the payee and the plan, then define the target for the period."
+    },
     "EMPTY_ACTION": "Create your first quota",
     "EMPTY_FILTER_TITLE": "No quotas match your filters.",
     "CREATE_TITLE": "Create Quota",
@@ -1538,11 +1540,17 @@
     "COL_STATUS": "Status",
     "EMPTY_TITLE": "No assignments yet",
     "EMPTY_DESCRIPTION": "Assign team members to compensation plans to begin tracking their performance.",
-    "EMPTY_PREREQ_BEFORE": "An assignment links a",
-    "EMPTY_PREREQ_PAYEE": "payee",
-    "EMPTY_PREREQ_BETWEEN": "to a",
-    "EMPTY_PREREQ_PLAN": "compensation plan",
-    "EMPTY_PREREQ_AFTER": ", so you need at least one of each first.",
+    "PREREQ_INTRO": {
+      "EYEBROW": "Before your first assignment",
+      "TITLE": "An assignment connects a payee to a plan",
+      "LEAD": "It decides which plan’s rules apply to each payee, and for which period. Without it, the payee earns nothing under the plan.",
+      "STEP_PAYEE_TITLE": "Create a payee",
+      "STEP_PAYEE_DESC": "The person who will earn under the plan.",
+      "STEP_PLAN_TITLE": "Create a plan",
+      "STEP_PLAN_DESC": "Its rules decide how the commission is calculated.",
+      "STEP_LINK_TITLE": "Assign the payee to the plan",
+      "STEP_LINK_DESC": "The assignment takes the plan’s period. From then on, the payee’s credits are calculated with its rules."
+    },
     "EMPTY_ACTION": "Create your first assignment",
     "EMPTY_FILTER_TITLE": "No assignments match your filters.",
     "CREATE_TITLE": "Create Assignment",
@@ -2550,5 +2558,238 @@
     "EN": "English",
     "ES": "Español",
     "PL": "Polski"
+  },
+  "GUIDED": {
+    "ENV": {
+      "BANNER_TITLE": "Practice mode",
+      "BANNER_BODY": "Nothing here affects your real data. The plans, payees, sales and payouts in this tour live in a separate sandbox.",
+      "PRACTICE": "Practice",
+      "LIVE": "Live"
+    },
+    "ERRORS": {
+      "REJECTED": "The data was rejected. What needs fixing:"
+    },
+    "PAYEE_RULES": {
+      "NOTICE": "Your company settings make some payee fields required (field requirements). The sandbox applies the same rules as the real product, so they are required here too."
+    },
+    "INTRO": {
+      "EYEBROW": "Practice mode · nothing here is real",
+      "TITLE": "Your sandbox for testing commission",
+      "LEAD": "This section is for experimenting. Build plans and rules, add a payee and a sale, calculate and pay — the whole cycle runs on the real engine, but on practice data that never touches your company's numbers.",
+      "POINT_TRY": "Try any plan or rule — flat, tiered, attainment, triggers, caps — and see exactly what it would pay.",
+      "POINT_SAFE": "Nothing here reaches production: no real payees, sales or payouts. Start over whenever you like.",
+      "POINT_PROMOTE": "Save each test as an experiment, compare them, and promote the one that works to a real plan.",
+      "HELP": "Need a hand? The manual explains every step, and Zeke, the assistant, can help you build plans and rules.",
+      "HELP_NO_ZEKE": "Need a hand? The manual explains every step.",
+      "START": "Start experimenting",
+      "MANUAL": "Open the manual",
+      "ASK_ZEKE": "Ask Zeke",
+      "CLOSE": "Close this introduction"
+    },
+    "EDIT": {
+      "HINT": "Editing “{{name}}”. Jump to any step, change what you need and press Update experiment — every step runs again on its own with the real commands.",
+      "AUTO_STEP": "Nothing to fill in here: this step runs on its own when you update the experiment.",
+      "UPDATE": "Update experiment",
+      "CANCEL": "Cancel editing",
+      "INVALID": "Some fields are missing or invalid. Check the highlighted fields.",
+      "STOPPED": "The update stopped at “{{step}}”. That step is open with the reason; nothing was saved."
+    },
+    "PROMOTE": {
+      "TITLE": "Take it to production",
+      "LEAD": "Found the configuration you want? Create it for real. The plan and its rules are copied to your live data exactly as you tuned them here.",
+      "SCOPE": "Only the configuration crosses over. The practice payee, the quota, the test sale and the commissions it produced stay in the sandbox, and this experiment stays here too — promoting copies, it does not move.",
+      "ACTION": "Promote to a real plan",
+      "CONFIRM_TITLE": "Create this plan for real?",
+      "CONFIRM_MSG": "A real plan will be created with these rules. It starts as a draft and pays nobody until someone activates it from the Plans screen. None of your practice data crosses over.",
+      "DONE": "Real plan created: {{name}}, with {{rules}} rule(s). It is a draft — activate it from Plans when you are ready.",
+      "RENAMED": "You already had a plan called “{{original}}”, so this one was given a new name.",
+      "SAVED_AS": "This test was saved in your experiments as “{{name}}” and the sandbox was cleared.",
+      "VIEW_PLAN": "View it in Plans →",
+      "TOAST_DONE": "“{{name}}” is now a real plan (draft). The test was saved in your experiments.",
+      "ALREADY": "This exact configuration is already in production as “{{name}}”. Nothing changed since it was promoted, so no new plan was created — change the plan or a rule to promote it again."
+    },
+    "TITLE": "Sandbox",
+    "SUBTITLE": "A safe sandbox to learn and test your commission setup. Run the whole cycle — plan, rule, payee, sale, calculation, pay run and payment — on practice data, try different rules, and promote the one that works to a real plan when you are ready.",
+    "RESET": "Start over",
+    "PROGRESS": "{{done}} of {{total}} completed",
+    "TABS": {
+      "STEPS": "Steps",
+      "EXPERIMENTS": "Experiments"
+    },
+    "STEP_DONE": "Done",
+    "LOCKED": {
+      "APPROVED": "The pay run is approved. Next: mark it as paid.",
+      "PAID": "The pay run is paid and the period is locked — the cycle is complete. Start over to run it again."
+    },
+    "UNCREDITED": {
+      "TITLE": "Calculated — but no commission was generated:",
+      "NO_PAYEE": "{{reference}}: the sale has no payee, so nobody can earn commission on it.",
+      "NO_ASSIGNMENT": "{{reference}}: the payee has no active assignment covering the sale date. Check the assignment period (step 5).",
+      "CURRENCY": "{{reference}}: the sale's currency differs from the plan's. Record the sale in the plan's currency (step 6).",
+      "NO_RULES": "{{reference}}: the plan has no rule in force on the sale date. Add a rule (step 2).",
+      "TRIGGER": "{{reference}}: the sale does not meet the trigger of {{rules}}, so the rule does not apply to it. Add a rule without that condition (step 2) or record a sale that meets it (step 6).",
+      "UNKNOWN": "{{reference}}: the engine generated no commission for this sale.",
+      "NONE_EXPLAINED": "The calculation ran, but no sale generated commission. Check the rule's trigger (does the sale meet it?), the assignment dates and the sale's currency."
+    },
+    "FINISHED": "That is the full cycle. Everything you created here lives apart from your real data — start over as often as you like.",
+    "BLOCKED": {
+      "NEEDS_PLAN": "Create the plan first: a rule belongs to a plan.",
+      "NEEDS_PAYEE": "Create the payee first: a sale is credited to someone.",
+      "NEEDS_PLAN_AND_PAYEE": "You need the plan and the payee first.",
+      "NEEDS_RULE_AND_ASSIGNMENT": "The plan needs a rule, and the payee needs to be assigned to it.",
+      "NEEDS_TRANSACTION": "Record a sale first: there is nothing to calculate yet.",
+      "NEEDS_CREDITS": "Calculate the sale first: a pay run pays commission that already exists.",
+      "NEEDS_PAYRUN": "Run the pay run first.",
+      "NEEDS_APPROVAL": "Approve the pay run before marking it paid.",
+      "NEEDS_MANAGER_SETTING": "Your company settings require a manager for every payee, and the sandbox has no payee to pick as manager yet. Make Manager optional in your company settings (field requirements) to continue the tour."
+    },
+    "FIELD": {
+      "PLAN_NAME": "Plan name",
+      "CURRENCY": "Currency",
+      "PAYEE_NAME": "Full name",
+      "EMPLOYEE_CODE": "Employee code",
+      "QUOTA": "Quota amount",
+      "REFERENCE": "Sale reference",
+      "AMOUNT": "Sale amount",
+      "DESCRIPTION": "Description",
+      "PERIOD_START": "Period start",
+      "PERIOD_END": "Period end",
+      "EMAIL": "Email",
+      "ROLE": "Role",
+      "MEASUREMENT": "Measured on",
+      "DATE": "Sale date"
+    },
+    "STEP": {
+      "PLAN": {
+        "TITLE": "Create a plan",
+        "SHORT": "The container for the rules that decide what a sale pays.",
+        "LONG": "A plan is the agreement: who it covers, for what period, and in which currency. It holds no maths of its own — the rules inside it do. Everything that follows hangs from this one, which is why it comes first.",
+        "EFFECT": "Confirming creates a plan for this calendar year. In the product this is the Plans screen.",
+        "ACTION": "Create plan",
+        "DESCRIPTION_VALUE": "Created in the sandbox."
+      },
+      "RULE": {
+        "TITLE": "Add a rule",
+        "SHORT": "The rate table: how much commission a sale generates.",
+        "LONG": "The rule is where the money is decided, and this is the same rule form the Plans screen uses — every option is here: a flat, tiered or attainment rate table, a trigger that decides which sales it applies to, a modifier, a cap and a floor. Use the simulator to see what a sale would pay before you add it.",
+        "EFFECT": "Confirming adds the rule to the practice plan. From now on, any sale the plan reaches is calculated with exactly this configuration.",
+        "ACTION": "Add rule",
+        "NAME_VALUE": "Flat commission"
+      },
+      "PAYEE": {
+        "TITLE": "Create a payee",
+        "SHORT": "The person who earns the commission.",
+        "LONG": "A payee is whoever gets paid: a sales rep, a manager, a partner. The employee code is how imports and your payroll recognise them later.",
+        "EFFECT": "Confirming creates the person. On its own this pays nothing — they still have to be assigned to a plan.",
+        "ACTION": "Create payee"
+      },
+      "QUOTA": {
+        "TITLE": "Set a quota",
+        "SHORT": "The target this person is measured against.",
+        "LONG": "A quota is the target for a period. Rules that pay by attainment need it: without a quota there is no percentage of target to compute. Flat rules ignore it, and it is still worth having for reporting.",
+        "EFFECT": "Confirming sets the target for this person on this plan, for the year.",
+        "ACTION": "Set quota"
+      },
+      "ASSIGNMENT": {
+        "TITLE": "Assign the plan",
+        "SHORT": "The link that makes the plan apply to the person.",
+        "LONG": "An assignment connects a payee to a plan for a period. This is the link the engine looks for: a sale by someone with no active assignment generates nothing, and that is the single most common reason commission goes missing.",
+        "EFFECT": "Confirming links the two for the year. From here the person's sales can generate commission.",
+        "ACTION": "Assign plan"
+      },
+      "TRANSACTION": {
+        "TITLE": "Record a sale",
+        "SHORT": "The fact that generates commission.",
+        "LONG": "A transaction is a sale that happened. In the product they usually arrive by import or from your CRM; here you type one. Note that recording it and calculating it are two separate steps — the sale is a fact, the commission is a decision about it.",
+        "EFFECT": "Confirming records the sale as pending. Nothing is calculated yet: that is the next step.",
+        "ACTION": "Record sale"
+      },
+      "CALCULATE": {
+        "TITLE": "Calculate",
+        "SHORT": "Turn the sale into commission.",
+        "LONG": "Calculating runs the engine over the pending sales: it finds the rule that applies, works out the amount, and writes a credit. A credit is commission owed to someone and not yet paid.",
+        "EFFECT": "Confirming calculates the sale and creates the credit. If nothing appears, the engine says why — a missing rule, a missing assignment, a rate that does not cover the amount.",
+        "ACTION": "Calculate"
+      },
+      "PAYRUN": {
+        "TITLE": "Run a pay run",
+        "SHORT": "Closes the period for everyone at once.",
+        "LONG": "A pay run gathers the credits of a period into payouts, one per payee and plan. It is tenant-wide: in the real product it closes the period for every person at the same time.",
+        "EFFECT": "Confirming creates a draft pay run with the payout for this person. Nothing has been paid yet.",
+        "ACTION": "Run pay run"
+      },
+      "APPROVE": {
+        "TITLE": "Approve the payout",
+        "SHORT": "Someone signs it off before money moves.",
+        "LONG": "Approval is the human checkpoint. Until it happens the figures can be recalculated; after it, the payout is committed and waiting to be paid.",
+        "EFFECT": "Confirming approves the run and its payouts. They now count as money the company owes.",
+        "ACTION": "Approve"
+      },
+      "PAY": {
+        "TITLE": "Mark as paid",
+        "SHORT": "The money left the company.",
+        "LONG": "Marking as paid records that the payment actually went out. It consumes the credits, so the same commission can never be paid twice, and it locks the period. In the real product this step is irreversible.",
+        "EFFECT": "Confirming closes the cycle: the credits are consumed and the period is locked.",
+        "ACTION": "Mark as paid"
+      }
+    },
+    "MEASUREMENT": {
+      "REVENUE": "Revenue",
+      "UNITS": "Units"
+    },
+    "RESULT": {
+      "TITLE": "What exists now",
+      "EMPTY": "Nothing yet. Run the first step and what it creates will appear here.",
+      "PLAN": "Plan",
+      "RULE": "Rule",
+      "PAYEE": "Payee",
+      "QUOTA": "Quota",
+      "ASSIGNMENT": "Assignment",
+      "TRANSACTION": "Sale",
+      "CREDITS": "Commission calculated",
+      "PAYRUN": "Pay run and payouts",
+      "RULE_TIERS": "{{count}} tier(s)",
+      "RULE_CONDITIONS": "{{count}} trigger condition(s)",
+      "RULE_MODIFIER": "modifier × {{factor}}",
+      "RULE_CAP": "cap {{amount}}",
+      "RULE_FLOOR": "floor {{amount}}",
+      "RULE_TYPE_UNKNOWN": "Rate table",
+      "PER_UNIT": "per unit",
+      "UNCREDITED": "Sales without commission",
+      "REFUSED": "Not priced — {{reason}}. The rule's rate table refused this sale, so it pays nothing until the table covers it."
+    },
+    "EXPERIMENTS": {
+      "TITLE": "Your experiments",
+      "SAVE": "Save experiment",
+      "EMPTY": "No saved experiments yet. Run a cycle and save it to compare configurations later.",
+      "RENAME": "Rename",
+      "DELETE": "Delete",
+      "BACK": "Close",
+      "REVIEWING": "Reviewing: {{name}}",
+      "NAME_PROMPT": "Name this experiment",
+      "DEFAULT_NAME": "My experiment",
+      "RENAME_TITLE": "Rename experiment",
+      "EMPTY_TITLE": "No experiments yet",
+      "COMMISSION": "Commission",
+      "NO_RESULT": "Not calculated",
+      "DELETE_TITLE": "Delete this experiment?",
+      "DELETE_MSG": "“{{name}}” will be permanently deleted. Only the saved snapshot is removed — your current sandbox and your real plans are not affected.",
+      "LOAD": "Edit",
+      "IN_PRODUCTION": "In production as “{{name}}”.",
+      "TOAST_SAVED": "Experiment “{{name}}” saved.",
+      "TOAST_UPDATED": "Experiment “{{name}}” updated.",
+      "TOAST_RENAMED": "Experiment renamed to “{{name}}”.",
+      "LOAD_TITLE": "Load this experiment into the sandbox?",
+      "LOAD_MSG": "Your current practice run is cleared and every form is filled with “{{name}}”, rules included, so you can change anything and run it again. Save the current run first if you want to keep it.",
+      "LOAD_CONFIRM": "Load experiment",
+      "PROMOTE": "Promote",
+      "PROMOTE_LOAD_TITLE": "Promote “{{name}}”?",
+      "PROMOTE_LOAD_MSG": "Its plan and rules are first recreated in the sandbox with the real commands (your current practice run is cleared). Then you confirm the promotion — nothing real is created before that.",
+      "PROMOTE_LOAD_CONFIRM": "Recreate and continue",
+      "NO_CONFIG": "Saved before configurations were stored: it can be reviewed, but not loaded or promoted.",
+      "LOADED": "Editing “{{name}}”. Saving updates this experiment.",
+      "UPDATE": "Update experiment",
+      "SAVE_AS_NEW": "Save as new"
+    }
   }
 }

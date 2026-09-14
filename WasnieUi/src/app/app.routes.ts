@@ -23,6 +23,17 @@ export const routes: Routes = [
       import('./features/subscription/subscription.routes').then((m) => m.subscriptionRoutes),
   },
   {
+    // El recorrido guiado: entrada permanente, no sólo la primera vez. Lleva los mismos guardas que
+    // el resto del producto — practica dentro de la empresa del usuario, con su sesión.
+    path: 'guided-tour',
+    title: 'GUIDED.TITLE',
+    canActivate: [planGuard, subscriptionGuard],
+    loadComponent: () =>
+      import('./features/guided-tour/guided-tour.component').then(
+        (m) => m.GuidedTourComponent
+      ),
+  },
+  {
     path: 'dashboard',
     title: 'NAV.DASHBOARD',
     canActivate: [planGuard, subscriptionGuard],

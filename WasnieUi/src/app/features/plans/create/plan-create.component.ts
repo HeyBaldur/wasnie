@@ -6,6 +6,7 @@ import { AppShellComponent } from '../../../shared/components/app-shell/app-shel
 import { PlansStore } from '../state/plans.store';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { ToastService } from '../../../shared/services/toast.service';
+import { PlanLockIntroComponent } from './plan-lock-intro.component';
 import {
   WsButtonComponent,
   WsInputComponent,
@@ -33,6 +34,7 @@ const CURRENCIES: SelectOption[] = [
     WsSelectComponent,
     WsDateRangePickerComponent,
     WsPageHeaderComponent,
+    PlanLockIntroComponent,
   ],
   templateUrl: './plan-create.component.html',
   styleUrl: './plan-create.component.scss',

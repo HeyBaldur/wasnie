@@ -1,0 +1,68 @@
+<section class="lock" aria-labelledby="plan-lock-intro-title">
+  <!--
+    ★ LA ILUSTRACIÓN CUENTA LA REGLA. Un plan con sus reglas, un pago aprobado junto a él y un candado
+    que cae y se cierra sobre el plan: a partir del primer pago, lo que se definió queda así. Sin texto
+    dentro, colores por tokens, quieta con `prefers-reduced-motion`.
+  -->
+  <div class="lock__art" aria-hidden="true">
+    <svg class="lock__svg" viewBox="0 0 320 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="lock-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" class="art-stop-violet" />
+          <stop offset="1" class="art-stop-blue" />
+        </linearGradient>
+      </defs>
+
+      <path class="art-sparkle art-sparkle--1" d="M28 30l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5z" />
+      <path class="art-sparkle art-sparkle--2" d="M296 24l2 4.5 4.5 2-4.5 2-2 4.5-2-4.5-4.5-2 4.5-2z" />
+      <circle class="art-dot art-dot--1" cx="160" cy="12" r="3" />
+      <circle class="art-dot art-dot--2" cx="304" cy="120" r="2.5" />
+
+      <!-- El plan, con sus reglas -->
+      <g class="art-card art-card--plan">
+        <rect class="art-surface" x="54" y="30" width="132" height="100" rx="12" />
+        <rect class="art-line art-line--strong" x="70" y="46" width="60" height="6" rx="3" />
+        <rect class="art-line" x="70" y="58" width="38" height="4" rx="2" />
+        <rect class="art-rule art-rule--1" x="70" y="74" width="100" height="10" rx="3" />
+        <rect class="art-rule art-rule--2" x="70" y="90" width="80" height="10" rx="3" />
+        <rect class="art-rule art-rule--3" x="70" y="106" width="92" height="10" rx="3" />
+      </g>
+
+      <!-- El pago ya aprobado bajo ese plan -->
+      <g class="art-card art-card--payout">
+        <rect class="art-surface" x="200" y="62" width="100" height="58" rx="10" />
+        <circle class="art-avatar" cx="218" cy="80" r="7" />
+        <rect class="art-line art-line--strong" x="231" y="75" width="40" height="5" rx="2.5" />
+        <rect class="art-line" x="231" y="84" width="26" height="4" rx="2" />
+        <rect class="art-pill-success" x="212" y="96" width="48" height="14" rx="7" />
+        <path class="art-check-success" d="M222 103l3 3 6-6" />
+        <rect class="art-line-success" x="236" y="101" width="18" height="4" rx="2" />
+      </g>
+
+      <!-- El candado que cae y se cierra sobre el plan -->
+      <g class="art-lock">
+        <path class="art-shackle" d="M166 38 v-8 a14 14 0 0 1 28 0 v8" />
+        <rect x="158" y="36" width="44" height="36" rx="8" fill="url(#lock-grad)" />
+        <circle class="art-keyhole" cx="180" cy="51" r="4" />
+        <rect class="art-keyhole" x="178.5" y="53" width="3" height="8" rx="1.5" />
+      </g>
+    </svg>
+  </div>
+
+  <div class="lock__body">
+    <span class="lock__eyebrow">
+      <app-icon name="shield-check" [size]="12" />
+      {{ 'PLANS.LOCK_INTRO.EYEBROW' | translate }}
+    </span>
+    <h2 id="plan-lock-intro-title" class="lock__title">{{ 'PLANS.LOCK_INTRO.TITLE' | translate }}</h2>
+
+    <ul class="lock__points">
+      @for (point of points; track point.key) {
+        <li class="lock__point">
+          <span class="lock__point-icon" aria-hidden="true"><app-icon [name]="point.icon" [size]="14" /></span>
+          <span>{{ point.key | translate }}</span>
+        </li>
+      }
+    </ul>
+  </div>
+</section>
