@@ -239,7 +239,6 @@
     "TITLE": "Manual de usuario",
     "SHORTCUTS_TITLE": "Ir directo a",
     "SHORTCUTS_BODY": "El manual es denso y técnico. Estas son las secciones del motor de cálculo que la gente viene a buscar.",
-    "VIEW_FLOW": "Ver flujo del sistema",
     "EMPTY_TITLE": "El manual todavía no está disponible",
     "EMPTY_DESC": "Esta instalación aún no tiene publicado el manual de usuario. Cuando se agregue, aparecerá acá.",
     "LOAD_ERROR": "No se pudo cargar el manual."

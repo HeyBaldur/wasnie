@@ -17,7 +17,6 @@ import { AppShellComponent } from '../../shared/components/app-shell/app-shell.c
 import { WsCardComponent, WsButtonComponent, WsEmptyStateComponent } from '../../shared/ui';
 import { ManualApiService } from './services/manual.api.service';
 import { ManualHeading } from './models/manual.model';
-import { WelcomeService } from '../../core/services/welcome.service';
 
 type ManualState = 'loading' | 'ready' | 'unavailable' | 'error';
 
@@ -54,10 +53,6 @@ export class ManualComponent implements OnInit {
   private readonly api = inject(ManualApiService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
-
-  /** Root-provided, so a button here opens the panel that lives in the shell. */
-  // The modal itself is rendered by the app shell; this only flips the shared signal.
-  readonly welcome = inject(WelcomeService);
 
   private readonly docRef = viewChild<ElementRef<HTMLElement>>('doc');
 

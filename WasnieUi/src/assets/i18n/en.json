@@ -239,7 +239,6 @@
     "TITLE": "User manual",
     "SHORTCUTS_TITLE": "Jump straight to",
     "SHORTCUTS_BODY": "The manual is dense and technical. These are the sections of the calculation engine people come looking for.",
-    "VIEW_FLOW": "View system flow",
     "EMPTY_TITLE": "The manual is not available yet",
     "EMPTY_DESC": "This installation does not have the user manual published yet. Once it is added, it will appear here.",
     "LOAD_ERROR": "The manual could not be loaded."
