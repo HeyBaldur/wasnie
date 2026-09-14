@@ -27,6 +27,24 @@
     height: 120px;
   }
 
+  // ── Artwork variant ──────────────────────────────────────────────────────────────────────────────
+  // The animated, multi-colour illustrations (ARTWORK_KEYS). They carry their own colours as tokens, so the
+  // grey tint and the 0.85 fade meant for glyphs would only wash them out; they also need room to read.
+  &--art {
+    width: min(100%, 240px);
+    height: auto;
+    aspect-ratio: 220 / 165;
+    opacity: 1;
+    color: inherit;
+
+    // The SVG arrives through [innerHTML], so only ::ng-deep reaches it from this encapsulated sheet.
+    ::ng-deep svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+  }
+
   // ── Video variant ───────────────────────────────────────────────────────────────────────────────
   // A clip is the ARTWORK, not a monochrome glyph, so none of the rules above apply to it: the
   // tertiary-grey tint and the 0.85 opacity that make the SVGs recede would just make it look broken,

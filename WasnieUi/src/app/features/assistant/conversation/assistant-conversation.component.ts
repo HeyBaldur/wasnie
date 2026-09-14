@@ -79,7 +79,7 @@ import { formatMessageTime, plainTextOf } from './message-meta';
     AssistantMathDirective,
   ],
   templateUrl: './assistant-conversation.component.html',
-  styleUrls: ['./assistant-conversation.component.scss', './assistant-welcome.scss'],
+  styleUrls: ['./assistant-conversation.component.scss', './assistant-welcome.scss', './assistant-thinking.scss'],
   host: {
     '[class.assistant-conversation--wide]': 'wide()',
   },

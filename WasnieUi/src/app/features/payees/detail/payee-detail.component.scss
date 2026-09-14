@@ -191,6 +191,15 @@
   flex-direction: column;
   height: 100%; // stretch to fill the grid cell so both cards are identical height
 
+  // ★ ONLY AN OPEN CARD STRETCHES. The grid row takes the height of its tallest card, and a COLLAPSED card
+  // stretched to match looked like an open card with nothing in it: opening "Quota attainment" turned the
+  // shut "Sales trend" beside it into a tall blank box (same for Quotas / Assignments). A collapsed card
+  // keeps its header height and sits at the top of its cell; two open cards still match each other.
+  &:has(> .bento-card__body[hidden]) {
+    height: auto;
+    align-self: start;
+  }
+
   &--skeleton {
     min-height: 200px;
     animation: shimmer 1.4s ease infinite;

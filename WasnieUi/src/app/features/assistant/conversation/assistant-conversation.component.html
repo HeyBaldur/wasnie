@@ -253,7 +253,11 @@
     real reply so nothing shifts when the persisted message replaces it.
   -->
   @if (store.streamingReply() !== null) {
-    <div class="assistant-msg assistant-msg--assistant" data-testid="assistant-streaming">
+    <div
+      class="assistant-msg assistant-msg--assistant"
+      [class.assistant-msg--thinking]="store.streamingReply()!.length === 0"
+      data-testid="assistant-streaming"
+    >
       @if (store.streamingReply()!.length > 0) {
         <!--
           Markdown is rendered WHILE it streams, from whatever has arrived. A half-written `**`
@@ -279,58 +283,72 @@
           so below the threshold this degrades to the plain loader, in the same place and the same
           type. The dots have not been replaced; they are what a simple turn still looks like.
         -->
-        @if (showSteps()) {
-          <ul class="assistant-steps" role="status" data-testid="assistant-steps">
-            @for (step of store.progressSteps(); track step.phase) {
-              <li
-                class="assistant-steps__item"
-                [class.assistant-steps__item--done]="step.done"
-                [attr.data-phase]="step.phase"
-                [attr.data-state]="step.done ? 'done' : 'running'"
-              >
-                @if (step.done) {
-                  <app-icon name="check" [size]="14" class="assistant-steps__check" />
-                } @else {
-                  <span class="assistant-steps__spinner" aria-hidden="true"></span>
-                }
-                <span class="assistant-steps__label">{{ phaseLabel(step.phase) | translate }}</span>
-              </li>
-            }
-          </ul>
-        } @else {
+        <!--
+          ★ THE THINKING CARD. One surface for the whole wait: Zeke's mark (a CSS orb — the GIF could not be
+          paused and did not match the product's look), what is happening, and an activity bar that shows
+          MOVEMENT, never a percentage — the server reports no progress fraction, so none is drawn.
+        -->
+        <div class="assistant-thinking">
           <!--
-            ★ THE DOTS STAY; THE WORDS JOIN THEM. Three silent dots cannot tell "working" apart
-            from "hung", and this assistant can genuinely take several seconds.
-
-            ★ AND THE WORDS ARE TRUE AT EVERY MOMENT. No stage is named here: this is the branch for
-            turns that reported no steps at all — an older backend, or the instant before the first
-            one lands — and naming one would be the single place in this feature that asserts
-            something it cannot verify.
+            ★ THE WORDS ARE TRUE AT EVERY MOMENT. No stage is named in this line. While the turn has reported
+            too few steps for a list (an older backend, a simple question, or the instant before the first
+            one lands) this head IS the plain loader — the mark beside the honest sentence.
           -->
-          <div class="assistant-msg__waiting" role="status" data-testid="assistant-waiting">
-            <!--
-              The assistant's own face while it thinks — an avatar, in the shape every chat uses for
-              one. It replaces the three dots: the dots said "something is happening", the mark says
-              WHO is doing it, which is the same information plus an identity.
-
-              ★ TWO IMAGES, ONE VISIBLE. The animated mark is a GIF, and a GIF cannot be paused from
-              CSS — so a reader who has asked for less motion gets the STILL assistant mark in the
-              same circle, swapped in stylesheet-side. Both are square and already served from the
-              app root, so neither crops badly and neither is a new asset.
-            -->
-            <span class="assistant-msg__avatar" aria-hidden="true">
-              <img class="assistant-msg__avatar-motion" src="/brain.gif" alt="" />
-              <img class="assistant-msg__avatar-still" src="wasnie_logo.png" alt="" />
+          <div
+            class="assistant-thinking__head"
+            [class.assistant-msg__waiting]="!showSteps()"
+            [attr.role]="showSteps() ? null : 'status'"
+            [attr.data-testid]="showSteps() ? null : 'assistant-waiting'"
+          >
+            <span class="assistant-msg__avatar assistant-thinking__orb" aria-hidden="true">
+              <span class="assistant-thinking__orb-ring"></span>
+              <span class="assistant-thinking__orb-core">
+                <img class="assistant-msg__avatar-still" src="wasnie_logo.png" alt="" />
+              </span>
             </span>
-            <span class="assistant-msg__waiting-text">{{ 'ASSISTANT.PROCESSING' | translate }}</span>
-          </div>
-        }
 
-        @if (waitingLong()) {
-          <p class="assistant-msg__waiting-long" data-testid="assistant-waiting-long">
-            {{ 'ASSISTANT.PROCESSING_LONG' | translate }}
-          </p>
-        }
+            <div class="assistant-thinking__title">
+              <span class="assistant-thinking__eyebrow">Zeke</span>
+              <span class="assistant-msg__waiting-text assistant-thinking__shimmer">{{ 'ASSISTANT.PROCESSING' | translate }}</span>
+            </div>
+          </div>
+
+          <span class="assistant-thinking__bar" aria-hidden="true"><span></span></span>
+
+          <!--
+            ★ THE STEPS ARE THE SERVER'S, NOT A STORYBOARD. Each item exists because the backend reported
+            starting that work, and turns green because it reported finishing it. Below the threshold (a
+            plain understand-then-answer turn) the list is not shown — see showSteps().
+          -->
+          @if (showSteps()) {
+            <ul class="assistant-steps" role="status" data-testid="assistant-steps">
+              @for (step of store.progressSteps(); track step.phase) {
+                <li
+                  class="assistant-steps__item"
+                  [class.assistant-steps__item--done]="step.done"
+                  [attr.data-phase]="step.phase"
+                  [attr.data-state]="step.done ? 'done' : 'running'"
+                >
+                  <span class="assistant-steps__marker" aria-hidden="true">
+                    @if (step.done) {
+                      <app-icon name="check" [size]="12" class="assistant-steps__check" />
+                    } @else {
+                      <span class="assistant-steps__spinner"></span>
+                    }
+                  </span>
+                  <span class="assistant-steps__label">{{ phaseLabel(step.phase) | translate }}</span>
+                </li>
+              }
+            </ul>
+          }
+
+          @if (waitingLong()) {
+            <p class="assistant-msg__waiting-long" data-testid="assistant-waiting-long">
+              <app-icon name="clock" [size]="13" class="assistant-msg__waiting-long-icon" />
+              <span>{{ 'ASSISTANT.PROCESSING_LONG' | translate }}</span>
+            </p>
+          }
+        </div>
       }
     </div>
   }
