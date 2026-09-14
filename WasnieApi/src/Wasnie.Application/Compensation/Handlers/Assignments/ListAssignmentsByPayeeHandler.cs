@@ -67,7 +67,17 @@ public sealed class ListAssignmentsByPayeeHandler(
         var query =
             from a in db.PlanAssignments.Where(a => a.PayeeId == request.PayeeId)
             join pl in db.CompensationPlans on a.PlanId equals pl.Id
-            select new { Assignment = a, PlanName = pl.Name, PlanVersion = pl.Version };
+            join py in db.Payees on a.PayeeId equals py.Id into payees
+            from py in payees.DefaultIfEmpty()
+            select new
+            {
+                Assignment = a,
+                PlanName = pl.Name,
+                PlanVersion = pl.Version,
+                // Current payee name, not the snapshot — see ListAssignmentsHandler.
+                PayeeFullName = py != null ? py.FullName : a.PayeeSnapshot.FullName,
+                PayeeEmployeeCode = py != null ? py.EmployeeCode : a.PayeeSnapshot.EmployeeCode,
+            };
 
         // ── Status ───────────────────────────────────────────────────────────
         if (string.Equals(p.Status, AllStatuses, StringComparison.OrdinalIgnoreCase))
@@ -113,7 +123,7 @@ public sealed class ListAssignmentsByPayeeHandler(
             .ToListAsync(cancellationToken);
 
         var dtos = pageItems
-            .Select(x => CompensationMapper.ToPlanAssignmentDto(x.Assignment, x.PlanName, x.PlanVersion))
+            .Select(x => CompensationMapper.ToPlanAssignmentDto(x.Assignment, x.PlanName, x.PlanVersion, x.PayeeFullName, x.PayeeEmployeeCode))
             .ToList();
 
         return Result<PagedResult<PlanAssignmentDto>>.Success(new PagedResult<PlanAssignmentDto>

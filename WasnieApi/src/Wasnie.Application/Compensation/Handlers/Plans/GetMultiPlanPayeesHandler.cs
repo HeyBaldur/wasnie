@@ -60,12 +60,27 @@ public sealed class GetMultiPlanPayeesHandler(IApplicationDbContext db, IAuthori
             .ToList();
 
         // Payees of THIS plan that are also in another active plan (>1 distinct active plan).
-        var items = byPayee
+        var multi = byPayee
             .Where(p => p.PlanIds.Contains(request.PlanId) && p.PlanIds.Count > 1)
+            .ToList();
+
+        // Q3: the CURRENT name of just those payees. The snapshot is the name at assignment time, and a
+        // renamed payee's assignments carry different ones — `g.First()` above picked whichever row came
+        // first, so the same person could show under an old name. Snapshot is only the fallback.
+        var multiIds = multi.Select(p => p.PayeeId).ToList();
+        var currentById = multiIds.Count == 0
+            ? new Dictionary<Guid, (string FullName, string EmployeeCode)>()
+            : (await db.Payees
+                .Where(py => multiIds.Contains(py.Id))
+                .Select(py => new { py.Id, py.FullName, py.EmployeeCode })
+                .ToListAsync(cancellationToken))
+                .ToDictionary(py => py.Id, py => (py.FullName, py.EmployeeCode));
+
+        var items = multi
             .Select(p => new MultiPlanPayeeDto(
                 PayeeId: p.PayeeId,
-                FullName: p.Display.FullName,
-                EmployeeCode: p.Display.EmployeeCode,
+                FullName: currentById.TryGetValue(p.PayeeId, out var current) ? current.FullName : p.Display.FullName,
+                EmployeeCode: currentById.TryGetValue(p.PayeeId, out var currentCode) ? currentCode.EmployeeCode : p.Display.EmployeeCode,
                 OtherPlans: p.PlanIds
                     .Where(pid => pid != request.PlanId)
                     .Select(pid => new OtherActivePlanDto(pid, activePlanNameById[pid]))

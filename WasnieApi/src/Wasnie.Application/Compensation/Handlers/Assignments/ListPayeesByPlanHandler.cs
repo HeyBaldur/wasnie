@@ -39,7 +39,17 @@ public sealed class ListPayeesByPlanHandler(
                 db.CompensationPlans,
                 a => a.PlanId,
                 pl => pl.Id,
-                (a, pl) => new { Assignment = a, PlanName = pl.Name, PlanVersion = pl.Version });
+                (a, pl) => new { Assignment = a, PlanName = pl.Name, PlanVersion = pl.Version })
+            // Current payee name, not the snapshot — see ListAssignmentsHandler.
+            .GroupJoin(db.Payees, x => x.Assignment.PayeeId, py => py.Id, (x, payees) => new { x, payees })
+            .SelectMany(g => g.payees.DefaultIfEmpty(), (g, py) => new
+            {
+                g.x.Assignment,
+                g.x.PlanName,
+                g.x.PlanVersion,
+                PayeeFullName = py != null ? py.FullName : g.x.Assignment.PayeeSnapshot.FullName,
+                PayeeEmployeeCode = py != null ? py.EmployeeCode : g.x.Assignment.PayeeSnapshot.EmployeeCode,
+            });
 
         // Filters
         if (!string.IsNullOrWhiteSpace(p.Status) &&
@@ -52,7 +62,7 @@ public sealed class ListPayeesByPlanHandler(
 
         var sorted = sortBy switch
         {
-            "payeefullname" => desc ? joined.OrderByDescending(x => x.Assignment.PayeeSnapshot.FullName) : joined.OrderBy(x => x.Assignment.PayeeSnapshot.FullName),
+            "payeefullname" => desc ? joined.OrderByDescending(x => x.PayeeFullName) : joined.OrderBy(x => x.PayeeFullName),
             _ => desc ? joined.OrderByDescending(x => x.Assignment.EffectivePeriod.Start) : joined.OrderBy(x => x.Assignment.EffectivePeriod.Start),
         };
 
@@ -62,7 +72,7 @@ public sealed class ListPayeesByPlanHandler(
             .Take(p.PageSize)
             .ToListAsync(cancellationToken);
 
-        var dtos = items.Select(x => CompensationMapper.ToPlanAssignmentDto(x.Assignment, x.PlanName, x.PlanVersion)).ToList();
+        var dtos = items.Select(x => CompensationMapper.ToPlanAssignmentDto(x.Assignment, x.PlanName, x.PlanVersion, x.PayeeFullName, x.PayeeEmployeeCode)).ToList();
 
         return Result<PagedResult<PlanAssignmentDto>>.Success(new PagedResult<PlanAssignmentDto>
         {

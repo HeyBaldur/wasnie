@@ -381,6 +381,61 @@ public sealed class AssignmentsEndpointsTests : IAsyncLifetime
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    // ── The payee's name is the CURRENT one, not the name at assignment time ──────
+    // Found on CEO-001: renamed from "Rudolph" to "Rudolph GeHard Chipellin 3ero", the assignments list showed
+    // both names with the same code, as if there were two payees. The four read endpoints are asked, because
+    // the left join to Payees has to translate on SQL Server (an in-memory test would not prove that).
+
+    [Fact]
+    public async Task RenamedPayee_EveryAssignmentEndpoint_ShowsTheCurrentName_AndTheOldNameStillFindsIt()
+    {
+        var payee = await CreatePayeeAsync(_clientA, "RENAME01");
+        var plan = await CreateActivePlanAsync(_clientA);
+        var assign = await _clientA.PostAsJsonAsync("/api/assignments", new
+        {
+            planId = plan.Id,
+            payeeId = payee.Id,
+            effectiveStart = "2025-01-01",
+            effectiveEnd = "2025-12-31",
+        });
+        assign.EnsureSuccessStatusCode();
+        var assignment = (await assign.Content.ReadFromJsonAsync<AssignmentNameResponse>())!;
+        assignment.PayeeFullName.Should().Be("Test Payee RENAME01");
+
+        var rename = await _clientA.PutAsJsonAsync($"/api/payees/{payee.Id}", new
+        {
+            payeeId = payee.Id,
+            fullName = "Renamed Person",
+            employeeCode = "RENAME01",
+            email = "rename01@test.com",
+            hireDate = "2024-01-01",
+        });
+        rename.EnsureSuccessStatusCode();
+
+        var list = await (await _clientA.GetAsync($"/api/assignments?payeeId={payee.Id}"))
+            .Content.ReadPagedResultAsync<AssignmentNameResponse>();
+        list.Items.Should().ContainSingle().Which.PayeeFullName.Should().Be("Renamed Person");
+
+        var byId = await (await _clientA.GetAsync($"/api/assignments/{assignment.Id}"))
+            .Content.ReadFromJsonAsync<AssignmentNameResponse>();
+        byId!.PayeeFullName.Should().Be("Renamed Person");
+
+        var byPayee = await (await _clientA.GetAsync($"/api/assignments/payee/{payee.Id}?status=all"))
+            .Content.ReadPagedResultAsync<AssignmentNameResponse>();
+        byPayee.Items.Should().ContainSingle().Which.PayeeFullName.Should().Be("Renamed Person");
+
+        var byPlan = await (await _clientA.GetAsync($"/api/assignments/plan/{plan.Id}?sortBy=payeeFullName"))
+            .Content.ReadPagedResultAsync<AssignmentNameResponse>();
+        byPlan.Items.Should().ContainSingle().Which.PayeeFullName.Should().Be("Renamed Person");
+
+        // Someone who still knows the payee by the old name must not get an empty list.
+        var byOldName = await (await _clientA.GetAsync("/api/assignments?search=Test%20Payee%20RENAME01"))
+            .Content.ReadPagedResultAsync<AssignmentNameResponse>();
+        byOldName.Items.Should().ContainSingle().Which.PayeeFullName.Should().Be("Renamed Person");
+    }
+
+    private sealed record AssignmentNameResponse(Guid Id, Guid PayeeId, string PayeeFullName, string PayeeEmployeeCode);
+
     private async Task<PayeeResponse> CreatePayeeAsync(HttpClient client, string code = "EMP001")
     {
         var request = new

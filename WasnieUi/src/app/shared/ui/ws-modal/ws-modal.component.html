@@ -1,9 +1,6 @@
 @if (isOpen()) {
-  <!--
-    ★ animate.leave (Angular 20.2+, sin @angular/animations): al cerrar, Angular pone la clase y espera a que
-    termine su animación ANTES de quitar el nodo. Sin eso el @if lo borraba al instante y no había salida.
-  -->
-  <div class="ws-modal" role="dialog" aria-modal="true" animate.leave="ws-modal--leaving">
+  <!-- #root: al cerrarse, el componente anima una copia inerte de este nodo (ver playExit). -->
+  <div #root class="ws-modal" role="dialog" aria-modal="true">
     <div class="ws-modal__overlay" (click)="onBackdropClick()"></div>
 
     <div #dialog [class]="dialogClass()">

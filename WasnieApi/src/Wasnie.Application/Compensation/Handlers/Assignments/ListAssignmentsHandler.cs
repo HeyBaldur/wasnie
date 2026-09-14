@@ -45,25 +45,37 @@ public sealed class ListAssignmentsHandler(
         if (p.PayeeId.HasValue)
             query = query.Where(x => x.PayeeId == p.PayeeId.Value);
 
-        // Join with plans for planName sorting
-        var joined = query.Join(
-            db.CompensationPlans,
-            a => a.PlanId,
-            pl => pl.Id,
-            (a, pl) => new
+        // Join with plans for planName sorting, and LEFT join with payees for the current name.
+        // ★ THE PAYEE'S NAME IS READ LIVE, NOT FROM THE ASSIGNMENT'S SNAPSHOT. PayeeSnapshot is the name as it was
+        // when the assignment was created, and it never changes. Showing it made one renamed payee look like
+        // two people with the same code (CEO-001: "Rudolph" on the 9 rows created before the rename,
+        // "Rudolph GeHard Chipellin 3ero" on the 4 after). An assignment is a live relationship, so it shows
+        // who the payee IS. The snapshot stays in the row untouched (§B6) and is only the fallback when the
+        // payee row cannot be read.
+        var joined =
+            from a in query
+            join pl in db.CompensationPlans on a.PlanId equals pl.Id
+            join py in db.Payees on a.PayeeId equals py.Id into payees
+            from py in payees.DefaultIfEmpty()
+            select new
             {
                 Assignment = a,
                 PlanName = pl.Name,
                 PlanVersion = pl.Version,
-            });
+                PayeeFullName = py != null ? py.FullName : a.PayeeSnapshot.FullName,
+                PayeeEmployeeCode = py != null ? py.EmployeeCode : a.PayeeSnapshot.EmployeeCode,
+            };
 
         // Search
         if (!string.IsNullOrWhiteSpace(p.Search))
         {
             var srch = p.Search.Trim().ToLower();
+            // The current name AND the name at assignment time both match: someone who still knows the payee
+            // by the old name must not get an empty list.
             joined = joined.Where(x =>
-                x.Assignment.PayeeSnapshot.FullName.ToLower().Contains(srch) ||
-                x.Assignment.PayeeSnapshot.EmployeeCode.ToLower().Contains(srch));
+                x.PayeeFullName.ToLower().Contains(srch) ||
+                x.PayeeEmployeeCode.ToLower().Contains(srch) ||
+                x.Assignment.PayeeSnapshot.FullName.ToLower().Contains(srch));
         }
 
         // Sort
@@ -72,7 +84,7 @@ public sealed class ListAssignmentsHandler(
 
         var sorted = sortBy switch
         {
-            "payeefullname" => desc ? joined.OrderByDescending(x => x.Assignment.PayeeSnapshot.FullName) : joined.OrderBy(x => x.Assignment.PayeeSnapshot.FullName),
+            "payeefullname" => desc ? joined.OrderByDescending(x => x.PayeeFullName) : joined.OrderBy(x => x.PayeeFullName),
             "planname" => desc ? joined.OrderByDescending(x => x.PlanName) : joined.OrderBy(x => x.PlanName),
             _ => desc ? joined.OrderByDescending(x => x.Assignment.EffectivePeriod.Start) : joined.OrderBy(x => x.Assignment.EffectivePeriod.Start),
         };
@@ -90,8 +102,8 @@ public sealed class ListAssignmentsHandler(
             x.PlanName,
             x.PlanVersion,
             x.Assignment.PayeeId,
-            x.Assignment.PayeeSnapshot.FullName,
-            x.Assignment.PayeeSnapshot.EmployeeCode,
+            x.PayeeFullName,
+            x.PayeeEmployeeCode,
             x.Assignment.EffectivePeriod.Start,
             x.Assignment.EffectivePeriod.End,
             x.Assignment.Status.ToString(),
