@@ -2,7 +2,8 @@ import { Component, DestroyRef, HostListener, OnInit, computed, inject, signal }
 import { createRowMenu } from '../../../shared/utils/row-menu';
 import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { extractApiError } from '../../../shared/utils/api-error';
+import { extractApiError, extractApiErrorCode } from '../../../shared/utils/api-error';
+import { deletePlanErrorKey } from './delete-plan-error';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
@@ -192,7 +193,17 @@ export class PlansListComponent implements OnInit {
       this.deleteOpen.set(false);
       this.pendingDeleteId.set(null);
     } catch (err) {
-      this.toast.show(extractApiError(err), 'error');
+      // The refusal arrives as a code (KAN-69), with no `message` on purpose: translate it through the
+      // whitelist. Only a response that is not coded at all (404, network) uses the plain message path.
+      const coded = extractApiErrorCode(err);
+      this.toast.show(coded ? deletePlanErrorKey(coded) : extractApiError(err), 'error');
+      // A coded refusal means the plan changed since the list loaded: close the dialog and reload, so the
+      // menu stops offering a delete the server will not do.
+      if (coded) {
+        this.deleteOpen.set(false);
+        this.pendingDeleteId.set(null);
+        await this.store.loadPlans();
+      }
     } finally {
       this.deleteSaving.set(false);
     }

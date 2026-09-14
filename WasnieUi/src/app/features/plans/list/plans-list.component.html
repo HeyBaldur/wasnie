@@ -117,7 +117,8 @@
                               <app-icon name="check-circle" [size]="14" />
                               {{ 'PLANS.ACTION_ACTIVATE' | translate }}
                             </button>
-                            @if (plan.activeRuleCount === 0) {
+                            <!-- KAN-69: the server decides (no assignments, quotas or money trace). Hidden, not disabled (§5.8). -->
+                            @if (plan.isDeletable) {
                               <button *hasPermission="'Plans.Delete'" class="row-menu__item row-menu__item--danger" type="button" (click)="onDelete(plan.id)">
                                 <app-icon name="trash" [size]="14" />
                                 {{ 'COMMON.DELETE' | translate }}

@@ -37,6 +37,13 @@ public static class AuditActions
     public const string PlanCreated = "PLAN_CREATED";
     public const string PlanActivated = "PLAN_ACTIVATED";
     public const string PlanArchived = "PLAN_ARCHIVED";
+
+    /// <summary>
+    /// A Draft plan was permanently deleted, with its rules. ★ THE ROW OUTLIVES THE PLAN: its Metadata
+    /// carries the name, version, currency, period and rule count, because after the delete nothing
+    /// else in the database can say what was removed.
+    /// </summary>
+    public const string PlanDeleted = "PLAN_DELETED";
     public const string PlanVersionCreated = "PLAN_VERSION_CREATED";
     public const string PlanRuleAdded = "PLAN_RULE_ADDED";
     public const string PlanRuleUpdated = "PLAN_RULE_UPDATED";

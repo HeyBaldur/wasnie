@@ -13,6 +13,11 @@ export interface PlanSummary {
   activeRuleCount: number;
   /** Active assignments. Archiving the plan deactivates every one of them. */
   activeAssignmentCount: number;
+  /**
+   * Draft AND nothing points at it — computed by the server with the same check the delete runs
+   * (`PlanDeletionBlockers`), so the menu offers Delete exactly when the delete would succeed.
+   */
+  isDeletable: boolean;
 }
 
 export type PlanVersion = PlanSummary;

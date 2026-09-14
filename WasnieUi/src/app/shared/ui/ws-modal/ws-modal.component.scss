@@ -13,7 +13,7 @@
   inset: 0;
   background: var(--color-bg-overlay);
   backdrop-filter: blur(2px);
-  animation: ws-modal-fade-in var(--transition-base) ease;
+  animation: ws-modal-fade-in 200ms ease-out both;
 }
 
 .ws-modal__dialog {
@@ -32,7 +32,7 @@
   max-height: calc(100vh - 64px);
   max-height: calc(100dvh - 64px);
   width: 100%;
-  animation: ws-modal-scale-in var(--transition-slow) ease;
+  animation: ws-modal-zoom-in 320ms cubic-bezier(0.34, 1.36, 0.64, 1) both;
   overflow: hidden;
 }
 
@@ -176,7 +176,46 @@
   to   { opacity: 1; }
 }
 
-@keyframes ws-modal-scale-in {
-  from { opacity: 0; transform: scale(0.96) translateY(-8px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
+// ── Entrada y salida ────────────────────────────────────────────────────────────────
+// Entra con zoom desde 90% y un rebote corto al final; sale más rápido de lo que entra (160ms), con un zoom
+// out a 95%: cerrar tiene que sentirse inmediato. La opacidad llega antes que la escala para que el rebote
+// no se vea como un parpadeo.
+@keyframes ws-modal-zoom-in {
+  0%   { opacity: 0; transform: scale(0.9) translateY(8px); }
+  45%  { opacity: 1; }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes ws-modal-zoom-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.95); }
+}
+
+@keyframes ws-modal-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+// ★ Angular espera a la animación del nodo que lleva la clase de salida — el raíz. Por eso el raíz también
+// "anima" (una pausa de la misma duración): sin ella Angular quitaría el nodo antes de que el diálogo y el
+// fondo terminaran de salir.
+@keyframes ws-modal-hold {
+  from { opacity: 1; }
+  to   { opacity: 1; }
+}
+
+.ws-modal--leaving {
+  pointer-events: none;
+  animation: ws-modal-hold 160ms linear both;
+
+  .ws-modal__overlay { animation: ws-modal-fade-out 160ms ease-in both; }
+  .ws-modal__dialog { animation: ws-modal-zoom-out 160ms cubic-bezier(0.4, 0, 1, 1) both; }
+}
+
+// Sin zoom para quien pidió menos movimiento: solo un fundido corto al entrar y al salir.
+@media (prefers-reduced-motion: reduce) {
+  .ws-modal__dialog { animation: ws-modal-fade-in 150ms ease-out both; }
+  .ws-modal--leaving { animation-duration: 120ms; }
+  .ws-modal--leaving .ws-modal__overlay { animation-duration: 120ms; }
+  .ws-modal--leaving .ws-modal__dialog { animation: ws-modal-fade-out 120ms ease-in both; }
 }

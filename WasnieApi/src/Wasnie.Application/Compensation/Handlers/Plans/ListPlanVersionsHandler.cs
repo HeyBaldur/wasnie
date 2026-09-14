@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Extensions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Application.Compensation.Queries.Plans;
@@ -43,9 +44,21 @@ public sealed class ListPlanVersionsHandler(IApplicationDbContext db, IAuthoriza
 
         var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);
 
+        var draftIds = paged.Items
+            .Where(x => x.Status == Wasnie.Domain.Compensation.Plans.PlanStatus.Draft).Select(x => x.Id).ToList();
+        var blockers = await PlanDeletionBlockers.FindAsync(db, draftIds, cancellationToken);
+
         return Result<PagedResult<PlanSummaryDto>>.Success(new PagedResult<PlanSummaryDto>
         {
-            Items = paged.Items.Select(CompensationMapper.ToPlanSummaryDto).ToList(),
+            // ⚠ KNOWN DEFECT, KEPT AS IT WAS (reported with KAN-69, outside its scope): this used to be the
+            // method group `Select(CompensationMapper.ToPlanSummaryDto)`, which binds to the (item, index)
+            // overload of Select — so ActiveAssignmentCount has always been the ROW INDEX here, not a count.
+            // Spelled out only because the mapper gained a parameter; fixing it is its own ticket.
+            Items = paged.Items.Select((plan, index) => CompensationMapper.ToPlanSummaryDto(
+                plan,
+                index,
+                isDeletable: plan.Status == Wasnie.Domain.Compensation.Plans.PlanStatus.Draft
+                    && !blockers.ContainsKey(plan.Id))).ToList(),
             TotalCount = paged.TotalCount,
             Page = paged.Page,
             PageSize = paged.PageSize,

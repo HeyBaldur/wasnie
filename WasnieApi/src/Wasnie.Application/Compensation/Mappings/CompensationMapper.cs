@@ -25,7 +25,7 @@ public static class CompensationMapper
             plan.ClawbackMaturationDays,
             plan.ClawbackCapPercent);
 
-    public static PlanSummaryDto ToPlanSummaryDto(CompensationPlan plan, int activeAssignmentCount) =>
+    public static PlanSummaryDto ToPlanSummaryDto(CompensationPlan plan, int activeAssignmentCount, bool isDeletable) =>
         new(
             plan.Id,
             plan.Name,
@@ -35,7 +35,8 @@ public static class CompensationMapper
             plan.EffectivePeriod.End,
             plan.Currency,
             plan.Rules.Count(r => r.IsActive),
-            activeAssignmentCount);
+            activeAssignmentCount,
+            isDeletable);
 
     public static RuleDto ToRuleDto(CompensationRule rule) =>
         new(

@@ -1,5 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Wasnie.Domain.Audit;
+using Wasnie.Domain.Compensation.Plans;
+using Wasnie.Infrastructure.Persistence;
 using FluentAssertions;
 using Wasnie.IntegrationTests.Helpers;
 using Wasnie.IntegrationTests.Infrastructure;
@@ -404,15 +410,87 @@ public sealed class PlansEndpointsTests : IAsyncLifetime
         check.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // KAN-69: this test used to be DeletePlan_DraftWithRules_Returns422. Rules no longer block — they are
+    // configuration, and a clean Draft with rules is the dead draft the ticket removes. The expectation was
+    // changed on purpose, not to make a refactor pass.
     [Fact]
-    public async Task DeletePlan_DraftWithRules_Returns422()
+    public async Task DeletePlan_CleanDraftWithRules_Returns204_RemovesRules_AndIsAudited()
     {
         var plan = await CreatePlanAsync(_clientA, "Plan With Rules");
         await AddRuleAsync(_clientA, plan.Id);
 
         var response = await _clientA.DeleteAsync($"/api/plans/{plan.Id}");
 
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await db.CompensationPlans.IgnoreQueryFilters().AnyAsync(p => p.Id == plan.Id)).Should().BeFalse();
+        (await db.Set<Rule>().IgnoreQueryFilters().AnyAsync(r => r.PlanId == plan.Id)).Should().BeFalse();
+
+        var log = await db.AuditLogs.IgnoreQueryFilters()
+            .SingleAsync(l => l.ResourceId == plan.Id.ToString() && l.Action == AuditActions.PlanDeleted);
+        log.TenantId.Should().Be(TestConstants.TenantA);
+        log.ActorUserId.Should().Be(TestConstants.UserAId);
+        log.ResourceDisplayName.Should().Be("Plan With Rules");
+        log.Metadata.Should().Contain("\"ruleCount\":\"1\"");
+    }
+
+    [Fact]
+    public async Task DeletePlan_DraftAssignedThroughTheApi_Returns422WithCode_AndDeletesNothing()
+    {
+        // ⛔ The money gate, end to end. The API accepts assigning a DRAFT plan (the screens never offer
+        // one), and the engine credits Draft assignments — so this Draft is not "clean". Nothing in the
+        // database would stop the delete: PlanAssignments has no foreign key to the plan.
+        var plan = await CreatePlanAsync(_clientA, "Draft With Assignment");
+        await AddRuleAsync(_clientA, plan.Id);
+        var payeeResponse = await _clientA.PostAsJsonAsync("/api/payees", new
+        {
+            fullName = "Delete Gate Payee",
+            employeeCode = "DELGATE01",
+            email = "delete.gate@test.com",
+            hireDate = "2024-01-15",
+        });
+        payeeResponse.EnsureSuccessStatusCode();
+        var payee = (await payeeResponse.Content.ReadFromJsonAsync<IdResponse>())!;
+        var assign = await _clientA.PostAsJsonAsync("/api/assignments", new
+        {
+            planId = plan.Id,
+            payeeId = payee.Id,
+            effectiveStart = "2025-01-01",
+            effectiveEnd = "2025-12-31",
+        });
+        assign.EnsureSuccessStatusCode();
+
+        var listed = await (await _clientA.GetAsync("/api/plans")).Content.ReadPagedResultAsync<PlanSummaryResponse>();
+        listed.Items.Single(p => p.Id == plan.Id).IsDeletable.Should().BeFalse("the menu must not offer it");
+
+        var response = await _clientA.DeleteAsync($"/api/plans/{plan.Id}");
+
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("code").GetString().Should().Be(PlanDeleteInvariant.HasDependencies);
+        body.GetProperty("parameters").GetProperty("blockers").EnumerateArray()
+            .Select(e => e.GetString()).Should().Equal("Assignments");
+        body.TryGetProperty("message", out _).Should().BeFalse("a coded refusal carries no English sentence");
+
+        (await _clientA.GetAsync($"/api/plans/{plan.Id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await db.AuditLogs.IgnoreQueryFilters()
+            .AnyAsync(l => l.ResourceId == plan.Id.ToString() && l.Action == AuditActions.PlanDeleted))
+            .Should().BeFalse("a refused delete leaves no row claiming it happened");
+    }
+
+    [Fact]
+    public async Task ListPlans_CleanDraft_IsDeletable()
+    {
+        var plan = await CreatePlanAsync(_clientA, "Listed Clean Draft");
+        await AddRuleAsync(_clientA, plan.Id);
+
+        var listed = await (await _clientA.GetAsync("/api/plans")).Content.ReadPagedResultAsync<PlanSummaryResponse>();
+
+        listed.Items.Single(p => p.Id == plan.Id).IsDeletable.Should().BeTrue();
     }
 
     [Fact]
@@ -422,9 +500,14 @@ public sealed class PlansEndpointsTests : IAsyncLifetime
         await AddRuleAsync(_clientA, plan.Id);
         await _clientA.PostAsync($"/api/plans/{plan.Id}/activate", null);
 
+        var listed = await (await _clientA.GetAsync("/api/plans")).Content.ReadPagedResultAsync<PlanSummaryResponse>();
+        listed.Items.Single(p => p.Id == plan.Id).IsDeletable.Should().BeFalse();
+
         var response = await _clientA.DeleteAsync($"/api/plans/{plan.Id}");
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("code").GetString().Should().Be(PlanDeleteInvariant.NotDraft);
     }
 
     // ── Multi-tenant isolation ────────────────────────────────────────────────
@@ -598,5 +681,6 @@ public sealed class PlansEndpointsTests : IAsyncLifetime
     }
 
     private sealed record PlanResponse(Guid Id, string Name, string Status, int Version, string Currency, IEnumerable<object> Rules);
-    private sealed record PlanSummaryResponse(Guid Id, string Name, string Status, int Version);
+    private sealed record PlanSummaryResponse(Guid Id, string Name, string Status, int Version, bool IsDeletable);
+    private sealed record IdResponse(Guid Id);
 }
