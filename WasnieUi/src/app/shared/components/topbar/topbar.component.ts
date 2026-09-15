@@ -7,10 +7,12 @@ import { Router } from '@angular/router';
 import { RouterLink } from '@angular/router';
 import { HasPermissionPipe } from '../../pipes/has-permission.pipe';
 
+import { TrialBannerComponent } from '../../../features/subscription/trial-banner/trial-banner.component';
+
 @Component({
   selector: 'app-topbar',
   standalone: true,
-  imports: [TranslatePipe, IconComponent, AssistantTriggerComponent, RouterLink, HasPermissionPipe],
+  imports: [TranslatePipe, IconComponent, AssistantTriggerComponent, TrialBannerComponent, RouterLink, HasPermissionPipe],
   templateUrl: './topbar.component.html',
   styleUrl: './topbar.component.scss',
 })

@@ -123,7 +123,11 @@ describe('KAN-77 · TrialBannerComponent', () => {
         { provide: CurrentUserService, useValue: { hasPermission: () => canManage } },
         {
           provide: SubscriptionStateService,
-          useValue: { isTrial: signal(state === 'Trial'), trialDaysRemaining: signal(days) },
+          useValue: {
+            isTrial: signal(state === 'Trial'),
+            trialDaysRemaining: signal(days),
+            access: signal(state === 'Trial' ? { trialEndsAt: '2026-09-21T08:59:45Z' } : null),
+          },
         },
       ],
     });
@@ -138,7 +142,16 @@ describe('KAN-77 · TrialBannerComponent', () => {
     expect(el.querySelector('.trial-banner')).not.toBeNull();
     expect(el.textContent).toContain('TRIAL_BANNER.DAYS');
     expect(el.querySelector('.trial-banner--ending')).toBeNull();
-    expect(el.querySelector('ws-button')).not.toBeNull();
+    expect(el.querySelector('[data-testid="trial-upgrade"]')).not.toBeNull();
+  });
+
+  it('reads as a compact topbar status: the label, then the count', () => {
+    const el = render('Trial', 6);
+
+    const pill = el.querySelector('.trial-banner__pill')!;
+    expect(pill.querySelector('app-icon')).not.toBeNull();
+    expect(pill.querySelector('.trial-banner__label')?.textContent).toContain('TRIAL_BANNER.LABEL');
+    expect(pill.querySelector('.trial-banner__msg')?.textContent).toContain('TRIAL_BANNER.DAYS');
   });
 
   it('the last day reads as its own sentence and turns into a warning', () => {
@@ -156,6 +169,6 @@ describe('KAN-77 · TrialBannerComponent', () => {
     const el = render('Trial', 4, false);
 
     expect(el.querySelector('.trial-banner')).not.toBeNull();
-    expect(el.querySelector('ws-button')).toBeNull();
+    expect(el.querySelector('[data-testid="trial-upgrade"]')).toBeNull();
   });
 });

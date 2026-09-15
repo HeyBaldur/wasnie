@@ -12,6 +12,9 @@
   </div>
 
   <div class="topbar__actions">
+    <!-- KAN-77: the trial's days left, as a status beside the assistant. Renders nothing outside a trial. -->
+    <app-trial-banner />
+
     <!-- Hidden entirely when the user has no assistant entitlement (hide, don't disable). -->
     <app-assistant-trigger />
 

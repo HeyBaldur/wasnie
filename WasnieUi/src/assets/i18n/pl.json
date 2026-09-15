@@ -2946,8 +2946,10 @@
     "LOAD_ERROR": "Nie udało się wczytać danych subskrypcji."
   },
   "TRIAL_BANNER": {
-    "DAYS": "Bezpłatny okres próbny: pozostało dni: {{days}}.",
-    "ONE_DAY": "Bezpłatny okres próbny: ostatni dzień.",
-    "CTA": "Subskrybuj"
+    "DAYS": "Pozostało dni: {{days}}",
+    "ONE_DAY": "Ostatni dzień",
+    "LABEL": "Okres próbny",
+    "ENDS_ON": "Okres próbny kończy się {{date}}",
+    "CTA": "Ulepsz plan"
   }
 }

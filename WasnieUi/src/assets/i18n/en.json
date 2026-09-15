@@ -2946,8 +2946,10 @@
     "LOAD_ERROR": "The subscription details could not be loaded."
   },
   "TRIAL_BANNER": {
-    "DAYS": "Free trial: {{days}} days left.",
-    "ONE_DAY": "Free trial: last day.",
-    "CTA": "Subscribe"
+    "DAYS": "{{days}} days left",
+    "ONE_DAY": "Last day",
+    "LABEL": "Free trial",
+    "ENDS_ON": "Your trial ends {{date}}",
+    "CTA": "Upgrade"
   }
 }

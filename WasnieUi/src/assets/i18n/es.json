@@ -2946,8 +2946,10 @@
     "LOAD_ERROR": "No se pudieron cargar los datos de la suscripción."
   },
   "TRIAL_BANNER": {
-    "DAYS": "Prueba gratuita: te quedan {{days}} días.",
-    "ONE_DAY": "Prueba gratuita: último día.",
-    "CTA": "Suscribirse"
+    "DAYS": "Quedan {{days}} días",
+    "ONE_DAY": "Último día",
+    "LABEL": "Prueba gratuita",
+    "ENDS_ON": "Tu prueba termina el {{date}}",
+    "CTA": "Mejorar plan"
   }
 }

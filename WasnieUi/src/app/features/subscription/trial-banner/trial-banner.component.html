@@ -1,10 +1,31 @@
 @if (subState.isTrial()) {
+  <!--
+    A compact status in the topbar, the way professional products show a trial: quiet while there is time, warm when
+    the end is close. The exact end moment is one hover away — the day count is rounded up, the tooltip is not.
+  -->
   <div class="trial-banner" [class.trial-banner--ending]="endingSoon()" role="status">
-    <span class="trial-banner__msg">{{ messageKey() | translate: { days: days() } }}</span>
+    <span
+      class="trial-banner__pill"
+      [wsTooltip]="endsAt() ? ('TRIAL_BANNER.ENDS_ON' | translate: { date: (endsAt() | dateFormat: 'medium' : 'short') }) : ''"
+      tooltipPlacement="bottom"
+    >
+      <app-icon class="trial-banner__icon" name="clock" [size]="14" />
+      <span class="trial-banner__label">{{ 'TRIAL_BANNER.LABEL' | translate }}</span>
+      <span class="trial-banner__sep" aria-hidden="true"></span>
+      <span class="trial-banner__msg">{{ messageKey() | translate: { days: days() } }}</span>
+    </span>
+
     @if ('Subscription.Manage' | hasPermission) {
-      <ws-button [variant]="endingSoon() ? 'primary' : 'secondary'" size="sm" routerLink="/pricing">
+      <!--
+        ★ A TOPBAR CONTROL, NOT ws-button — the same reason as "Ask Zeke" and the manual button beside it: it has to
+        share their 32px height and rounded shape, and forcing that onto ws-button means overriding the primitive from
+        outside. Ask Zeke is a gradient RIM that fills on hover; Upgrade is the commercial action, so it is FILLED from
+        the start — the two sit side by side and must not read as the same button.
+      -->
+      <a class="trial-banner__upgrade" routerLink="/pricing" data-testid="trial-upgrade">
+        <app-icon name="zap" [size]="14" />
         {{ 'TRIAL_BANNER.CTA' | translate }}
-      </ws-button>
+      </a>
     }
   </div>
 }

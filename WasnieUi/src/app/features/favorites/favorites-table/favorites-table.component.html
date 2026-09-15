@@ -1,11 +1,14 @@
 @if (store.visibleItems(entityType()); as items) {
   @if (items.length > 0) {
     <section class="favorites" data-testid="favorites-table" [attr.aria-label]="config.titleKey | translate">
-      <h2 class="favorites__title">
-        <app-icon name="star-filled" [size]="14" />
-        {{ config.titleKey | translate }}
-        <span class="favorites__count">{{ items.length }}</span>
-      </h2>
+      <!-- Same header language as the dashboard bands (pill + rule across the row), in the star's warm tone. -->
+      <div class="favorites__head">
+        <h2 class="favorites__title">
+          <span class="favorites__icon"><app-icon name="star-filled" [size]="12" /></span>
+          {{ config.titleKey | translate }}
+          <span class="favorites__count">{{ items.length }}</span>
+        </h2>
+      </div>
 
       <ws-table>
         <table>
