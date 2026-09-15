@@ -92,6 +92,12 @@ const ICONS: Record<string, string> = {
   // Tabler "pin". Same treatment as 'info-circle' above: the wrapper supplies viewBox, fill, stroke and
   // caps, so only the shapes live here and Tabler's `M0 0h24v24H0z` bounding-box path — a no-op spacer —
   // is dropped.
+  // Tabler «star». Two names, one shape: the outline is «not a favorite», the filled one is «a favorite»
+  // (KAN-64). The fill is set on the path itself because the wrapper draws `fill="none"`.
+  'star':
+    '<path d="M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873z"/>',
+  'star-filled':
+    '<path d="M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873z" fill="currentColor"/>',
   'pin':
     '<path d="M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4"/><path d="M9 15l-4.5 4.5"/><path d="M14.5 4l5.5 5.5"/>',
   // Tabler "brand-hipchat" — a speech bubble with a smile, for the assistant. The wrapper supplies

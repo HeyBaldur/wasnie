@@ -211,13 +211,15 @@ export class AssistantPageComponent implements OnInit {
     await this.router.navigate(['/assistant', id]);
   }
 
-  /** Starts a thread and moves the URL onto it, so a refresh comes back to the new one. */
+  /**
+   * Back to the welcome on the bare `/assistant` URL — no conversation is created until the user sends
+   * the first message (see `AssistantStore.startNewConversation`).
+   *
+   * ★ THE STORE IS CLEARED BEFORE NAVIGATING. `openFromUrl(null)` does not touch the store, so leaving
+   * `/assistant/{id}` alone would keep showing the old thread under a URL that no longer names it.
+   */
   async startNew(): Promise<void> {
-    await this.store.startConversation();
-
-    const id = this.store.conversation()?.id;
-    if (id) {
-      await this.router.navigate(['/assistant', id]);
-    }
+    this.store.startNewConversation();
+    await this.router.navigate(['/assistant']);
   }
 }

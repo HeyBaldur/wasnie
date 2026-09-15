@@ -643,6 +643,20 @@ export class AssistantStore {
     return term.length >= AssistantStore.MIN_SEARCH_LENGTH ? term : null;
   }
 
+  /**
+   * "New conversation": back to the welcome, with NOTHING created on the server.
+   *
+   * ★ THE THREAD IS BORN ON THE FIRST MESSAGE, NOT ON THE BUTTON. Creating it here left one empty
+   * "New conversation" row per click — garbage in the list and in the database, for threads nobody
+   * ever wrote in. `send` already creates the conversation when there is none, so clearing the active
+   * one is all this needs to do; clicking it again on the welcome is a no-op.
+   */
+  startNewConversation(): void {
+    this.conversation.set(null);
+    this.error.set(null);
+    this.historyOpen.set(false);
+  }
+
   async startConversation(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);

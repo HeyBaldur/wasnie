@@ -431,6 +431,21 @@
     "COL_STATUS": "Status",
     "COL_TOTAL": "Suma"
   },
+  "FAVORITES": {
+    "TITLE_PAYEES": "Ulubieni odbiorcy",
+    "TITLE_PLANS": "Ulubione plany",
+    "ADD": "Dodaj do ulubionych",
+    "REMOVE": "Usuń z ulubionych",
+    "TOAST_ADDED": "Dodano do ulubionych",
+    "TOAST_REMOVED": "Usunięto z ulubionych",
+    "ERROR_NOT_AVAILABLE": "Tego elementu nie można dodać do ulubionych.",
+    "ERROR_LIMIT_REACHED": "Możesz mieć tutaj maksymalnie {{max}} ulubionych. Usuń jeden, aby dodać kolejny.",
+    "ERROR_GENERIC": "Nie udało się zaktualizować ulubionych. Spróbuj ponownie.",
+    "COL_FAVORITE": "Ulubione",
+    "COL_NAME": "Nazwa",
+    "COL_STATUS": "Status",
+    "STATUS_UNKNOWN": "Nieznany"
+  },
   "COMMON": {
     "REFRESH": "Odśwież",
     "LOADING": "Ładowanie...",

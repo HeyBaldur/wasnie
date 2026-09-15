@@ -18,6 +18,9 @@
       {{ 'PAYEES.NEW' | translate }}
     </ws-button>
 
+    <!-- KAN-64: the quick-access table. A shortcut ON TOP of the list, not a filter of it; hidden while empty. -->
+    <app-favorites-table *hasPermission="'Payees.Read'" entityType="payee" />
+
     <div class="payees-list__toolbar">
       <ws-input
         class="payees-list__search"
@@ -74,6 +77,7 @@
                 <tr [routerLink]="[payee.id]">
                   <td class="col-name">
                     <div class="payee-identity">
+                      <app-favorite-star *hasPermission="'Payees.Read'" entityType="payee" [entityId]="payee.id" />
                       <span class="payee-avatar">{{ initialsFor(payee.fullName) }}</span>
                       <div class="payee-identity__text">
                         <span class="payee-name-row">

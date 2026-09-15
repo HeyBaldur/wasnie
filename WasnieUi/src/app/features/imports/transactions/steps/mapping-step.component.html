@@ -106,8 +106,8 @@
   @if (previewRows.length > 0 && mappedPreviewHeaders.length > 0) {
     <div class="preview-section">
       <h3 class="preview-section__title">{{ 'IMPORTS.TRANSACTIONS.PREVIEW_SAMPLE' | translate }}</h3>
-      <div class="preview-table-wrap">
-        <table class="preview-table">
+      <ws-table class="import-table">
+        <table>
           <thead>
             <tr>
               @for (h of mappedPreviewHeaders; track h.label) {
@@ -125,7 +125,7 @@
             }
           </tbody>
         </table>
-      </div>
+      </ws-table>
     </div>
   }
 

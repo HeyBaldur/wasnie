@@ -1,0 +1,13 @@
+<button
+  class="ws-favorite-toggle"
+  type="button"
+  [class.ws-favorite-toggle--active]="active()"
+  [attr.aria-pressed]="active()"
+  [attr.aria-busy]="busy()"
+  [wsTooltip]="(active() ? removeLabel() : addLabel()) | translate"
+  tooltipPlacement="bottom"
+  [attr.aria-label]="(active() ? removeLabel() : addLabel()) | translate"
+  (click)="press($event)"
+>
+  <app-icon [name]="active() ? 'star-filled' : 'star'" [size]="size()" />
+</button>

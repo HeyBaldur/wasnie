@@ -2,7 +2,7 @@ import { Component, computed, HostListener, input, output, signal } from '@angul
 import { TranslateModule } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
-import { WsButtonComponent, WsBadgeComponent, BadgeVariant } from '../../../../shared/ui';
+import { WsButtonComponent, WsBadgeComponent, BadgeVariant, WsTableComponent } from '../../../../shared/ui';
 import {
   PayeeImportColumnMapping,
   PayeeRowValidationResult,
@@ -17,7 +17,7 @@ type RowFilter = 'all' | 'errors' | 'warnings';
 @Component({
   selector: 'app-preview-step',
   standalone: true,
-  imports: [ImportStepHeroComponent, TranslateModule, FormsModule, IconComponent, WsButtonComponent, WsBadgeComponent],
+  imports: [ImportStepHeroComponent, TranslateModule, FormsModule, IconComponent, WsButtonComponent, WsBadgeComponent, WsTableComponent],
   templateUrl: './preview-step.component.html',
   styleUrl: './preview-step.component.scss',
 })

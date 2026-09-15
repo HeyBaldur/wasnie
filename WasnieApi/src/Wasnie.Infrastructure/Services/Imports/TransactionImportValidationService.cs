@@ -5,6 +5,7 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Compensation.ValueObjects;
 
 namespace Wasnie.Infrastructure.Services.Imports;
 
@@ -133,7 +134,7 @@ public sealed class TransactionImportValidationService(
 
             // ── amount ────────────────────────────────────────────────────────
             var amountStr = GetField(row, mapping.AmountColumn);
-            var amountIssue = TransactionFieldValidators.ValidateAmount(amountStr, out _);
+            var amountIssue = TransactionFieldValidators.ValidateAmount(amountStr, out var parsedAmount);
             if (amountIssue is not null) issues.Add(amountIssue);
 
             // ── quantity (optional column, defaults to 1 if not mapped or blank) ───────
@@ -156,6 +157,10 @@ public sealed class TransactionImportValidationService(
             var currency = GetField(row, mapping.CurrencyColumn);
             var currencyIssue = TransactionFieldValidators.ValidateCurrency(currency);
             if (currencyIssue is not null) issues.Add(currencyIssue);
+
+            // The money the preview shows: only when BOTH halves read, and through Money.Of — the same
+            // normalisation (4-decimal rounding, upper-case code) the import job applies when it stores the row.
+            var money = amountIssue is null && currencyIssue is null ? Money.Of(parsedAmount, currency) : null;
 
             // ── transactionDate ───────────────────────────────────────────────
             var dateStr = GetField(row, mapping.TransactionDateColumn);
@@ -221,6 +226,8 @@ public sealed class TransactionImportValidationService(
                 RowNumber = rowNum,
                 OriginalData = row,
                 Issues = issues,
+                Amount = money?.Amount,
+                Currency = money?.Currency,
             });
         }
 

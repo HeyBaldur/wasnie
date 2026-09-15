@@ -130,6 +130,23 @@ describe('AssistantStore', () => {
     expect(store.hasConversation()).toBeTrue();
   });
 
+  it('★ "New conversation" clears the active thread without creating one; the first send does', async () => {
+    await store.startConversation();
+    api.startConversation.calls.reset();
+
+    store.startNewConversation();
+    store.startNewConversation();
+
+    // Clicking repeatedly must not leave empty rows behind.
+    expect(api.startConversation).not.toHaveBeenCalled();
+    expect(store.hasConversation()).toBeFalse();
+
+    await store.send('first words');
+
+    expect(api.startConversation).toHaveBeenCalledTimes(1);
+    expect(store.hasConversation()).toBeTrue();
+  });
+
   it('ignores an empty message and does not call the server', async () => {
     await store.send('   ');
     expect(api.startConversation).not.toHaveBeenCalled();

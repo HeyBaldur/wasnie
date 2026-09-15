@@ -29,11 +29,16 @@ import {
   type SegOption,
 } from '../../../shared/ui';
 
+import { FavoritesTableComponent } from '../../favorites/favorites-table/favorites-table.component';
+import { FavoriteStarComponent } from '../../favorites/favorite-star/favorite-star.component';
+
 @Component({
   selector: 'app-plans-list',
   standalone: true,
   imports: [
     AppShellComponent,
+    FavoritesTableComponent,
+    FavoriteStarComponent,
     RefreshOnEnterDirective,
     IconComponent,
     RouterLink,

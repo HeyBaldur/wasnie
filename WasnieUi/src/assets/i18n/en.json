@@ -431,6 +431,21 @@
     "COL_STATUS": "Status",
     "COL_TOTAL": "Total"
   },
+  "FAVORITES": {
+    "TITLE_PAYEES": "Favorite payees",
+    "TITLE_PLANS": "Favorite plans",
+    "ADD": "Add to favorites",
+    "REMOVE": "Remove from favorites",
+    "TOAST_ADDED": "Added to favorites",
+    "TOAST_REMOVED": "Removed from favorites",
+    "ERROR_NOT_AVAILABLE": "This item can't be added to your favorites.",
+    "ERROR_LIMIT_REACHED": "You can have up to {{max}} favorites here. Remove one to add another.",
+    "ERROR_GENERIC": "Favorites couldn't be updated. Please try again.",
+    "COL_FAVORITE": "Favorite",
+    "COL_NAME": "Name",
+    "COL_STATUS": "Status",
+    "STATUS_UNKNOWN": "Unknown"
+  },
   "COMMON": {
     "REFRESH": "Refresh",
     "LOADING": "Loading...",

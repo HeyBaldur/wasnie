@@ -108,34 +108,59 @@
   white-space: nowrap;
 }
 
-// ── Sample / preview tables ──
-.preview-table-wrap {
-  border-color: var(--color-border-subtle);
-  box-shadow: var(--shadow-sm);
-  background: var(--color-bg-surface);
+// ── Sample / preview tables: ws-table, as every other list ──
+//
+// ★★ THE WIZARD'S TABLES ARE ws-table NOW, AND LOOK EXACTLY LIKE terminated-accounts'. They used to be
+// hand-rolled tables at 14px with `--space-3` of cell padding, a violet header gradient and a
+// violet row hover: a second table design living inside the import flow. Density, header, borders and hover
+// all come from the primitive; what stays here is only what ws-table has no concept of.
+//
+// ★ SCROLL + STICKY HEADER, for the review tables only (`--scroll`): they show every row of the file at once.
+// The primitive's wrapper is the element that scrolls, so the cap goes on it — and ::ng-deep is the only way
+// into a child component's template (same precedent as payout-detail and reconciliation), kept behind
+// `.import-table` so it cannot leak. A sticky cell floats over the rows scrolling under it, so it needs its
+// own opaque background, and the header's bottom rule is drawn as an inset shadow because a collapsed border
+// does not travel with a sticky cell.
+// The review steps set `font-semibold` on the whole step; the rows of a table are body text, as on every
+// other list. The header keeps its own 600 from ws-table.
+.import-table {
+  font-weight: 400;
 }
 
-.preview-table th,
-.preview-table__th {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-accent-violet) 6%, transparent), transparent),
-    var(--color-bg-surface-raised);
-}
+.import-table--scroll ::ng-deep .ws-table-wrap {
+  max-height: 440px;
+  overflow-y: auto;
 
-.preview-table tbody tr,
-.preview-table__row {
-  animation: imp-fade 320ms ease-out backwards;
-  transition: background var(--transition-base);
-
-  &:hover td {
-    background: color-mix(in srgb, var(--color-accent-violet) 5%, transparent);
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-bg-surface-raised);
+    box-shadow: inset 0 -1px 0 var(--color-border-default);
   }
 }
 
-@for $i from 1 through 15 {
-  .preview-table tbody tr:nth-child(#{$i}) {
-    animation-delay: #{($i - 1) * 25}ms;
-  }
+// The row number: as narrow as its digits, and quieter than the data.
+.import-table__num {
+  width: 1%;
+  white-space: nowrap;
+  color: var(--color-text-tertiary);
+}
+
+.import-table__nowrap {
+  white-space: nowrap;
+}
+
+// Issues / changes: several badges and messages per row, never truncated.
+.import-table__wide {
+  width: 32%;
+  white-space: normal;
+}
+
+// "No rows match" and "showing N of M": one full-width line under the header.
+.import-table__note {
+  text-align: center;
+  color: var(--color-text-tertiary);
 }
 
 // ── Review: the row filter becomes a segmented control ──
@@ -285,11 +310,6 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes imp-fade {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
 @keyframes imp-flow {
   to { background-position: -16px 0; }
 }
@@ -301,8 +321,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .preview-table tbody tr,
-  .preview-table__row,
   .mapping-error,
   .preview-error {
     animation: none;

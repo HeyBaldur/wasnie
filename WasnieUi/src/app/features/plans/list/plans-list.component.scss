@@ -15,6 +15,13 @@
 
 .col-name { min-width: 200px; }
 
+// The favorite star and the name on one line (KAN-64); same gap the payee row uses between star and avatar.
+.plan-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .col-mono {
   font-size: var(--font-size-13);
   font-family: ui-monospace, monospace;

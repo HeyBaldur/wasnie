@@ -2192,6 +2192,40 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.ToTable("HubSpotOAuthStates", (string)null);
                 });
 
+            modelBuilder.Entity("Wasnie.Domain.Settings.Favorite", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "UserId", "EntityType", "EntityId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Favorites_TenantId_UserId_EntityType_EntityId");
+
+                    b.ToTable("Favorites", (string)null);
+                });
+
             modelBuilder.Entity("Wasnie.Domain.Settings.FieldRequirementSetting", b =>
                 {
                     b.Property<Guid>("Id")

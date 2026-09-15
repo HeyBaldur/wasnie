@@ -52,6 +52,7 @@ public interface IApplicationDbContext
     // isolation here: every read must also match the owning UserId (see AssistantConversation).
     DbSet<Wasnie.Domain.Assistant.AssistantConversation> AssistantConversations { get; }
     DbSet<Wasnie.Domain.Settings.UserUiPreference> UserUiPreferences { get; }
+    DbSet<Wasnie.Domain.Settings.Favorite> Favorites { get; }
     DbSet<Wasnie.Domain.Assistant.AssistantMessage> AssistantMessages { get; }
 
     /// <summary>One user's standing on one conversation — pinned, and later archived/read.</summary>

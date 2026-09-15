@@ -14,6 +14,9 @@
       {{ 'PLANS.ACTION_NEW' | translate }}
     </ws-button>
 
+    <!-- KAN-64: the quick-access table. A shortcut ON TOP of the list, not a filter of it; hidden while empty. -->
+    <app-favorites-table *hasPermission="'Plans.Read'" entityType="plan" />
+
     <div class="plans-list__toolbar">
       <ws-input
         class="plans-list__search"
@@ -71,7 +74,11 @@
               @for (plan of store.pagedPlans(); track plan.id) {
                 <tr [routerLink]="[plan.id]">
                   <td class="col-name">
-                    <span class="plan-name">{{ plan.name }}</span>
+                    <!-- Plans have no avatar: the star leads the name instead (KAN-64). -->
+                    <span class="plan-identity">
+                      <app-favorite-star *hasPermission="'Plans.Read'" entityType="plan" [entityId]="plan.id" />
+                      <span class="plan-name">{{ plan.name }}</span>
+                    </span>
                   </td>
                   <td>
                     <ws-badge

@@ -431,6 +431,21 @@
     "COL_STATUS": "Estado",
     "COL_TOTAL": "Total"
   },
+  "FAVORITES": {
+    "TITLE_PAYEES": "Payees favoritos",
+    "TITLE_PLANS": "Planes favoritos",
+    "ADD": "Añadir a favoritos",
+    "REMOVE": "Quitar de favoritos",
+    "TOAST_ADDED": "Añadido a favoritos",
+    "TOAST_REMOVED": "Quitado de favoritos",
+    "ERROR_NOT_AVAILABLE": "Este elemento no se puede añadir a tus favoritos.",
+    "ERROR_LIMIT_REACHED": "Puedes tener hasta {{max}} favoritos aquí. Quita uno para añadir otro.",
+    "ERROR_GENERIC": "No se pudieron actualizar los favoritos. Inténtalo de nuevo.",
+    "COL_FAVORITE": "Favorito",
+    "COL_NAME": "Nombre",
+    "COL_STATUS": "Estado",
+    "STATUS_UNKNOWN": "Desconocido"
+  },
   "COMMON": {
     "REFRESH": "Actualizar",
     "LOADING": "Cargando...",

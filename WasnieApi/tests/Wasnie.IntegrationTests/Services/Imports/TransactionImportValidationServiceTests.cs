@@ -230,6 +230,45 @@ public sealed class TransactionImportValidationServiceTests
         var results = await sut.ValidateAsync([ValidRow(amount: amount)], DefaultMapping());
 
         results[0].Issues.Should().Contain(i => i.Field == "amount");
+        // Nothing to format: the preview shows the file's text beside the error instead.
+        results[0].Amount.Should().BeNull();
+        results[0].Currency.Should().BeNull();
+    }
+
+    // ★ The preview formats THESE, so they must be what the import job stores: the same invariant parse
+    // (thousands separator accepted) and the same Money.Of normalisation (4 decimals, upper-case code).
+    [Theory]
+    [InlineData("1000.00", "USD", 1000.00, "USD")]
+    [InlineData("1,000.50", "eur", 1000.50, "EUR")]
+    [InlineData(" 2500.5 ", "PLN", 2500.5, "PLN")]
+    [InlineData("1000.12345", "EUR", 1000.1234, "EUR")]
+    public async Task Validate_ReadableAmountAndCurrency_ReturnsTheMoneyTheImportStores(
+        string amount, string currency, double expectedAmount, string expectedCurrency)
+    {
+        await using var db = CreateDb(TenantA);
+        db.Payees.Add(MakePayee(TenantA, "EMP001"));
+        await db.SaveChangesAsync();
+
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
+        var results = await sut.ValidateAsync([ValidRow(amount: amount, currency: currency)], DefaultMapping());
+
+        results[0].Amount.Should().Be((decimal)expectedAmount);
+        results[0].Currency.Should().Be(expectedCurrency);
+    }
+
+    [Fact]
+    public async Task Validate_ReadableAmountWithUnknownCurrency_ReturnsNoMoney()
+    {
+        await using var db = CreateDb(TenantA);
+        db.Payees.Add(MakePayee(TenantA, "EMP001"));
+        await db.SaveChangesAsync();
+
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
+        var results = await sut.ValidateAsync([ValidRow(amount: "1000.00", currency: "XXX")], DefaultMapping());
+
+        // An amount without a currency cannot be shown as money; both stay null together.
+        results[0].Amount.Should().BeNull();
+        results[0].Currency.Should().BeNull();
     }
 
     [Theory]
@@ -246,6 +285,8 @@ public sealed class TransactionImportValidationServiceTests
         var results = await sut.ValidateAsync([ValidRow(amount: amount)], DefaultMapping());
 
         results[0].Issues.Should().Contain(i => i.Field == "amount");
+        // Read, but rejected — not money the import will store.
+        results[0].Amount.Should().BeNull();
     }
 
     // ──────────────────────────────────────────────────────────────────────────

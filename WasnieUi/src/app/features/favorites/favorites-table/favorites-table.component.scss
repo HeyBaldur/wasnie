@@ -1,0 +1,61 @@
+// The table itself is ws-table — density, borders, hover and the card surface all come from the primitive, so the
+// shortcut reads as the same kind of table as the list under it. Only the heading and the cell content live here.
+
+.favorites {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+// A section label, not a page title: small, uppercase like a table header, with the star as its marker. It is an <h2>,
+// so the global title rule would set it in the display serif — the UI face is named here on purpose.
+.favorites__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+
+  app-icon {
+    color: var(--color-warning);
+  }
+}
+
+.favorites__count {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+// Shrink-to-fit comes from ws-table's `.col-action`; the star sits on the left, so it is aligned there.
+.favorites__star-col {
+  text-align: left;
+}
+
+.favorites__name {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.favorites__meta {
+  margin-left: var(--space-2);
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
