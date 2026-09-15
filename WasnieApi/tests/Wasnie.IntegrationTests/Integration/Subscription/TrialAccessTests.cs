@@ -153,12 +153,14 @@ public sealed class TrialAccessTests : IAsyncLifetime
 
         dto!.State.Should().Be("Trial");
         dto.TrialDaysRemaining.Should().Be(4, "days are rounded UP — 3 days and an hour is shown as 4");
-        dto.AssistantTrialMessageLimit.Should().Be(300);
+        // KAN-80: the allowance is TOKENS now, and a trial counts from the beginning (no billing period).
+        dto.AssistantTokenLimit.Should().Be(500_000);
+        dto.AssistantTokensSince.Should().BeNull();
     }
 
     private sealed record LockedBody(string Code, string? Reason);
 
     private sealed record AccessBody(
         string State, string? LockReason, DateTimeOffset? TrialEndsAt, int? TrialDaysRemaining,
-        int? AssistantTrialMessagesUsed, int? AssistantTrialMessageLimit);
+        long? AssistantTokensUsed, long? AssistantTokenLimit, DateTimeOffset? AssistantTokensSince);
 }

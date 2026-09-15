@@ -35,9 +35,9 @@ public interface IAssistantEntitlement
     Task RequireAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// True when the account is in its free trial and has used up the trial's assistant allowance (KAN-77).
+    /// True when the account is in its free trial and has used up the trial's assistant TOKENS (KAN-77, KAN-80).
     /// Always false for paying accounts. Asked only by the handlers that make the model run, AFTER
-    /// <see cref="RequireAsync"/> — being out of trial messages is not the same as not being entitled.
+    /// <see cref="RequireAsync"/> — being out of trial tokens is not the same as not being entitled.
     /// </summary>
     Task<bool> IsTrialAllowanceExhaustedAsync(CancellationToken cancellationToken = default);
 

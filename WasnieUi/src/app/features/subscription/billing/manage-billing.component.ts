@@ -18,6 +18,7 @@ import {
   cardBrandLabel, invoiceStatusKey, invoiceStatusVariant, isLiveSubscriptionEnded, liveSubscriptionStatusKey,
   liveSubscriptionStatusVariant, resolveBillingPeriod, trialRemaining,
 } from './billing-display';
+import { TokenUsageMeterComponent } from '../token-usage/token-usage-meter.component';
 
 /**
  * Explicit translation keys per subscription status — never `'STATUS_' + status` (§C2): an unknown status from
@@ -55,6 +56,7 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * 26;
   imports: [
     DatePipe, RouterLink, TranslatePipe, CurrencyFormatPipe, AppShellComponent, IconComponent, WsPageLayoutComponent,
     WsCardComponent, WsButtonComponent, WsBadgeComponent, WsTableComponent, WsEmptyStateComponent,
+    TokenUsageMeterComponent,
   ],
   templateUrl: './manage-billing.component.html',
   styleUrl: './manage-billing.component.scss',

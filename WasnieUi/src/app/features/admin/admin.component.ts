@@ -5,6 +5,7 @@ import { WsPageHeaderComponent } from '../../shared/ui';
 import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
 import { FieldRequirementsComponent } from './field-requirements/field-requirements.component';
 import { AppearanceCardComponent } from './appearance-card/appearance-card.component';
+import { AssistantUsageCardComponent } from './assistant-usage-card/assistant-usage-card.component';
 
 @Component({
   selector: 'app-admin',
@@ -16,6 +17,7 @@ import { AppearanceCardComponent } from './appearance-card/appearance-card.compo
     HasPermissionDirective,
     FieldRequirementsComponent,
     AppearanceCardComponent,
+    AssistantUsageCardComponent,
   ],
   templateUrl: './admin.component.html',
   styleUrl: './admin.component.scss',

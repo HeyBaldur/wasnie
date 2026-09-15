@@ -80,7 +80,8 @@ public sealed class AssistantChatHandlerTests
 
     private static PostMessageHandler Post(Principal p) =>
         new(p.Db, p.Tenant, p.User, new FakeClock(Now.UtcDateTime), p.Guids, Entitled(),
-            UnconfiguredProvider(), NoKnowledge(), NoNavigation(), NoRouter(), NoTools(), Options.Create(new GroqOptions()), NullLogger<PostMessageHandler>.Instance);
+            UnconfiguredProvider(), NoKnowledge(), NoNavigation(), NoRouter(), NoTools(), Options.Create(new GroqOptions()), NullLogger<PostMessageHandler>.Instance,
+            Substitute.For<Wasnie.Application.Assistant.Abstractions.IModelUsageRecorder>());
 
     /// <summary>
     /// No model configured, so these tests keep exercising the stand-in reply they were written
@@ -369,7 +370,8 @@ public sealed class AssistantChatHandlerTests
         var laterClock = new FakeClock(Now.AddHours(1).UtcDateTime);
         var post = new PostMessageHandler(
             alice.Db, alice.Tenant, alice.User, laterClock, alice.Guids, Entitled(),
-            UnconfiguredProvider(), NoKnowledge(), NoNavigation(), NoRouter(), NoTools(), Options.Create(new GroqOptions()), NullLogger<PostMessageHandler>.Instance);
+            UnconfiguredProvider(), NoKnowledge(), NoNavigation(), NoRouter(), NoTools(), Options.Create(new GroqOptions()), NullLogger<PostMessageHandler>.Instance,
+            Substitute.For<Wasnie.Application.Assistant.Abstractions.IModelUsageRecorder>());
         await post.Handle(new PostMessageCommand(older.Value!.Id, "bump"), CancellationToken.None);
 
         var list = await List(alice).Handle(new ListConversationsQuery(), CancellationToken.None);

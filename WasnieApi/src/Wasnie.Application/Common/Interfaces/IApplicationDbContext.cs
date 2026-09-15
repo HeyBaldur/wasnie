@@ -57,6 +57,7 @@ public interface IApplicationDbContext
 
     /// <summary>One user's standing on one conversation — pinned, and later archived/read.</summary>
     DbSet<Wasnie.Domain.Assistant.AssistantConversationState> AssistantConversationStates { get; }
+    DbSet<Wasnie.Domain.Assistant.AssistantTokenUsage> AssistantTokenUsages { get; }
 
     DbSet<HubSpotConnection> HubSpotConnections { get; }
     DbSet<HubSpotOAuthState> HubSpotOAuthStates { get; }

@@ -24,8 +24,9 @@ const access = (state: AccountAccess['state'], extra: Partial<AccountAccess> = {
   trialEndsAt: null,
   trialDaysRemaining: state === 'Trial' ? 5 : null,
   trialLengthDays: state === 'Trial' ? 7 : null,
-  assistantTrialMessagesUsed: null,
-  assistantTrialMessageLimit: null,
+  assistantTokensUsed: null,
+  assistantTokenLimit: null,
+  assistantTokensSince: null,
   ...extra,
 });
 

@@ -57,12 +57,14 @@ public sealed class AssistantEntitlement(
     }
 
     /// <summary>
-    /// ★ KAN-77 — THE TRIAL'S SAFETY NET. A trial gets the assistant, but every message runs a large model at
-    /// our expense, so a trial account may send at most <see cref="BillingOptions.TrialAssistantMessageLimit"/>
-    /// messages (tenant-wide, every user together). Paying accounts have no limit; this never applies to them.
+    /// ★ KAN-77 / KAN-80 — THE TRIAL'S SAFETY NET. A trial gets the assistant, but every turn runs a large model at
+    /// our expense, so a trial account may consume at most <see cref="BillingOptions.TrialAssistantTokenLimit"/>
+    /// tokens (input + output, tenant-wide, every user together). Paying accounts have no limit.
     ///
-    /// Counts the USER turns stored for the tenant — the requests that make the model run. A retry re-answers a
-    /// stored question and adds no row, which is fine: it is bounded by the questions already counted.
+    /// ★ TOKENS SPENT, NOT QUESTIONS ASKED (KAN-80). It reads the same sum the usage meter shows
+    /// (<see cref="Wasnie.Application.Assistant.Common.AssistantTokenMeter"/>), so the screen and the refusal never
+    /// disagree. A turn that starts under the limit may end above it — the check is before the turn, and a turn's size is
+    /// only known afterwards. That overshoot is bounded by one turn and is the honest trade against cutting an answer in half.
     /// </summary>
     public async Task<bool> IsTrialAllowanceExhaustedAsync(CancellationToken cancellationToken = default)
     {
@@ -73,10 +75,10 @@ public sealed class AssistantEntitlement(
         if (access?.State != AccountAccessState.Trial)
             return false;
 
-        var sent = await db.AssistantMessages
-            .CountAsync(m => m.TenantId == tenantContext.TenantId && m.Role == AssistantMessageRole.User, cancellationToken);
+        var used = await Wasnie.Application.Assistant.Common.AssistantTokenMeter.UsedAsync(
+            db, tenantContext.TenantId, since: null, cancellationToken);
 
-        return sent >= billingOptions.Value.TrialAssistantMessageLimit;
+        return used >= billingOptions.Value.TrialAssistantTokenLimit;
     }
 
     // Today: the tenant admin, and only the tenant admin. Tomorrow: this line reads the seat.

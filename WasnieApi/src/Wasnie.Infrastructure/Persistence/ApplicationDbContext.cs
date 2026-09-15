@@ -117,6 +117,7 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>, IApplicatio
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Settings.Favorite> Favorites => Set<Wasnie.Domain.Settings.Favorite>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantMessage> AssistantMessages => Set<Wasnie.Domain.Assistant.AssistantMessage>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantConversationState> AssistantConversationStates => Set<Wasnie.Domain.Assistant.AssistantConversationState>();
+    public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantTokenUsage> AssistantTokenUsages => Set<Wasnie.Domain.Assistant.AssistantTokenUsage>();
 
     public Microsoft.EntityFrameworkCore.DbSet<HubSpotConnection> HubSpotConnections => Set<HubSpotConnection>();
     public Microsoft.EntityFrameworkCore.DbSet<HubSpotOAuthState> HubSpotOAuthStates => Set<HubSpotOAuthState>();
@@ -164,6 +165,7 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>, IApplicatio
         builder.ApplyConfiguration(new Configurations.FavoriteConfiguration());
         builder.ApplyConfiguration(new Configurations.Assistant.AssistantMessageConfiguration());
         builder.ApplyConfiguration(new Configurations.Assistant.AssistantConversationStateConfiguration());
+        builder.ApplyConfiguration(new Configurations.Assistant.AssistantTokenUsageConfiguration());
         builder.ApplyConfiguration(new HubSpotConnectionConfiguration());
         builder.ApplyConfiguration(new HubSpotOAuthStateConfiguration());
         builder.ApplyConfiguration(new CrmOwnerMappingConfiguration());
@@ -202,6 +204,8 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>, IApplicatio
         builder.Entity<Wasnie.Domain.Assistant.AssistantMessage>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         // Same floor, same reason: a standing belongs to one USER, and the handlers add that half.
         builder.Entity<Wasnie.Domain.Assistant.AssistantConversationState>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        // KAN-80: token usage is per ACCOUNT (tenant), so the floor is the whole isolation here — no user half.
+        builder.Entity<Wasnie.Domain.Assistant.AssistantTokenUsage>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         // HubSpotConnection is tenant-filtered for normal (authenticated) access. HubSpotOAuthState is
         // intentionally NOT filtered — the anonymous OAuth callback resolves the tenant from the state row.
         builder.Entity<HubSpotConnection>().HasQueryFilter(e => e.TenantId == CurrentTenantId);

@@ -446,6 +446,19 @@
     "COL_STATUS": "Status",
     "STATUS_UNKNOWN": "Unknown"
   },
+  "ASSISTANT_USAGE": {
+    "TITLE": "Assistant usage",
+    "DESC": "Tokens Zeke has used for this account — questions and answers together.",
+    "TRIAL_OF": "{{used}} of {{limit}} tokens",
+    "TRIAL_CAPTION": "Included in your free trial",
+    "TRIAL_EXHAUSTED": "You have used all the assistant tokens in your trial. Subscribe to keep using Zeke.",
+    "PERIOD_USED": "{{used}} tokens",
+    "PERIOD_CAPTION": "This billing period, since {{date}}",
+    "PERIOD_CAPTION_NO_DATE": "This billing period",
+    "BAR_LABEL": "Assistant tokens used",
+    "COMPACT_TRIAL": "Assistant: {{used}} of {{limit}} tokens",
+    "COMPACT_PERIOD": "Assistant: {{used}} tokens this period"
+  },
   "COMMON": {
     "REFRESH": "Refresh",
     "LOADING": "Loading...",
@@ -2360,7 +2373,7 @@
       "STATUS_ARCHIVED": "Archived",
       "MORE_MATCHES": "Showing {{ shown }} of {{ total }} matches. Refine the name to narrow it down."
     },
-    "ERROR_TRIAL_LIMIT_REACHED": "You have used all the assistant messages included in your free trial. Subscribe to keep using Zeke without limits.",
+    "ERROR_TRIAL_LIMIT_REACHED": "You have used all the assistant tokens included in your free trial. Subscribe to keep using Zeke without limits.",
     "WELCOME_EYEBROW": "Zeke · your Incentra assistant",
     "WELCOME_TRY_ASKING": "Try asking"
   },
@@ -2881,7 +2894,6 @@
     "TRIAL_TITLE": "Free trial",
     "TRIAL_BADGE": "Trial",
     "TRIAL_REMAINING": "{{days}} day(s) left — your trial ends on {{date}}. Nothing is charged until you subscribe.",
-    "TRIAL_ASSISTANT_USAGE": "Assistant messages used during the trial: {{used}} of {{limit}}.",
     "SEE_PRICING": "See pricing",
     "SECTION_SUBSCRIPTION": "Subscription",
     "SECTION_PAYMENT": "Payment information",

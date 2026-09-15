@@ -51,8 +51,15 @@ export interface AccountAccess {
   trialDaysRemaining: number | null;
   /** The configured trial length — what "N days left" is out of. Null unless in trial. */
   trialLengthDays: number | null;
-  assistantTrialMessagesUsed: number | null;
-  assistantTrialMessageLimit: number | null;
+  /**
+   * KAN-80 — assistant tokens consumed (input + output). Trial: since the account began. Active: in the current billing
+   * period. Null when locked.
+   */
+  assistantTokensUsed: number | null;
+  /** The trial's token allowance. Null for a paying account, which has none. */
+  assistantTokenLimit: number | null;
+  /** Start of the current billing period for a paying account; null for a trial and when locked. */
+  assistantTokensSince: string | null;
 }
 
 export interface SubscriptionUsage {

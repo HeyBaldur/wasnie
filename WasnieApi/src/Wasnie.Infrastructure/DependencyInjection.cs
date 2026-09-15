@@ -96,6 +96,8 @@ public static class DependencyInjection
         // services because it is answered the same way — and kept separate from them because it is an
         // entitlement (per user, headed for per-seat billing), not a role permission.
         services.AddScoped<IAssistantEntitlement, AssistantEntitlement>();
+        // KAN-80: one per request; persists the token usage of every model call when the request ends.
+        services.AddScoped<Wasnie.Application.Assistant.Abstractions.IModelUsageRecorder, Wasnie.Infrastructure.Assistant.ModelUsageRecorder>();
         services.AddScoped<IPaidPlanGate, PaidPlanGate>();
         services.AddScoped<IAccountAccessReader, AccountAccessReader>();
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
@@ -120,7 +122,7 @@ public static class DependencyInjection
         services.AddOptions<BillingOptions>()
             .Bind(configuration.GetSection(BillingOptions.SectionName))
             .Validate(o => o.TrialDays is > 0 and <= 365, "Billing:TrialDays must be between 1 and 365.")
-            .Validate(o => o.TrialAssistantMessageLimit > 0, "Billing:TrialAssistantMessageLimit must be greater than 0.")
+            .Validate(o => o.TrialAssistantTokenLimit > 0, "Billing:TrialAssistantTokenLimit must be greater than 0.")
             .Validate(
                 o => !Wasnie.Application.Features.Subscription.SubscriptionPlanCatalog.Validate(o).Any(),
                 "Billing:Plans is invalid (at least one plan, unique codes, DefaultPlanCode must be one of them, positive limits).")

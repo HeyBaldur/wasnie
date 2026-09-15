@@ -16,10 +16,13 @@ public sealed class BillingOptions
     public int TrialDays { get; init; } = 7;
 
     /// <summary>
-    /// How many messages a tenant may send to the assistant during its trial, across all its users.
-    /// A safety net against abuse, not a product limit — deliberately generous. Paying tenants have none.
+    /// How many assistant TOKENS (input + output) a tenant may consume during its trial, across all its users (KAN-80).
+    ///
+    /// ★ TOKENS, NOT MESSAGES. The old limit was 300 messages, and a message costs anywhere from a few hundred tokens to
+    /// tens of thousands — so it measured nothing that costs money. Tokens are what the model provider bills. Paying
+    /// tenants have no limit.
     /// </summary>
-    public int TrialAssistantMessageLimit { get; init; } = 300;
+    public long TrialAssistantTokenLimit { get; init; } = 500_000;
 
     /// <summary>
     /// The plan a trial experiences, and the plan a LEGACY Stripe product (one still carrying the old

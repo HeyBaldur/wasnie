@@ -42,7 +42,8 @@ public sealed class PostMessageHandler(
     AssistantSectionRouter router,
     AssistantToolRunner toolRunner,
     IOptions<GroqOptions> options,
-    ILogger<PostMessageHandler> logger)
+    ILogger<PostMessageHandler> logger,
+    IModelUsageRecorder usageRecorder)
     : IRequestHandler<PostMessageCommand, Result<AssistantExchangeDto>>
 {
     public async Task<Result<AssistantExchangeDto>> Handle(
@@ -59,6 +60,9 @@ public sealed class PostMessageHandler(
 
         if (conversation is null)
             return Result<AssistantExchangeDto>.Failure(OwnedConversations.NotFound);
+
+        // KAN-80: every model call below is charged to this account and attributed to this conversation.
+        usageRecorder.ForConversation(conversation.Id);
 
         var now = clock.UtcNowOffset;
 

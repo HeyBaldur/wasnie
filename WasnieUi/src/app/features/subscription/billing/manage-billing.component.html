@@ -58,11 +58,8 @@
                     <span class="billing-plan__headline">
                       {{ 'BILLING.TRIAL_DAYS_LEFT' | translate: { days: access()!.trialDaysRemaining } }}
                     </span>
-                    @if (access()!.assistantTrialMessageLimit) {
-                      <span class="billing-plan__caption">
-                        {{ 'BILLING.TRIAL_ASSISTANT_USAGE' | translate: { used: access()!.assistantTrialMessagesUsed, limit: access()!.assistantTrialMessageLimit } }}
-                      </span>
-                    }
+                    <!-- KAN-80: the trial's assistant allowance, in tokens — the same meter Settings shows. -->
+                    <app-token-usage-meter [access]="access()" variant="compact" />
                   </div>
                 </div>
 
@@ -132,6 +129,8 @@
                       }
                     }
                   }
+                  <!-- KAN-80: a paying account's assistant tokens for THIS billing period. Nothing for an ended one. -->
+                  <app-token-usage-meter [access]="access()" variant="compact" />
                 </div>
               </div>
             } @else {

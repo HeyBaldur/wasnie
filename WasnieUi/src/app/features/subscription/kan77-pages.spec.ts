@@ -30,7 +30,8 @@ const PRO: SubscriptionPlan = {
 
 const access = (state: AccountAccess['state'], lockReason: AccountAccess['lockReason'] = null): AccountAccess => ({
   state, lockReason, trialEndsAt: '2026-09-21T10:59:45Z', trialDaysRemaining: state === 'Trial' ? 7 : null, trialLengthDays: state === 'Trial' ? 7 : null,
-  assistantTrialMessagesUsed: state === 'Trial' ? 12 : null, assistantTrialMessageLimit: state === 'Trial' ? 300 : null,
+  assistantTokensUsed: state === 'Locked' ? null : 12_000, assistantTokenLimit: state === 'Trial' ? 1_000_000 : null,
+  assistantTokensSince: state === 'Active' ? '2026-09-01T00:00:00Z' : null,
 });
 
 const toast = () => jasmine.createSpyObj<WsToastService>('WsToastService', ['show']);
@@ -207,7 +208,8 @@ describe('KAN-77 · ManageBillingComponent', () => {
 
     expect(fixture.componentInstance.loadError()).toBeFalse();
     expect(el.textContent).toContain('BILLING.TRIAL_TITLE');
-    expect(el.textContent).toContain('BILLING.TRIAL_ASSISTANT_USAGE');
+    // KAN-80: the trial's assistant allowance is now a token meter, not a message count.
+    expect(el.querySelector('[data-testid="token-usage-trial"]')).not.toBeNull();
     expect(el.textContent).not.toContain('SUBSCRIPTION.BILLING_PORTAL_BTN');
   });
 

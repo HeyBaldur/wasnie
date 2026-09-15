@@ -20,15 +20,24 @@ public sealed record GetAccountAccessQuery : IRequest<Result<AccountAccessDto>>;
 /// <param name="LockReason">TrialEnded | SubscriptionEnded | NoSubscription — null unless Locked.</param>
 /// <param name="TrialDaysRemaining">Whole days left, rounded up — null unless in trial.</param>
 /// <param name="TrialLengthDays">The configured trial length — what "N days left" is out of. Null unless in trial.</param>
-/// <param name="AssistantTrialMessagesUsed">Null unless in trial: paying accounts have no allowance.</param>
+/// <param name="AssistantTokensUsed">
+/// Assistant tokens consumed (input + output, KAN-80). Trial: since the account began. Active: in the CURRENT billing
+/// period only. Null when locked.
+/// </param>
+/// <param name="AssistantTokenLimit">The trial's token allowance. Null for a paying account, which has none.</param>
+/// <param name="AssistantTokensSince">
+/// Where <paramref name="AssistantTokensUsed"/> starts counting: the start of the current billing period for a paying
+/// account, null for a trial (everything counts) and when locked.
+/// </param>
 public sealed record AccountAccessDto(
     string State,
     string? LockReason,
     DateTimeOffset? TrialEndsAt,
     int? TrialDaysRemaining,
     int? TrialLengthDays,
-    int? AssistantTrialMessagesUsed,
-    int? AssistantTrialMessageLimit);
+    long? AssistantTokensUsed,
+    long? AssistantTokenLimit,
+    DateTimeOffset? AssistantTokensSince);
 
 public sealed class GetAccountAccessHandler(
     IApplicationDbContext db,
@@ -53,15 +62,31 @@ public sealed class GetAccountAccessHandler(
         if (access.State == AccountAccessState.Locked && await reconciler.ReconcileAsync(cancellationToken))
             access = await accessReader.GetAsync(tenantContext.TenantId, cancellationToken) ?? access;
 
-        int? used = null;
-        int? limit = null;
+        long? used = null;
+        long? limit = null;
+        DateTimeOffset? since = null;
         int? trialLength = null;
         if (access.State == AccountAccessState.Trial)
         {
-            limit = billingOptions.Value.TrialAssistantMessageLimit;
+            limit = billingOptions.Value.TrialAssistantTokenLimit;
             trialLength = billingOptions.Value.TrialDays;
-            used = await db.AssistantMessages.CountAsync(
-                m => m.TenantId == tenantContext.TenantId && m.Role == AssistantMessageRole.User, cancellationToken);
+            used = await Wasnie.Application.Assistant.Common.AssistantTokenMeter.UsedAsync(
+                db, tenantContext.TenantId, since: null, cancellationToken);
+        }
+        else if (access.State == AccountAccessState.Active)
+        {
+            // ★ THE CURRENT BILLING PERIOD, AS DECIDED FOR KAN-80. A paying account sees what it consumed this period and
+            // nothing older. The period comes from the Stripe subscription; when Stripe has not told us its start yet,
+            // the subscription's own creation is the honest fallback — it is when this paid relationship began.
+            var subscription = await db.UserSubscriptions
+                .Where(s => s.TenantId == tenantContext.TenantId && s.StripeSubscriptionId != null)
+                .OrderByDescending(s => s.CreatedAt)
+                .Select(s => new { s.CurrentPeriodStart, s.CreatedAt })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            since = subscription?.CurrentPeriodStart ?? subscription?.CreatedAt;
+            used = await Wasnie.Application.Assistant.Common.AssistantTokenMeter.UsedAsync(
+                db, tenantContext.TenantId, since, cancellationToken);
         }
 
         return Result<AccountAccessDto>.Success(new AccountAccessDto(
@@ -71,6 +96,7 @@ public sealed class GetAccountAccessHandler(
             access.TrialDaysRemaining,
             trialLength,
             used,
-            limit));
+            limit,
+            since));
     }
 }

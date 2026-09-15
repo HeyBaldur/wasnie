@@ -446,6 +446,19 @@
     "COL_STATUS": "Status",
     "STATUS_UNKNOWN": "Nieznany"
   },
+  "ASSISTANT_USAGE": {
+    "TITLE": "Wykorzystanie asystenta",
+    "DESC": "Tokeny wykorzystane przez Zeke dla tego konta — pytania i odpowiedzi łącznie.",
+    "TRIAL_OF": "{{used}} z {{limit}} tokenów",
+    "TRIAL_CAPTION": "W ramach bezpłatnego okresu próbnego",
+    "TRIAL_EXHAUSTED": "Wykorzystano wszystkie tokeny asystenta z okresu próbnego. Wykup subskrypcję, aby dalej korzystać z Zeke.",
+    "PERIOD_USED": "{{used}} tokenów",
+    "PERIOD_CAPTION": "Bieżący okres rozliczeniowy, od {{date}}",
+    "PERIOD_CAPTION_NO_DATE": "Bieżący okres rozliczeniowy",
+    "BAR_LABEL": "Wykorzystane tokeny asystenta",
+    "COMPACT_TRIAL": "Asystent: {{used}} z {{limit}} tokenów",
+    "COMPACT_PERIOD": "Asystent: {{used}} tokenów w tym okresie"
+  },
   "COMMON": {
     "REFRESH": "Odśwież",
     "LOADING": "Ładowanie...",
@@ -2360,7 +2373,7 @@
       "STATUS_ARCHIVED": "Zarchiwizowany",
       "MORE_MATCHES": "Wyświetlono {{ shown }} z {{ total }} dopasowań. Doprecyzuj nazwę, aby zawęzić wyniki."
     },
-    "ERROR_TRIAL_LIMIT_REACHED": "Wykorzystano wszystkie wiadomości asystenta dostępne w bezpłatnym okresie próbnym. Proszę wykupić subskrypcję, aby dalej korzystać z Zeke bez ograniczeń.",
+    "ERROR_TRIAL_LIMIT_REACHED": "Wykorzystano wszystkie tokeny asystenta dostępne w bezpłatnym okresie próbnym. Wykup subskrypcję, aby korzystać z Zeke bez ograniczeń.",
     "WELCOME_EYEBROW": "Zeke · Twój asystent Incentra",
     "WELCOME_TRY_ASKING": "Zapytaj na przykład"
   },
@@ -2881,7 +2894,6 @@
     "TRIAL_TITLE": "Bezpłatny okres próbny",
     "TRIAL_BADGE": "Okres próbny",
     "TRIAL_REMAINING": "Pozostało dni: {{days}} — okres próbny kończy się {{date}}. Nic nie jest pobierane, dopóki nie wykupisz subskrypcji.",
-    "TRIAL_ASSISTANT_USAGE": "Wiadomości asystenta wykorzystane w okresie próbnym: {{used}} z {{limit}}.",
     "SEE_PRICING": "Zobacz cennik",
     "SECTION_SUBSCRIPTION": "Subskrypcja",
     "SECTION_PAYMENT": "Informacje o płatności",

@@ -175,7 +175,8 @@ public sealed class AssistantChatCompletionTests
             new AssistantSectionRouter(provider, knowledge, NullLogger<AssistantSectionRouter>.Instance),
             new AssistantToolRunner(provider, tools ?? [], NullLogger<AssistantToolRunner>.Instance),
             Options.Create(new GroqOptions { ApiKey = "test-key" }),
-            NullLogger<StreamAssistantReplyHandler>.Instance);
+            NullLogger<StreamAssistantReplyHandler>.Instance,
+            Substitute.For<Wasnie.Application.Assistant.Abstractions.IModelUsageRecorder>());
 
         return new Harness(db, handler, provider, tenant, user, tenantCtx);
     }
