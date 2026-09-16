@@ -7,7 +7,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Exceptions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Features.Subscription.DTOs;
-using Wasnie.Domain.Authorization;
 using Wasnie.IntegrationTests.Infrastructure;
 
 namespace Wasnie.IntegrationTests.Integration.Subscription;
@@ -20,17 +19,14 @@ public sealed class SubscriptionEndpointsTests : IAsyncLifetime
 
     private static readonly IReadOnlyList<SubscriptionPlanDto> SamplePlans =
     [
-        new(PriceId: null, ProductId: null, Name: "Free", Price: 0m,
-            Currency: "EUR", Interval: "free", Tier: "Free",
-            MaxPayees: 5, MaxPlans: 1, IsCurrentPlan: false),
         new(PriceId: "price_starter", ProductId: "prod_starter", Name: "Starter", Price: 29m,
-            Currency: "EUR", Interval: "month", Tier: "Starter",
+            Currency: "EUR", Interval: "month", PlanCode: "starter",
             MaxPayees: 25, MaxPlans: 5, IsCurrentPlan: false),
         new(PriceId: "price_growth", ProductId: "prod_growth", Name: "Growth", Price: 79m,
-            Currency: "EUR", Interval: "month", Tier: "Growth",
+            Currency: "EUR", Interval: "month", PlanCode: "growth",
             MaxPayees: 75, MaxPlans: 15, IsCurrentPlan: true),
         new(PriceId: "price_scale", ProductId: "prod_scale", Name: "Scale", Price: 199m,
-            Currency: "EUR", Interval: "month", Tier: "Scale",
+            Currency: "EUR", Interval: "month", PlanCode: "scale",
             MaxPayees: 150, MaxPlans: -1, IsCurrentPlan: false),
     ];
 
@@ -65,7 +61,7 @@ public sealed class SubscriptionEndpointsTests : IAsyncLifetime
     // ── Plans endpoint ──────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetPlans_ReturnsFourPlansWithCorrectShape()
+    public async Task GetPlans_ReturnsThePaidPlansWithCorrectShape_AndNoFreePlan()
     {
         using var factory = _fixture.Factory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
@@ -78,22 +74,15 @@ public sealed class SubscriptionEndpointsTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var plans = await response.Content.ReadFromJsonAsync<List<PlanResponse>>(JsonOptions);
         plans.Should().NotBeNull();
-        plans!.Should().HaveCount(4);
+        plans!.Should().HaveCount(3);
+        plans.Should().NotContain(p => p.PriceId == null, "KAN-77: there is no synthetic free plan any more");
 
-        var free = plans!.First(p => p.Tier == "Free");
-        free.PriceId.Should().BeNull();
-        free.ProductId.Should().BeNull();
-        free.Price.Should().Be(0m);
-        free.Interval.Should().Be("free");
-        free.MaxPayees.Should().Be(5);
-        free.MaxPlans.Should().Be(1);
-
-        var starter = plans.First(p => p.Tier == "Starter");
+        var starter = plans.First(p => p.PlanCode == "starter");
         starter.PriceId.Should().Be("price_starter");
         starter.Price.Should().Be(29m);
         starter.MaxPayees.Should().Be(25);
 
-        var growth = plans.First(p => p.Tier == "Growth");
+        var growth = plans.First(p => p.PlanCode == "growth");
         growth.IsCurrentPlan.Should().BeTrue();
     }
 
@@ -165,20 +154,20 @@ public sealed class SubscriptionEndpointsTests : IAsyncLifetime
 
     private sealed record PlanResponse(
         string? PriceId, string? ProductId, string Name, decimal Price,
-        string Currency, string Interval, string Tier,
+        string Currency, string Interval, string PlanCode,
         int MaxPayees, int MaxPlans, bool IsCurrentPlan);
 
     private sealed record ConfigResponse(string PublishableKey);
 
     private sealed class StubSubscriptionPlanService(IReadOnlyList<SubscriptionPlanDto> plans) : ISubscriptionPlanService
     {
-        public Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(Tier currentTier, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(string? currentPlanCode, CancellationToken cancellationToken = default)
             => Task.FromResult(plans);
     }
 
     private sealed class BrokenSubscriptionPlanService : ISubscriptionPlanService
     {
-        public Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(Tier currentTier, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(string? currentPlanCode, CancellationToken cancellationToken = default)
             => throw new StripeUnavailableException("The subscription plan service is temporarily unavailable. Please try again shortly.");
     }
 }

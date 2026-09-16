@@ -4,4 +4,4 @@ using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Features.Subscription.Commands;
 
-public sealed record ChangePlanCommand(string TargetTier) : IRequest<Result<ChangePlanResultDto>>;
+public sealed record ChangePlanCommand(string TargetPlanCode) : IRequest<Result<ChangePlanResultDto>>;

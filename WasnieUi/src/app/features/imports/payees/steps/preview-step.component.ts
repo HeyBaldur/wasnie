@@ -2,7 +2,7 @@ import { Component, computed, HostListener, input, output, signal } from '@angul
 import { TranslateModule } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
-import { WsButtonComponent, WsStatCardComponent, WsBadgeComponent, BadgeVariant } from '../../../../shared/ui';
+import { WsButtonComponent, WsBadgeComponent, BadgeVariant, WsTableComponent } from '../../../../shared/ui';
 import {
   PayeeImportColumnMapping,
   PayeeRowValidationResult,
@@ -10,13 +10,14 @@ import {
   ValidationIssue,
 } from '../models/payee-import.models';
 import { composeFullName } from '../helpers/fullname-composer';
+import { ImportStepHeroComponent } from '../../shared/import-step-hero.component';
 
 type RowFilter = 'all' | 'errors' | 'warnings';
 
 @Component({
   selector: 'app-preview-step',
   standalone: true,
-  imports: [TranslateModule, FormsModule, IconComponent, WsButtonComponent, WsStatCardComponent, WsBadgeComponent],
+  imports: [ImportStepHeroComponent, TranslateModule, FormsModule, IconComponent, WsButtonComponent, WsBadgeComponent, WsTableComponent],
   templateUrl: './preview-step.component.html',
   styleUrl: './preview-step.component.scss',
 })
@@ -24,7 +25,6 @@ export class PreviewStepComponent {
   readonly fileId = input.required<string>();
   readonly columnMapping = input.required<PayeeImportColumnMapping>();
   readonly validateResponse = input.required<ValidateResponse>();
-  readonly atPayeesLimit = input(false);
 
   readonly importRequested = output<{ skipWarnings: boolean }>();
   readonly back = output<void>();

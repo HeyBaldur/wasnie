@@ -14,12 +14,13 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   ClarifyEntity,
   ClarifyOption,
   clarifyEntityOf,
+  clarifyOptionIcon,
   clarifyOptionKey,
   clarifyPromptKey,
   clarifyStatusKey,
@@ -44,6 +45,12 @@ import { STARTER_PROMPTS, StarterPrompt, placeholderRange } from './../panel/sta
 import { ComposerLayout, composerLayoutFor, composerMaxHeight } from './composer-layout';
 import { ComposerMirror } from './composer-mirror';
 import { formatMessageTime, plainTextOf } from './message-meta';
+import { assistantFailureKind } from './assistant-failure';
+import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
+import { AssistantTokenStatusComponent } from './assistant-token-status.component';
+import { AddTokensDialogComponent } from '../../subscription/add-tokens/add-tokens-dialog.component';
+import { refreshAfterTokenPurchase } from '../../subscription/add-tokens/token-purchase-return';
+import { SubscriptionStateService } from '../../subscription/services/subscription-state.service';
 
 /**
  * The conversation itself, with no opinion about where it is shown.
@@ -77,9 +84,13 @@ import { formatMessageTime, plainTextOf } from './message-meta';
     IconComponent,
     AssistantMarkdownPipe,
     AssistantMathDirective,
+    RouterLink,
+    HasPermissionPipe,
+    AssistantTokenStatusComponent,
+    AddTokensDialogComponent,
   ],
   templateUrl: './assistant-conversation.component.html',
-  styleUrl: './assistant-conversation.component.scss',
+  styleUrls: ['./assistant-conversation.component.scss', './assistant-turns.scss', './assistant-alert.scss', './assistant-welcome.scss', './assistant-thinking.scss'],
   host: {
     '[class.assistant-conversation--wide]': 'wide()',
   },
@@ -93,6 +104,8 @@ export class AssistantConversationComponent {
   private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly subscriptionState = inject(SubscriptionStateService);
   private readonly destroyRef = inject(DestroyRef);
 
   /**
@@ -133,6 +146,13 @@ export class AssistantConversationComponent {
    * text that needed the width. Starting stacked costs at most one frame of an extra row before the
    * first measurement lands.
    */
+  /**
+   * KAN-83 UX — the token purchase dialog, opened from the 80% warning or from the card that stopped a question.
+   * Held here rather than in a service: it is one dialog belonging to this screen, and a global overlay service
+   * would be machinery for a problem nobody has.
+   */
+  readonly addTokensOpen = signal(false);
+
   readonly composerLayout = signal<ComposerLayout>('stacked');
 
   /**
@@ -255,6 +275,11 @@ export class AssistantConversationComponent {
 
   private readonly messagesEl = viewChild<ElementRef<HTMLElement>>('messages');
 
+  /** The growing content inside the scroller. Watched for size, not read for state. */
+  private readonly streamEl = viewChild<ElementRef<HTMLElement>>('stream');
+
+  private streamObserver: MutationObserver | null = null;
+
   /** The composer, so a starter prompt can put its text in it and select the placeholder. */
   private readonly composer = viewChild(WsTextareaComponent);
 
@@ -280,6 +305,13 @@ export class AssistantConversationComponent {
   private lastView: string | null = null;
 
   constructor() {
+    // KAN-83 UX: coming back from Stripe after buying tokens. The credit lands by webhook a beat after the
+    // redirect, so the balance is re-read here (and once more shortly after, if it still looks exhausted).
+    // ★ THE SNAPSHOT CAN BE ABSENT. This same component renders inside the side panel, where it is not the
+    // target of a route at all — there is no activated route to read a query parameter from, and the return
+    // trip from Stripe simply does not apply.
+    refreshAfterTokenPurchase(this.route?.snapshot?.queryParams ?? {}, this.subscriptionState);
+
     // ★ THE TIMING. This effect runs BEFORE the template has rendered the new turns, which is exactly
     // why it does not scroll here: the container has not grown yet, so scrollHeight is the old one and
     // the jump would land short. It decides WHETHER and HOW to scroll — reading the pre-render scroll
@@ -356,6 +388,22 @@ export class AssistantConversationComponent {
     // `singleLineHeight` for what happened when this was left to the first keystroke.
     afterNextRender(() => this.updateComposerLayout(), { injector: this.injector });
 
+    // ★★ FOLLOW ANYTHING THAT GROWS, NOT JUST THE THINGS WE REMEMBERED TO LIST.
+    //
+    // The effect above pulls the view down when `messages()` or `streamingReply()` change, and that
+    // covered turns and streamed text — but nothing else. An alert ("out of AI tokens"), the thinking
+    // card and the clarify panel all appear BELOW the last answer without either signal moving, so
+    // they landed off-screen: the reader sat looking at the final reply with no hint that the thing
+    // they needed was a scroll away, and plenty of people never scroll.
+    //
+    // Enumerating those three states here would leave the fourth one broken again the day it is added.
+    // Watching the stream's HEIGHT catches all of them by construction, including anything a future
+    // turn renders.
+    effect(() => {
+      const stream = this.streamEl()?.nativeElement;
+      untracked(() => this.watchStreamGrowth(stream));
+    });
+
     // ★ A DRAFT CAN ARRIVE WITHOUT A KEYSTROKE. Switching conversations and reloading the page both
     // replace the composer's content with no input event to notice it, so the shape and the height
     // would still describe the text that was there before — a six-line draft coming back as one line.
@@ -365,6 +413,7 @@ export class AssistantConversationComponent {
     });
 
     this.destroyRef.onDestroy(() => {
+      this.streamObserver?.disconnect();
       this.stopLongWaitClock();
       this.clearCopiedTimer();
       this.mirror.destroy();
@@ -410,6 +459,52 @@ export class AssistantConversationComponent {
   }
 
   /** True when the view is at (or within a hair of) the newest message — or when there is nothing yet. */
+  /**
+   * Keeps the view at the bottom while content appears below it.
+   *
+   * ★★ A MutationObserver, NOT A ResizeObserver — and that is the whole trick. The stream is laid out
+   * at a FIXED height and its content overflows into the scroller around it, so adding an alert does
+   * not change the stream's box by a single pixel and a size observer never fires at all. Measured:
+   * 250px of new content, zero callbacks. What changes is the set of NODES, so that is what to watch.
+   *
+   * ★ IT ASKS `atBottom`, NOT `isNearBottom()`. By the time this fires the content is already there, so
+   * measuring now would report "not at the bottom" for exactly the reader we are trying to follow.
+   * `atBottom` is the last thing the READER did — it only moves on a real scroll event — which is the
+   * question that matters: were they following along?
+   *
+   * ★ NEVER SMOOTH. This fires many times a second while an answer streams; queued animations lag
+   * behind the content and read as stuttering.
+   */
+  private watchStreamGrowth(stream: HTMLElement | undefined): void {
+    this.streamObserver?.disconnect();
+    this.streamObserver = null;
+
+    if (!stream || typeof MutationObserver === 'undefined') {
+      return;
+    }
+
+    this.streamObserver = new MutationObserver(() => {
+      if (!this.atBottom()) {
+        return;
+      }
+
+      // ★★ TWICE, AND NEITHER CALL IS requestAnimationFrame. The callback runs with the new nodes
+      // attached but not yet laid out, so this first attempt can land short; the timeout catches the
+      // final height a tick later. rAF would be the natural choice for "after layout" and is the wrong
+      // one here: it does not run at all while the tab is in the background, so a chat left open in a
+      // background tab would come back scrolled to the wrong place. A timeout is throttled there, not
+      // cancelled.
+      this.scrollToBottom('auto');
+      setTimeout(() => {
+        if (this.atBottom()) {
+          this.scrollToBottom('auto');
+        }
+      });
+    });
+
+    this.streamObserver.observe(stream, { childList: true, subtree: true, characterData: true });
+  }
+
   private isNearBottom(): boolean {
     const el = this.messagesEl()?.nativeElement;
     if (!el) {
@@ -614,6 +709,11 @@ ${this.translate.instant('ASSISTANT.CANCELLED_COPY_NOTICE')}`;
     return clarifyOptionKey(option.function) ?? '';
   }
 
+  /** The icon standing for an option's lookup. Whitelisted too, with a neutral fallback. */
+  clarifyIcon(option: ClarifyOption): string {
+    return clarifyOptionIcon(option.function);
+  }
+
   /**
    * The record an option stands for, or null when it stands for a function.
    *
@@ -735,6 +835,12 @@ ${this.translate.instant('ASSISTANT.CANCELLED_COPY_NOTICE')}`;
    * Cleared only when the box still holds EXACTLY what is being retried: if the user edited it, that
    * text is theirs and Retry is not entitled to it.
    */
+  /**
+   * What the failed turn allows: retry, subscribe, or nothing (see assistant-failure.ts). Derived from the error
+   * code the server sent, so the card and its actions can never disagree with the reason shown.
+   */
+  readonly failureKind = computed(() => assistantFailureKind(this.store.errorKey()));
+
   async retry(): Promise<void> {
     const retried = this.store.unsentText();
     await this.store.retry();

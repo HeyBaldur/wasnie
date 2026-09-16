@@ -110,9 +110,9 @@ public sealed class ReactivationCancellationFieldsTests : IAsyncLifetime
         var setupDb = setup.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var now = DateTimeOffset.UtcNow;
 
-        var sub = UserSubscription.CreateFree(Guid.NewGuid(), TestConstants.TenantA, "test@wasnie.io", now);
+        var sub = UserSubscription.CreatePending(Guid.NewGuid(), TestConstants.TenantA, "test@wasnie.io", now);
         sub.UpdateFromStripe(
-            tier: Tier.Scale, status: SubscriptionStatus.Active,
+            planCode: "pro", status: SubscriptionStatus.Active,
             stripeSubscriptionId: "sub_before", stripeCustomerId: "cus_react_test",
             stripePriceId: "price_scale", stripeProductId: "prod_scale",
             periodStart: now, periodEnd: now.AddMonths(1),
@@ -142,9 +142,9 @@ public sealed class ReactivationCancellationFieldsTests : IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var now = DateTimeOffset.UtcNow;
 
-        var tenantBSub = UserSubscription.CreateFree(Guid.NewGuid(), TestConstants.TenantB, "b@test.io", now);
+        var tenantBSub = UserSubscription.CreatePending(Guid.NewGuid(), TestConstants.TenantB, "b@test.io", now);
         tenantBSub.UpdateFromStripe(
-            tier: Tier.Scale, status: SubscriptionStatus.Active,
+            planCode: "pro", status: SubscriptionStatus.Active,
             stripeSubscriptionId: "sub_b_orig", stripeCustomerId: "cus_b",
             stripePriceId: "price_scale", stripeProductId: "prod_scale",
             periodStart: now, periodEnd: now.AddMonths(1),
@@ -185,9 +185,9 @@ public sealed class ReactivationCancellationFieldsTests : IAsyncLifetime
         var now = DateTimeOffset.UtcNow;
         var periodEnd = oldPeriodEnd ?? new DateTimeOffset(2026, 7, 11, 0, 0, 0, TimeSpan.Zero);
 
-        var sub = UserSubscription.CreateFree(Guid.NewGuid(), TestConstants.TenantA, "test@wasnie.io", now);
+        var sub = UserSubscription.CreatePending(Guid.NewGuid(), TestConstants.TenantA, "test@wasnie.io", now);
         sub.UpdateFromStripe(
-            tier: Tier.Scale, status: SubscriptionStatus.Active,
+            planCode: "pro", status: SubscriptionStatus.Active,
             stripeSubscriptionId: "sub_old", stripeCustomerId: "cus_react_test",
             stripePriceId: "price_scale", stripeProductId: "prod_scale",
             periodStart: now, periodEnd: periodEnd,
@@ -214,7 +214,7 @@ public sealed class ReactivationCancellationFieldsTests : IAsyncLifetime
         var periodEnd = newPeriodEnd ?? new DateTimeOffset(2026, 7, 12, 0, 0, 0, TimeSpan.Zero);
 
         tracked.UpdateFromStripe(
-            tier: Tier.Scale, status: SubscriptionStatus.Active,
+            planCode: "pro", status: SubscriptionStatus.Active,
             stripeSubscriptionId: "sub_reactivated_new",
             stripeCustomerId: "cus_react_test",
             stripePriceId: "price_scale", stripeProductId: "prod_scale",

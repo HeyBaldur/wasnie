@@ -1,46 +1,88 @@
 @reference "../../../../styles.scss";
 
+// ── The wizard ──────────────────────────────────────────────────────────────────
+//
+// A track runs under the steps and fills (blue→violet) up to the active one; the active step wears a gradient
+// circle with a breathing halo; a finished step turns green with a tick that pops. Each step's content rises in
+// when it appears. Tokens throughout; still with reduced motion.
+
 :host {
   display: block;
   width: 100%;
 }
 
 .ws-wz__steps {
+  --wz-circle: 36px;
+
+  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: var(--space-8);
-  padding: 0;
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(60% 140% at 0% 0%, color-mix(in srgb, var(--color-accent-violet) 8%, transparent), transparent 70%),
+    var(--color-bg-surface);
+}
+
+// The track: from the centre of the first circle to the centre of the last.
+.ws-wz__track {
+  position: absolute;
+  top: calc(var(--space-4) + var(--wz-circle) / 2 - 2px);
+  // Equal columns, so the first and last centres are half a column in from each side.
+  left: calc(var(--space-5) + (100% - 2 * var(--space-5)) / (2 * var(--wz-count, 5)));
+  right: calc(var(--space-5) + (100% - 2 * var(--space-5)) / (2 * var(--wz-count, 5)));
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
+}
+
+.ws-wz__track-fill {
+  display: block;
+  width: calc(var(--wz-progress, 0) * 100%);
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--color-success), var(--color-accent-blue), var(--color-accent-violet));
+  transition: width 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .ws-wz__step {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
 }
 
 .ws-wz__circle {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: var(--wz-circle);
+  height: var(--wz-circle);
+  border-radius: var(--radius-full);
   font-size: var(--font-size-13);
   font-weight: 600;
-  transition: background var(--transition-normal), color var(--transition-normal);
+  transition: background var(--transition-base), color var(--transition-base), transform var(--transition-base);
 
   .ws-wz__step--upcoming & {
-    background: var(--color-bg-surface-sunken);
+    background: var(--color-bg-surface);
     color: var(--color-text-tertiary);
     border: 1px solid var(--color-border-default);
   }
 
   .ws-wz__step--active & {
-    background: var(--color-brand);
-    color: var(--color-brand-contrast);
-    box-shadow: 0 0 0 4px var(--color-brand-subtle);
+    background: linear-gradient(135deg, var(--color-accent-blue), var(--color-accent-violet));
+    color: var(--color-text-inverse);
+    box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--color-accent-violet) 70%, transparent);
+    transform: scale(1.08);
   }
 
   .ws-wz__step--done & {
@@ -49,33 +91,80 @@
   }
 }
 
+.ws-wz__halo {
+  position: absolute;
+  inset: -6px;
+  border-radius: var(--radius-full);
+  border: 2px solid color-mix(in srgb, var(--color-accent-violet) 45%, transparent);
+  animation: ws-wz-halo 2s ease-out infinite;
+  pointer-events: none;
+}
+
+.ws-wz__check {
+  display: flex;
+  animation: ws-wz-pop 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
 .ws-wz__label {
   font-size: var(--font-size-12);
   font-weight: 500;
   color: var(--color-text-tertiary);
-  white-space: nowrap;
+  line-height: 1.3;
+  transition: color var(--transition-base);
 
   .ws-wz__step--active & {
-    color: var(--color-text-primary);
-    font-weight: 600;
+    color: var(--color-accent-violet);
+    font-weight: 700;
   }
 
   .ws-wz__step--done & {
     color: var(--color-text-primary);
   }
-}
 
-.ws-wz__line {
-  flex: 1;
-  height: 2px;
-  margin: 0 var(--space-2);
-  align-self: flex-start;
-  margin-top: 16px; /* align with circle centers */
-
-  &--pending { background: var(--color-border-default); }
-  &--done    { background: var(--color-success); }
+  // Narrow screens: only the active label stays, the circles tell the rest.
+  @media (max-width: 640px) {
+    .ws-wz__step:not(.ws-wz__step--active) & {
+      display: none;
+    }
+  }
 }
 
 .ws-wz__content {
   width: 100%;
+
+  // Each step is inserted fresh by its wizard (@if per step), so this plays on every step change.
+  // ★ FILL-MODE backwards, NEVER both: a transform left on the step after the animation would become the
+  // containing block of every position: fixed dropdown inside it (the mapping step's selects) — the same
+  // defect the modals had.
+  > ::ng-deep * {
+    animation: ws-wz-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+}
+
+@keyframes ws-wz-halo {
+  0%   { transform: scale(0.85); opacity: 0.9; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+@keyframes ws-wz-pop {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+
+@keyframes ws-wz-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-wz__halo,
+  .ws-wz__check,
+  .ws-wz__content > ::ng-deep * {
+    animation: none;
+  }
+
+  .ws-wz__track-fill,
+  .ws-wz__circle {
+    transition: none;
+  }
 }

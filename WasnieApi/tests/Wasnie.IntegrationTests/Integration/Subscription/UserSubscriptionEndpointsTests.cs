@@ -5,11 +5,17 @@ using System.Text.Json.Serialization;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Wasnie.Domain.Subscription;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.IntegrationTests.Infrastructure;
 
 namespace Wasnie.IntegrationTests.Integration.Subscription;
 
+/// <summary>
+/// The subscription row and the current-user plan, after KAN-77. These tests used to drive
+/// <c>POST /api/subscription/select-free</c>; the free plan is gone, so what they pin now is that the endpoint no
+/// longer exists, that a trial tenant has no subscription and no plan, and that tenants stay isolated.
+/// </summary>
 [Collection(WasnieIntegrationTestCollection.Name)]
 public sealed class UserSubscriptionEndpointsTests : IAsyncLifetime
 {
@@ -23,24 +29,13 @@ public sealed class UserSubscriptionEndpointsTests : IAsyncLifetime
     {
         _clientA = _fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA);
         _clientB = _fixture.Factory.CreateClient().WithAuth(TestConstants.TenantB);
-
-        // Clean up subscription rows and reset onboarding flag for test isolation.
-        // Does NOT reset Tier — test tenants stay at Enterprise so capacity limits don't break other tests.
-        using var scope = _fixture.Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var tidA = TestConstants.TenantA;
-        var tidB = TestConstants.TenantB;
-        await db.Database.ExecuteSqlAsync(
-            $"DELETE FROM UserSubscriptions WHERE TenantId = {tidA} OR TenantId = {tidB}");
-        // Restore Tier to Enterprise (value 4) because select-free sets Tier = Free,
-        // and other integration tests rely on Enterprise tier to bypass capacity limits.
-        await db.Database.ExecuteSqlAsync(
-            $"UPDATE Tenants SET HasSelectedPlan = 0, Tier = 4 WHERE Id = {tidA} OR Id = {tidB}");
+        await ResetAsync();
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync() => ResetAsync();
+
+    private async Task ResetAsync()
     {
-        // Restore tenant state after each test so downstream test classes see Enterprise tier.
         using var scope = _fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var tidA = TestConstants.TenantA;
@@ -48,148 +43,60 @@ public sealed class UserSubscriptionEndpointsTests : IAsyncLifetime
         await db.Database.ExecuteSqlAsync(
             $"DELETE FROM UserSubscriptions WHERE TenantId = {tidA} OR TenantId = {tidB}");
         await db.Database.ExecuteSqlAsync(
-            $"UPDATE Tenants SET HasSelectedPlan = 0, Tier = 4 WHERE Id = {tidA} OR Id = {tidB}");
-    }
-
-    // ── Auth gates ─────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task SelectFree_WithoutToken_Returns401()
-    {
-        var anon = _fixture.Factory.CreateClient();
-        var response = await anon.PostAsync("/api/subscription/select-free", null);
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            $"UPDATE Tenants SET HasSelectedPlan = 0, PlanCode = NULL WHERE Id = {tidA} OR Id = {tidB}");
     }
 
     [Fact]
-    public async Task GetCurrent_WithoutToken_Returns401()
-    {
-        var anon = _fixture.Factory.CreateClient();
-        var response = await anon.GetAsync("/api/subscription/current");
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
-
-    // ── select-free creates UserSubscription row ───────────────────────────────
-
-    [Fact]
-    public async Task SelectFree_CreatesUserSubscriptionRow_WithCorrectFields()
+    public async Task SelectFree_no_longer_exists()
     {
         var response = await _clientA.PostAsync("/api/subscription/select-free", null);
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        response.IsSuccessStatusCode.Should().BeFalse("KAN-77 removed the free plan and its endpoint");
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed);
 
         using var scope = _fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var sub = await db.UserSubscriptions
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.TenantId == TestConstants.TenantA);
-
-        sub.Should().NotBeNull();
-        sub!.Tier.ToString().Should().Be("Free");
-        sub.Status.ToString().Should().Be("Active");
-        sub.StripeSubscriptionId.Should().BeNull();
-        sub.StripeCustomerId.Should().BeNull();
-        sub.CurrentPeriodStart.Should().BeNull();
-        sub.CurrentPeriodEnd.Should().BeNull();
+        (await db.UserSubscriptions.IgnoreQueryFilters().AnyAsync(s => s.TenantId == TestConstants.TenantA))
+            .Should().BeFalse("nothing may create a subscription row without Stripe any more");
     }
 
-    // ── select-free sets HasSelectedPlan on Tenant ─────────────────────────────
-
     [Fact]
-    public async Task SelectFree_SetsTenantHasSelectedPlan()
-    {
-        await _clientA.PostAsync("/api/subscription/select-free", null);
-
-        using var scope = _fixture.Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var tenant = await db.Tenants.FindAsync(TestConstants.TenantA);
-
-        tenant!.HasSelectedPlan.Should().BeTrue();
-        tenant.Tier.ToString().Should().Be("Free");
-    }
-
-    // ── select-free is idempotent ──────────────────────────────────────────────
-
-    [Fact]
-    public async Task SelectFree_IsIdempotent_DoesNotDuplicateRow()
-    {
-        await _clientA.PostAsync("/api/subscription/select-free", null);
-        var response2 = await _clientA.PostAsync("/api/subscription/select-free", null);
-
-        response2.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        using var scope = _fixture.Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var count = await db.UserSubscriptions
-            .IgnoreQueryFilters()
-            .CountAsync(s => s.TenantId == TestConstants.TenantA);
-
-        count.Should().Be(1);
-    }
-
-    // ── GET /api/subscription/current returns the subscription ─────────────────
-
-    [Fact]
-    public async Task GetCurrent_AfterSelectFree_ReturnsCorrectSubscription()
-    {
-        await _clientA.PostAsync("/api/subscription/select-free", null);
-
-        var response = await _clientA.GetAsync("/api/subscription/current");
-
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var sub = await response.Content.ReadFromJsonAsync<SubscriptionResponse>(JsonOptions);
-        sub.Should().NotBeNull();
-        sub!.Tier.Should().Be("Free");
-        sub.Status.Should().Be("Active");
-        sub.StripeSubscriptionId.Should().BeNull();
-        sub.CurrentPeriodStart.Should().BeNull();
-    }
-
-    // ── GET /api/subscription/current returns 404 if no subscription yet ────────
-
-    [Fact]
-    public async Task GetCurrent_BeforeSelectFree_Returns404()
+    public async Task GetCurrent_for_a_tenant_that_never_subscribed_returns_404()
     {
         var response = await _clientA.GetAsync("/api/subscription/current");
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    // ── Multi-tenant isolation ─────────────────────────────────────────────────
+    [Fact]
+    public async Task GetCurrentUser_in_trial_has_no_plan()
+    {
+        var me = await (await _clientA.GetAsync("/api/auth/me")).Content.ReadFromJsonAsync<MeResponse>(JsonOptions);
+
+        me!.PlanCode.Should().BeNull("a trial has not subscribed to any plan");
+        me.HasSelectedPlan.Should().BeFalse();
+    }
 
     [Fact]
-    public async Task SelectFree_IsTenantScoped_TenantBCannotSeeTenantASubscription()
+    public async Task A_subscription_is_tenant_scoped()
     {
-        await _clientA.PostAsync("/api/subscription/select-free", null);
+        using (var scope = _fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            var sub = UserSubscription.CreatePending(Guid.NewGuid(), TestConstants.TenantA, "a@wasnie.io", now);
+            sub.UpdateFromStripe("pro", SubscriptionStatus.Active, "sub_scope_a", "cus_scope_a", "price_299", "prod_299",
+                now, now.AddMonths(1), now.AddMonths(1), now);
+            db.UserSubscriptions.Add(sub);
+            await db.SaveChangesAsync();
+        }
+
+        var responseA = await _clientA.GetAsync("/api/subscription/current");
+        responseA.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await responseA.Content.ReadFromJsonAsync<SubscriptionResponse>(JsonOptions))!.PlanCode.Should().Be("pro");
 
         var responseB = await _clientB.GetAsync("/api/subscription/current");
-        responseB.StatusCode.Should().Be(HttpStatusCode.NotFound,
-            because: "TenantB has not selected a plan; TenantA's subscription is not visible");
+        responseB.StatusCode.Should().Be(HttpStatusCode.NotFound, "TenantA's subscription is not visible to TenantB");
     }
-
-    // ── Guard scenario: close wizard without selecting → wizard again ────────────
-
-    [Fact]
-    public async Task GetCurrentUser_BeforeSelectFree_HasSelectedPlanIsFalse()
-    {
-        var response = await _clientA.GetAsync("/api/auth/me");
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var me = await response.Content.ReadFromJsonAsync<MeResponse>(JsonOptions);
-        me!.HasSelectedPlan.Should().BeFalse(
-            because: "the tenant has not yet selected a plan");
-    }
-
-    [Fact]
-    public async Task GetCurrentUser_AfterSelectFree_HasSelectedPlanIsTrue()
-    {
-        await _clientA.PostAsync("/api/subscription/select-free", null);
-
-        var response = await _clientA.GetAsync("/api/auth/me");
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var me = await response.Content.ReadFromJsonAsync<MeResponse>(JsonOptions);
-        me!.HasSelectedPlan.Should().BeTrue(
-            because: "the tenant has selected the Free plan");
-    }
-
-    // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -197,13 +104,7 @@ public sealed class UserSubscriptionEndpointsTests : IAsyncLifetime
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
 
-    private sealed record SubscriptionResponse(
-        string Tier, string Status, string BillingEmail,
-        string? StripeSubscriptionId, string? StripeCustomerId,
-        string? StripePriceId, string? StripeProductId,
-        DateTimeOffset? CurrentPeriodStart, DateTimeOffset? CurrentPeriodEnd,
-        DateTimeOffset? NextBillingDate, DateTimeOffset? CanceledAt,
-        DateTimeOffset CreatedAt);
+    private sealed record SubscriptionResponse(string? PlanCode, string Status, string? StripeSubscriptionId);
 
-    private sealed record MeResponse(bool HasSelectedPlan, string Tier);
+    private sealed record MeResponse(bool HasSelectedPlan, string? PlanCode);
 }

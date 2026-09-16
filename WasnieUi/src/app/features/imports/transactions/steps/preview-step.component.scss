@@ -7,12 +7,6 @@
   gap: var(--space-4);
 }
 
-.preview-step__stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
-}
-
 // ── Row filter tabs ──────────────────────────────────────────────────────────
 
 .row-filter {
@@ -44,88 +38,6 @@
   &__count {
     color: var(--color-text-tertiary);
     font-weight: 400;
-  }
-}
-
-// ── Table ────────────────────────────────────────────────────────────────────
-
-// Visual treatment mirrors the standard app table (WsTable / Credits): surface
-// background, card radius + subtle shadow, raised uppercase header, generous cell
-// padding and row hover. The sticky header + vertical scroll are kept (this table
-// shows all rows at once), and the Issues cell keeps its multi-line/multi-badge
-// capability — only colours/typography/padding/borders are aligned.
-.preview-table-wrap {
-  overflow-x: auto;
-  overflow-y: auto;
-  max-height: 440px;
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.preview-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--font-size-14);
-  font-weight: 400;
-
-  &__th {
-    padding: var(--space-3) var(--space-4);
-    text-align: left;
-    font-size: var(--font-size-12);
-    font-weight: 600;
-    color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    background: var(--color-bg-surface-raised);
-    border-bottom: 1px solid var(--color-border-default);
-    white-space: nowrap;
-    position: sticky;
-    top: 0;
-    z-index: 1;
-
-    &--num   { width: 36px; }
-    &--issues { width: 28%; }
-  }
-
-  &__td {
-    padding: var(--space-3) var(--space-4);
-    color: var(--color-text-primary);
-    border-bottom: 1px solid var(--color-border-subtle);
-    vertical-align: top;
-
-    &--num {
-      width: 36px;
-      color: var(--color-text-tertiary);
-      white-space: nowrap;
-    }
-
-    &--status {
-      white-space: nowrap;
-    }
-
-    // Issues cell: keep full multi-line / multi-badge content visible (not truncated).
-    &--issues {
-      white-space: normal;
-    }
-  }
-
-  &__row {
-    transition: background var(--transition-fast);
-  }
-
-  &__row:hover {
-    background: var(--color-bg-surface-raised);
-  }
-
-  &__row:last-child &__td { border-bottom: none; }
-
-  &__empty {
-    padding: var(--space-6);
-    text-align: center;
-    color: var(--color-text-tertiary);
-    font-size: var(--font-size-12);
   }
 }
 
@@ -308,3 +220,6 @@
     gap: var(--space-2);
   }
 }
+
+// The shared visual layer of the import steps (mapping + review).
+@import '../../shared/import-steps-visual';

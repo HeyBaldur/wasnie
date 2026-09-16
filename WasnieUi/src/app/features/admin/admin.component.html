@@ -9,6 +9,11 @@
       <app-appearance-card />
     </div>
 
+    <!-- KAN-80: the assistant's token usage for this account. Renders nothing when there is none to act on. -->
+    <div class="settings-sections">
+      <app-assistant-usage-card />
+    </div>
+
     <div class="settings-sections" *hasPermission="'Settings.Update'">
       <app-field-requirements />
     </div>

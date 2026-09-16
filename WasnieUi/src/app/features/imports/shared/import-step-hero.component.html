@@ -1,0 +1,62 @@
+<div class="hero">
+  <div class="hero__art" aria-hidden="true">
+    @if (kind() === 'map') {
+      <svg viewBox="0 0 150 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- The file's columns -->
+        <g class="hero__float">
+          <rect x="6" y="12" width="44" height="66" rx="8" class="hero__paper" />
+          <rect x="6" y="12" width="44" height="10" rx="5" class="hero__band hero__band--green" />
+          <rect x="13" y="30" width="30" height="6" rx="3" class="hero__cell hero__cell--1" />
+          <rect x="13" y="42" width="30" height="6" rx="3" class="hero__cell hero__cell--2" />
+          <rect x="13" y="54" width="30" height="6" rx="3" class="hero__cell hero__cell--3" />
+          <rect x="13" y="66" width="22" height="6" rx="3" class="hero__line" />
+        </g>
+        <!-- The links -->
+        <path d="M50 33 C 72 33, 78 24, 100 24" class="hero__wire hero__wire--1" />
+        <path d="M50 45 C 72 45, 78 45, 100 45" class="hero__wire hero__wire--2" />
+        <path d="M50 57 C 72 57, 78 66, 100 66" class="hero__wire hero__wire--3" />
+        <!-- Incentra's fields -->
+        <g class="hero__float hero__float--late">
+          <rect x="100" y="16" width="44" height="16" rx="8" class="hero__field hero__field--1" />
+          <rect x="100" y="37" width="44" height="16" rx="8" class="hero__field hero__field--2" />
+          <rect x="100" y="58" width="44" height="16" rx="8" class="hero__field hero__field--3" />
+          <circle cx="110" cy="24" r="3" class="hero__dot hero__dot--1" />
+          <circle cx="110" cy="45" r="3" class="hero__dot hero__dot--2" />
+          <circle cx="110" cy="66" r="3" class="hero__dot hero__dot--3" />
+        </g>
+      </svg>
+    } @else {
+      <svg viewBox="0 0 150 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g class="hero__float">
+          <rect x="20" y="8" width="96" height="74" rx="10" class="hero__paper" />
+          <rect x="20" y="8" width="96" height="12" rx="6" class="hero__band hero__band--violet" />
+          <g class="hero__row hero__row--1">
+            <rect x="32" y="28" width="56" height="8" rx="4" class="hero__line" />
+            <circle cx="102" cy="32" r="6" class="hero__ok" />
+            <path d="M99 32l2 2l4-4" class="hero__tick" />
+          </g>
+          <g class="hero__row hero__row--2">
+            <rect x="32" y="44" width="48" height="8" rx="4" class="hero__line" />
+            <circle cx="102" cy="48" r="6" class="hero__ok" />
+            <path d="M99 48l2 2l4-4" class="hero__tick" />
+          </g>
+          <g class="hero__row hero__row--3">
+            <rect x="32" y="60" width="52" height="8" rx="4" class="hero__line" />
+            <circle cx="102" cy="64" r="6" class="hero__warn" />
+            <path d="M102 61v3.2M102 66.6v.1" class="hero__tick" />
+          </g>
+        </g>
+        <!-- The magnifier passing over the rows -->
+        <g class="hero__lens">
+          <circle cx="126" cy="40" r="12" class="hero__lens-glass" />
+          <path d="M135 49l8 8" class="hero__lens-handle" />
+        </g>
+      </svg>
+    }
+  </div>
+
+  <div class="hero__text">
+    <p class="hero__title">{{ titleKey() | translate }}</p>
+    <p class="hero__desc">{{ descKey() | translate }}</p>
+  </div>
+</div>

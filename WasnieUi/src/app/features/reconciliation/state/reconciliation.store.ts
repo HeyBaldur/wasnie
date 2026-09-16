@@ -57,7 +57,6 @@ export class ReconciliationStore {
   readonly hasActiveFilters = computed(() => this.activeFilterCount() > 0);
 
   /** Any money at all in the filtered set — decides whether the money cards are worth showing. */
-  readonly hasMoney = computed(() => this._summary().byCurrency.length > 0);
 
 
   // ── Closing a row by decision (KAN-51) ──────────────────────────────────────

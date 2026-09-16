@@ -56,7 +56,22 @@ public enum AssistantMessageStatus
 /// </summary>
 public sealed class AssistantMessage : Entity
 {
+    /// <summary>What a USER may send in one message.</summary>
     public const int MaxContentLength = 8000;
+
+    /// <summary>
+    /// What an ASSISTANT reply may hold — deliberately larger than <see cref="MaxContentLength"/>.
+    ///
+    /// ★★ ONE LIMIT USED TO SERVE BOTH, AND IT CUT ANSWERS IN SILENCE. The 8,000 characters were sized for what a
+    /// person types. A long, legitimate answer (a multi-plan design question, 2026-09-15) streamed in full — the
+    /// user watched all of it arrive — and was then truncated to 8,000 when stored; the stored row replaced the
+    /// streamed bubble and the answer visibly stopped mid-sentence, with nothing saying why.
+    ///
+    /// ★ 20,000 BECAUSE THAT IS WHERE A REPLY IS ALREADY REFUSED. <c>DegenerationGuard.DefaultMaxCharacters</c> fails
+    /// a turn whose answer passes 20,000 characters (the backstop against runaway generation), so any answer that
+    /// reaches the store fits here by construction. A unit test keeps the two numbers equal.
+    /// </summary>
+    public const int MaxReplyLength = 20_000;
 
     /// <summary>
     /// The stored content of the assistant's stand-in reply while no model is connected.
@@ -152,8 +167,9 @@ public sealed class AssistantMessage : Entity
         if (trimmed.Length == 0)
             throw new DomainException("Message content must not be empty.");
 
-        if (trimmed.Length > MaxContentLength)
-            throw new DomainException($"Message content must not exceed {MaxContentLength} characters.");
+        var limit = role == AssistantMessageRole.Assistant ? MaxReplyLength : MaxContentLength;
+        if (trimmed.Length > limit)
+            throw new DomainException($"Message content must not exceed {limit} characters.");
 
         // ★ ONLY AN ANSWER CAN BE CANCELLED. A question is typed and sent in one motion — there is no
         // interval during which the user could stop it — so a cancelled user turn would be a state the

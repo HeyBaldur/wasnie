@@ -3,11 +3,21 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Exceptions;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Common.Options;
+using Wasnie.Application.Features.Subscription;
 using Wasnie.Domain.Audit;
-using Wasnie.Domain.Authorization;
 
 namespace Wasnie.Infrastructure.Identity;
 
+/// <summary>
+/// Enforces the payee / compensation-plan caps of the tenant's plan.
+///
+/// ★ KAN-77: THE LIMITS COME FROM THE PLAN CATALOG, NOT A HARD-CODED TIER TABLE. A paying tenant is held to its
+/// own plan (<c>Tenant.PlanCode</c>); a trial experiences the default plan — the product it is trying out, in
+/// full. A null limit means unlimited, which is what the single €299 plan has today, so these checks are
+/// dormant until a plan with a cap is configured. The interface and the refusal shape are unchanged: callers
+/// and the client's limit modal keep working as they did.
+/// </summary>
 /// <remarks>
 /// ★★ LOS LÍMITES DEL PLAN CONTRATADO NO ALCANZAN AL SANDBOX, y hubo que descubrirlo en pantalla: un
 /// tenant del plan gratuito no podía ni empezar el recorrido guiado — «Plan Limit Reached: 1/1» —
@@ -25,36 +35,23 @@ public sealed class TierLimitChecker(
     ITenantContext tenantContext,
     ICurrentUserService currentUser,
     IAuditService auditService,
-    ISandboxScope sandboxScope)
+    ISandboxScope sandboxScope,
+    ISubscriptionPlanCatalog catalog)
     : ITierLimitChecker
 {
     public async Task EnsurePayeeLimitAsync(CancellationToken cancellationToken = default)
     {
         if (sandboxScope.IsSandbox) return;
 
-        var tenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Id == tenantContext.TenantId, cancellationToken);
-
-        if (tenant is null)
-        {
+        var plan = await CurrentPlanAsync(cancellationToken);
+        if (plan?.MaxPayees is not int maxPayees)
             return;
-        }
-
-        var tier = tenant.Tier;
-        var limits = TierLimits.Limits[tier];
-
-        if (limits.MaxPayees == int.MaxValue)
-        {
-            return;
-        }
 
         var count = await db.Payees.CountAsync(cancellationToken);
-
-        if (count >= limits.MaxPayees)
+        if (count >= maxPayees)
         {
-            await LogTierLimitDenialAsync("payees", count, limits.MaxPayees, tier, cancellationToken);
-            var upgradeTier = GetUpgradeTier(tier);
-            throw new TierLimitExceededException(tier.ToString(), "payees", count, limits.MaxPayees, upgradeTier);
+            await LogLimitDenialAsync("payees", count, maxPayees, plan.Code, cancellationToken);
+            throw new TierLimitExceededException(plan.Code, "payees", count, maxPayees, UpgradeTarget(plan));
         }
     }
 
@@ -62,34 +59,66 @@ public sealed class TierLimitChecker(
     {
         if (sandboxScope.IsSandbox) return;
 
-        var tenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Id == tenantContext.TenantId, cancellationToken);
-
-        if (tenant is null)
-        {
+        var plan = await CurrentPlanAsync(cancellationToken);
+        if (plan?.MaxPlans is not int maxPlans)
             return;
-        }
-
-        var tier = tenant.Tier;
-        var limits = TierLimits.Limits[tier];
-
-        if (limits.MaxPlans == int.MaxValue)
-        {
-            return;
-        }
 
         var count = await db.CompensationPlans.CountAsync(cancellationToken);
-
-        if (count >= limits.MaxPlans)
+        if (count >= maxPlans)
         {
-            await LogTierLimitDenialAsync("plans", count, limits.MaxPlans, tier, cancellationToken);
-            var upgradeTier = GetUpgradeTier(tier);
-            throw new TierLimitExceededException(tier.ToString(), "plans", count, limits.MaxPlans, upgradeTier);
+            await LogLimitDenialAsync("plans", count, maxPlans, plan.Code, cancellationToken);
+            throw new TierLimitExceededException(plan.Code, "plans", count, maxPlans, UpgradeTarget(plan));
         }
     }
 
-    private async Task LogTierLimitDenialAsync(
-        string resourceType, int count, int limit, Tier tier, CancellationToken cancellationToken)
+    public async Task<PayeeImportLimitCheck> CheckPayeeImportLimitAsync(int incomingCount, CancellationToken cancellationToken = default)
+    {
+        var plan = await CurrentPlanAsync(cancellationToken);
+        if (plan is null)
+            return new(false, 0, 0, "Unknown");
+
+        if (plan.MaxPayees is not int maxPayees)
+            return new(false, 0, 0, plan.Code);
+
+        var current = await db.Payees.CountAsync(cancellationToken);
+        if (current + incomingCount > maxPayees)
+        {
+            await LogLimitDenialAsync("payees_import", current, maxPayees, plan.Code, cancellationToken);
+            return new(true, current, maxPayees, plan.Code);
+        }
+
+        return new(false, current, maxPayees, plan.Code);
+    }
+
+    /// <summary>The tenant's own plan when it has subscribed to one we still sell; otherwise the default plan.</summary>
+    private async Task<SubscriptionPlanDefinition?> CurrentPlanAsync(CancellationToken cancellationToken)
+    {
+        var tenantPlanCode = await db.Tenants
+            .Where(t => t.Id == tenantContext.TenantId)
+            .Select(t => new { t.PlanCode })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tenantPlanCode is null)
+            return null;
+
+        return catalog.Find(tenantPlanCode.PlanCode) ?? catalog.Default;
+    }
+
+    /// <summary>
+    /// A plan with more room than the current one, cheapest first by limits — what the modal offers. Null when
+    /// nothing in the catalog is bigger (today: always, with one unlimited plan).
+    /// </summary>
+    private string? UpgradeTarget(SubscriptionPlanDefinition current) =>
+        catalog.All
+            .Where(p => !string.Equals(p.Code, current.Code, StringComparison.OrdinalIgnoreCase))
+            .Where(p => (p.MaxPayees ?? int.MaxValue) >= (current.MaxPayees ?? int.MaxValue)
+                     && (p.MaxPlans ?? int.MaxValue) >= (current.MaxPlans ?? int.MaxValue))
+            .OrderBy(p => p.MaxPayees ?? int.MaxValue)
+            .Select(p => p.Code)
+            .FirstOrDefault();
+
+    private async Task LogLimitDenialAsync(
+        string resourceType, int count, int limit, string planCode, CancellationToken cancellationToken)
     {
         try
         {
@@ -100,42 +129,8 @@ public sealed class TierLimitChecker(
                 ResourceId: currentUser.UserId ?? "anonymous",
                 ActorUserId: currentUser.UserId ?? "anonymous",
                 ActorEmail: currentUser.Email ?? string.Empty,
-                DisplayName: $"{resourceType}:{tier}:{count}/{limit}"), cancellationToken);
+                DisplayName: $"{resourceType}:{planCode}:{count}/{limit}"), cancellationToken);
         }
         catch { /* audit failures must not block */ }
     }
-
-    public async Task<PayeeImportLimitCheck> CheckPayeeImportLimitAsync(int incomingCount, CancellationToken cancellationToken = default)
-    {
-        var tenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Id == tenantContext.TenantId, cancellationToken);
-
-        if (tenant is null)
-            return new(false, 0, 0, "Unknown");
-
-        var tier = tenant.Tier;
-        var limits = TierLimits.Limits[tier];
-
-        if (limits.MaxPayees == int.MaxValue)
-            return new(false, 0, 0, tier.ToString());
-
-        var current = await db.Payees.CountAsync(cancellationToken);
-
-        if (current + incomingCount > limits.MaxPayees)
-        {
-            await LogTierLimitDenialAsync("payees_import", current, limits.MaxPayees, tier, cancellationToken);
-            return new(true, current, limits.MaxPayees, tier.ToString());
-        }
-
-        return new(false, current, limits.MaxPayees, tier.ToString());
-    }
-
-    private static string? GetUpgradeTier(Tier current) => current switch
-    {
-        Tier.Free => Tier.Starter.ToString(),
-        Tier.Starter => Tier.Growth.ToString(),
-        Tier.Growth => Tier.Scale.ToString(),
-        Tier.Scale => Tier.Enterprise.ToString(),
-        _ => null,
-    };
 }

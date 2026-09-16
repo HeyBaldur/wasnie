@@ -46,7 +46,7 @@ public sealed class OpenRouterProviderTests
         new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, contentType) };
 
     private static (OpenRouterChatProvider Provider, FakeTransport Transport) Build(
-        HttpResponseMessage response, OpenRouterOptions? options = null)
+        HttpResponseMessage response, OpenRouterOptions? options = null, IModelUsageRecorder? recorder = null)
     {
         var transport = new FakeTransport(response);
         var factory = Substitute.For<IHttpClientFactory>();
@@ -56,9 +56,18 @@ public sealed class OpenRouterProviderTests
         var provider = new OpenRouterChatProvider(
             factory,
             Options.Create(options ?? new OpenRouterOptions { ApiKey = "sk-or-test-key" }),
-            NullLogger<OpenRouterChatProvider>.Instance);
+            NullLogger<OpenRouterChatProvider>.Instance,
+            recorder);
 
         return (provider, transport);
+    }
+
+    /// <summary>Keeps what the provider recorded (KAN-80).</summary>
+    private sealed class ListRecorder : IModelUsageRecorder
+    {
+        public List<ModelUsage> Recorded { get; } = [];
+        public void Record(ModelUsage usage) => Recorded.Add(usage);
+        public void ForConversation(Guid conversationId) { }
     }
 
     // ── Test 1 — selection by configuration ───────────────────────────────────
@@ -445,6 +454,138 @@ public sealed class OpenRouterProviderTests
         thrown.ReasonKey.Should().StartWith("ASSISTANT.");
         thrown.ReasonKey.Should().NotContain("req_abc123");
         thrown.ReasonKey.Should().NotContain("TERM-CC-10");
+    }
+
+    // ── Provider routing on the wire (KAN-74) ─────────────────────────────────
+
+    private static OpenRouterOptions RoutedToCerebras() => new()
+    {
+        ApiKey = "sk-or-test-key",
+        ProviderOnly = ["cerebras", "sambanova"],
+        ProviderOrder = ["cerebras", "sambanova"],
+        ProviderAllowFallbacks = true,
+        RequireZeroDataRetention = true,
+        RequireParameters = true,
+    };
+
+    /// <summary>
+    /// ★★ ASSERTED ON THE BODY, FOR THE SAME REASON AS THE TEMPERATURE. The `provider` object is what keeps a call off
+    /// the cheap, slow, undeclared hosts OpenRouter picks by default — and a field dropped by the naming policy or the
+    /// null-ignore rule would look exactly like one that was sent, from the call site. Every one of the three calls must
+    /// carry it: routing only the answer would leave the two classifiers, the slow ones, where they were.
+    /// </summary>
+    [Fact]
+    public async Task All_three_calls_carry_the_configured_routing_on_the_wire()
+    {
+        const string expected =
+            "\"provider\":{\"only\":[\"cerebras\",\"sambanova\"],\"order\":[\"cerebras\",\"sambanova\"],\"allow_fallbacks\":true,\"zdr\":true,\"require_parameters\":true}";
+
+        var (router, routerWire) = Build(Ok("""{"choices":[{"message":{"content":"{\"sections\":[]}"}}]}"""), RoutedToCerebras());
+        await router.CompleteJsonAsync([new ChatMessage(ChatMessage.UserRole, "hola")], CancellationToken.None);
+        routerWire.Body.Should().Contain(expected);
+
+        var (dispatcher, dispatcherWire) = Build(Ok("""{"choices":[{"message":{"content":"no tool"}}]}"""), RoutedToCerebras());
+        await dispatcher.SelectToolAsync(
+            [new ChatMessage(ChatMessage.UserRole, "hola")],
+            [new AssistantToolSchema("get_payee_balance", "…", """{"type":"object"}""")],
+            CancellationToken.None);
+        dispatcherWire.Body.Should().Contain(expected);
+
+        var (generator, generatorWire) = Build(Ok("data: [DONE]\n\n", "text/event-stream"), RoutedToCerebras());
+        await foreach (var _ in generator.StreamAsync([new ChatMessage(ChatMessage.UserRole, "hola")], CancellationToken.None))
+        {
+        }
+        generatorWire.Body.Should().Contain(expected);
+    }
+
+    [Fact]
+    public async Task No_routing_configured_sends_no_provider_object_at_all()
+    {
+        var (provider, transport) = Build(Ok("""{"choices":[{"message":{"content":"{}"}}]}"""));
+
+        await provider.CompleteJsonAsync([new ChatMessage(ChatMessage.UserRole, "x")], CancellationToken.None);
+
+        transport.Body.Should().NotContain("\"provider\"",
+            "an environment that chose no vendors keeps OpenRouter's default routing, exactly as before");
+    }
+
+    // ── Token usage (KAN-80) ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// ★ READ FROM THE REAL SHAPES OPENROUTER SENDS (§A4): `usage` in the complete response for the two classifiers, and in
+    /// the LAST SSE message — after the text, with an empty `choices` — for the streamed answer.
+    /// </summary>
+    [Fact]
+    public async Task The_classifiers_record_input_output_reasoning_cost_and_upstream()
+    {
+        var recorder = new ListRecorder();
+        var (router, _) = Build(Ok("""
+            {"provider":"Cerebras","model":"openai/gpt-oss-120b",
+             "choices":[{"message":{"content":"{\"sections\":[]}"}}],
+             "usage":{"prompt_tokens":736,"completion_tokens":64,"total_tokens":800,"cost":0.0003056,
+                      "completion_tokens_details":{"reasoning_tokens":47}}}
+            """), recorder: recorder);
+
+        await router.CompleteJsonAsync([new ChatMessage(ChatMessage.UserRole, "hola")], CancellationToken.None);
+
+        recorder.Recorded.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new ModelUsage(ModelCall.Router, "openai/gpt-oss-120b", "Cerebras", 736, 64, 47, 0.0003056m));
+    }
+
+    [Fact]
+    public async Task The_streamed_answer_records_the_usage_of_its_last_message()
+    {
+        var sse = string.Join("\n\n", [
+            """data: {"choices":[{"delta":{"content":"Hola"}}]}""",
+            """data: {"provider":"Cerebras","model":"openai/gpt-oss-120b","choices":[],"usage":{"prompt_tokens":2100,"completion_tokens":40,"cost":0.00077}}""",
+            "data: [DONE]",
+        ]) + "\n\n";
+        var recorder = new ListRecorder();
+        var (provider, _) = Build(Ok(sse, "text/event-stream"), recorder: recorder);
+
+        var text = new List<string>();
+        await foreach (var fragment in provider.StreamAsync([new ChatMessage(ChatMessage.UserRole, "hola")], CancellationToken.None))
+        {
+            text.Add(fragment);
+        }
+
+        text.Should().Equal("Hola");
+        recorder.Recorded.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new ModelUsage(ModelCall.Answer, "openai/gpt-oss-120b", "Cerebras", 2100, 40, null, 0.00077m));
+    }
+
+    [Fact]
+    public async Task A_stream_that_ends_without_usage_is_still_recorded_with_null_tokens()
+    {
+        var sse = """data: {"choices":[{"delta":{"content":"Hola"}}]}""" + "\n\n";
+        var recorder = new ListRecorder();
+        var (provider, _) = Build(Ok(sse, "text/event-stream"), recorder: recorder);
+
+        await foreach (var _ in provider.StreamAsync([new ChatMessage(ChatMessage.UserRole, "hola")], CancellationToken.None))
+        {
+            break; // the user pressed Stop after the first fragment
+        }
+
+        var usage = recorder.Recorded.Should().ContainSingle(
+            "the call happened; not knowing its size is not a reason to pretend it did not").Subject;
+        usage.Call.Should().Be(ModelCall.Answer);
+        usage.PromptTokens.Should().BeNull("not reported is not zero");
+        usage.CompletionTokens.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_refused_call_records_nothing_because_nothing_was_spent()
+    {
+        var recorder = new ListRecorder();
+        var (provider, _) = Build(new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+        {
+            Content = new StringContent("""{"error":{"message":"rate limited"}}"""),
+        }, recorder: recorder);
+
+        var act = async () => await provider.CompleteJsonAsync([new ChatMessage(ChatMessage.UserRole, "x")], CancellationToken.None);
+
+        await act.Should().ThrowAsync<ChatCompletionException>();
+        recorder.Recorded.Should().BeEmpty();
     }
 
     // ── The interface did not change ──────────────────────────────────────────

@@ -64,6 +64,21 @@ public sealed class TransactionRowValidationResult
     public required int RowNumber { get; init; }
     public required Dictionary<string, string> OriginalData { get; init; }
     public required List<ValidationIssue> Issues { get; init; }
+
+    /// <summary>
+    /// The amount this row will be imported as — the file's text read with the SAME parse the import job
+    /// uses and normalised by <c>Money.Of</c>. Null together with <see cref="Currency"/> whenever the amount
+    /// or the currency cannot be read; then the screen shows <see cref="OriginalData"/> beside its error.
+    /// </summary>
+    /// <remarks>
+    /// ★ SENT BY THE SERVER SO THE PREVIEW CANNOT DISAGREE WITH THE IMPORT. The client used to format the raw
+    /// text itself or not at all; a browser parse would read "1,000.50" as NaN while the job reads 1000.50.
+    /// </remarks>
+    public decimal? Amount { get; init; }
+
+    /// <summary>ISO code as stored (upper-case). Null together with <see cref="Amount"/>.</summary>
+    public string? Currency { get; init; }
+
     public bool HasErrors => Issues.Exists(i => i.Severity == IssueSeverity.Error);
     public bool HasWarnings => Issues.Exists(i => i.Severity == IssueSeverity.Warning);
 }

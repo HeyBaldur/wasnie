@@ -61,7 +61,11 @@
  * column and centres it, exactly as the chat products this is modelled on do — and the drawer, which
  * never had the problem, is left alone rather than given a cap that would do nothing.
  *
- * `ch` rather than px: the limit is how many CHARACTERS fit on a line, so it should follow the font.
+ * ★ `rem`, NOT `ch` ANY MORE (widened on request, 2026-09-15). It was 76ch — about 590px at 14px — and read as
+ * narrow with large empty margins on a desktop screen. The page's turns now also run at a larger size than the
+ * composer, and `ch` follows each element's OWN font: the stream and the composer would have resolved the same
+ * number to two different widths. `rem` is one length for all three, which is what "two widths that must agree
+ * should be one number" below requires. ~900px keeps lines at a comfortable reading length at 15px.
  *
  * ★★ THE CLARIFY PANEL IS IN THIS LIST BECAUSE IT IS THE COMPOSER'S SIBLING, NOT ITS CHILD. It sits
  *    directly inside the same footer, so `> .assistant-composer` never reached it and it stretched to
@@ -73,33 +77,13 @@
 :host(.assistant-conversation--wide) .assistant-conversation__stream,
 :host(.assistant-conversation--wide) .assistant-conversation__composer > .assistant-clarify,
 :host(.assistant-conversation--wide) .assistant-conversation__composer > .assistant-composer {
-  max-width: 76ch;
+  max-width: 56rem;
   margin-inline: auto;
   width: 100%;
 }
 
-.assistant-msg {
-  max-width: 85%;
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-14);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-
-  &--user {
-    align-self: flex-end;
-    background: var(--color-brand-subtle);
-    color: var(--color-text-primary);
-  }
-
-  &--assistant {
-    align-self: flex-start;
-    background: var(--color-bg-surface-sunken);
-    color: var(--color-text-primary);
-    border: 1px solid var(--color-border-default);
-  }
-}
+// The turns themselves (the user's bubble, Zeke's mark and card) live in assistant-turns.scss — split out like the
+// welcome and the thinking card, so each stylesheet stays inside its size budget.
 
 /**
  * Rendered Markdown from the assistant. Every value is a token, so it reads correctly in all three
@@ -295,161 +279,7 @@
   img { max-width: 100%; }
 }
 
-/* The assistant's mark while the model is thinking: the gap between pressing Enter and the first token. */
-.assistant-msg__waiting {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-// Secondary, deliberately: it accompanies the answer, it is not the answer. Same size as the panel's
-// small print so it never competes with the content that is about to replace it.
-.assistant-msg__waiting-text {
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
-}
-
-// Only appears on a slow turn, so it is quieter still — an explanation offered, not an alarm raised.
-.assistant-msg__waiting-long {
-  margin: var(--space-2) 0 0;
-  font-size: var(--font-size-12);
-  line-height: 1.45;
-  color: var(--color-text-tertiary);
-
-  /**
-   * ★ THIS ONE LINE IS THE "…few seconds." BUG, AND IT IS NOT ABOUT THIS PARAGRAPH.
-   *
-   * `.assistant-msg` sets `white-space: pre-wrap`, which it must: a user's message is printed verbatim
-   * and the line breaks they typed have to survive. But it INHERITS, and inside it this sentence is not
-   * typed text — it is a translated UI string sitting in a template on its own indented line. With
-   * pre-wrap the template's newline and leading spaces stop being formatting and become CONTENT: the
-   * sentence starts indented, the wrap comes back to the true left edge, and the last word ("seconds.")
-   * lands under nothing, looking like a broken layout.
-   *
-   * So the inheritance is refused exactly where it does not belong. Fixing it by reflowing the template
-   * onto one long line would work today and break the next time anyone formats this file — the rule
-   * belongs to the element whose text must not preserve whitespace.
-   */
-  white-space: normal;
-}
-
-// ── The waiting avatar ──────────────────────────────────────────────────────
-//
-// The chat's own avatar shape, worn by the assistant rather than by a person. 32px and a full radius
-// are the topbar avatar's numbers, not new ones: an avatar that is nearly but not quite the app's
-// avatar reads as a mistake, and there is no avatar primitive in the design system to inherit from.
-.assistant-msg__avatar {
-  position: relative;
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-full);
-  // Clips the mark to the circle. Both marks are square, so `cover` below crops nothing — the rule is
-  // here so a future non-square asset degrades to a centred crop instead of a squashed one.
-  overflow: hidden;
-  background: var(--color-bg-surface-sunken);
-}
-
-.assistant-msg__avatar-motion,
-.assistant-msg__avatar-still {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-// The still mark is the exception, not the default: it exists only for the media query below.
-.assistant-msg__avatar-still {
-  display: none;
-}
-
-// ★ A GIF CANNOT BE STOPPED FROM CSS. Loops are exactly what this preference is about, so under it the
-// animated mark is swapped for the assistant's still one — same circle, same size, no motion. Hiding
-// the avatar outright would take the assistant's identity away from the reader who asked for calm.
-@media (prefers-reduced-motion: reduce) {
-  .assistant-msg__avatar-motion {
-    display: none;
-  }
-
-  .assistant-msg__avatar-still {
-    display: block;
-  }
-}
-
-// ── The steps of a turn ─────────────────────────────────────────────────────
-//
-// A quiet checklist, not a progress bar. It occupies the same place and the same visual weight as the
-// waiting line it replaces — secondary text beside a small mark — so a turn that reports steps and one
-// that does not look like the same panel doing the same thing at two levels of detail.
-//
-// ★ NO EXTERNAL SPINNER LIBRARY. One ring, one keyframe, tokens throughout: the design system has no
-// spinner primitive, and adding one is a separate decision (DESIGN_SYSTEM §10.3) rather than something
-// to improvise here. This follows the precedent already set two rules above by the typing dots.
-.assistant-steps {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.assistant-steps__item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-secondary);
-}
-
-// ★ SMALL AND TIGHT, NOT SMALL AND FAINT. These are labels, not prose: at 11px — the smallest size the
-// system defines — regular weight would go thin and grey enough to read as disabled, which is the one
-// thing a step that is actively running must not look like. The extra weight buys back the legibility
-// the size costs, and the negative tracking keeps four words from sprawling across the panel.
-//
-// The weight and the tracking are literals because the design system has no tokens for either — every
-// other component in this codebase writes them the same way. Inventing `--font-weight-semibold` here
-// would be adding to the design system mid-feature (DESIGN_SYSTEM §10.3), which is a separate decision.
-.assistant-steps__label {
-  font-size: var(--font-size-11);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-// ★ A FINISHED STEP RECEDES; IT DOES NOT CELEBRATE. The tick is green because green is what "done"
-// means, but the text goes tertiary rather than bolder — the eye should be drawn to the step still
-// running, which is the only one the user is actually waiting on.
-.assistant-steps__item--done {
-  color: var(--color-text-tertiary);
-}
-
-.assistant-steps__check {
-  color: var(--color-success);
-  flex-shrink: 0;
-}
-
-// Sized to the tick beside it so the labels line up whichever state a step is in — a list whose text
-// shifts sideways as each step completes reads as jitter.
-.assistant-steps__spinner {
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-full);
-  border: 2px solid var(--color-border-default);
-  border-top-color: var(--color-text-secondary);
-  animation: assistant-step-spin 0.7s linear infinite;
-}
-
-@keyframes assistant-step-spin {
-  to { transform: rotate(360deg); }
-}
-
-// Respects the reader's setting: a perpetual rotation is exactly the motion this preference exists to
-// stop. The ring stays — it still marks which step is running — it simply holds still.
-@media (prefers-reduced-motion: reduce) {
-  .assistant-steps__spinner {
-    animation: none;
-  }
-}
+// ── The thinking card (waiting line, avatar, steps) ── lives in assistant-thinking.scss.
 
 .assistant-msg__placeholder {
   color: var(--color-text-tertiary);
@@ -485,141 +315,9 @@
   min-width: 0;
 }
 
-// ── The welcome ─────────────────────────────────────────────────────────────
-//
-// Three levels, and the hierarchy is the message: what you can ask, then what to ask, then what this
-// will never do.
-.assistant-welcome {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  // Sits in the upper part of the empty panel rather than dead centre: the eye starts at the top and
-  // the composer is what it travels to next.
-  padding: var(--space-6) var(--space-2) var(--space-4);
-}
+// ── The welcome ── lives in assistant-welcome.scss (same component; split to keep each stylesheet under the budget).
 
-.assistant-welcome__logo {
-  // ★ align-self, and it is the whole fix. The welcome is a flex COLUMN, whose default
-  // `align-items: stretch` was widening this box to the full column and letting `object-fit: contain`
-  // centre the mark inside it — so a left-aligned rule produced a visually centred logo. Shrinking the
-  // box to its content is what actually puts the mark on the left edge, in line with the greeting.
-  align-self: flex-start;
-
-  // Present, not shouting. Large enough to register as the product's mark above the greeting, small
-  // enough that the greeting is still the thing being read first.
-  height: 32px;
-  width: auto;
-  // The panel is min(420px, 100vw); on a narrow phone the mark must shrink rather than push the layout.
-  max-width: 60%;
-  margin-bottom: var(--space-1);
-}
-
-.assistant-welcome__greeting {
-  margin: 0;
-  // ★ SCALES WITH THE PANEL, WHICH IS min(420px, 100vw). On a desktop the panel is fixed at 420 and
-  // the viewport is wide, so the clamp lands on its 32px ceiling; on a phone the panel IS the viewport
-  // and the greeting comes down with it instead of overflowing. A single fixed size cannot do both,
-  // and the Spanish greeting is the long one that would break first.
-  font-size: clamp(var(--font-size-24), 7.5vw, var(--font-size-32));
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-
-  // ★ PLAIN TEXT, NOT GRADIENT — and it must stay a TOKEN, never a literal white. This used to paint
-  // `--gradient-assistant` clipped to the glyphs. The token resolves per theme (near-black on light
-  // and soft, near-white on dark), so the greeting reads white where the user asked for white and
-  // stays legible on the two light themes. Hard-coding #fff here would render invisible text on them.
-  color: var(--color-text-primary);
-
-  // The greeting is a question; long ones must wrap, never overflow the panel.
-  text-wrap: balance;
-}
-
-.assistant-welcome__subtitle {
-  margin: 0;
-  font-size: var(--font-size-15);
-  line-height: 1.5;
-  color: var(--color-text-secondary);
-}
-
-// ★ THE GUARANTEE, AND IT NO LONGER NEEDS A BOX. It carried its own surface and border so it would not
-// read as small print; on screen that box turned a sentence into a widget and broke the flow of the
-// welcome. The weight does the same job more quietly: same left edge as the subtitle, same colour as
-// ordinary body text, semibold so it still reads as a statement the product is making rather than a
-// footnote — which was always the point, not the border.
-.assistant-welcome__readonly {
-  margin: var(--space-2) 0 0;
-  font-size: var(--font-size-13);
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--color-text-secondary);
-}
-
-// The example questions. They WRAP rather than scroll: four short labels in three languages are not
-// the same four widths, and a row that scrolls sideways hides the last suggestion on exactly the
-// screens where a suggestion is most wanted.
-.assistant-welcome__starters {
-  // ★ LEFT-ALIGNED, not centred. Everything above — logo, greeting, subtitle, guarantee — sits on the
-  // same left edge, so centred buttons were the only block breaking that column and read as stray.
-  // Sharing that edge puts them back in the same reading column as the text they follow.
-  @apply flex flex-wrap items-center justify-start;
-  gap: var(--space-2);
-  margin-top: var(--space-5);
-}
-
-// ── The failed-turn alert ───────────────────────────────────────────────────
-//
-// ★ LOCAL CSS, NOT A NEW SHARED PRIMITIVE. The design system has no `ws-alert`, and adding one is a
-// separate decision (DESIGN_SYSTEM §10.3) rather than something to improvise mid-feature. The
-// documented precedent is followed instead: build it here, in the one component that needs it, from
-// the SAME warning tokens the pay-run and payout screens already use for their banners. If a second
-// feature wants an alert, this is what gets promoted — the tokens are already the house ones, so
-// promotion is a move rather than a rewrite.
-//
-// WARNING, not danger: nothing is broken and nothing was lost — the question is safe and can be
-// answered again. Red would say otherwise.
-.assistant-alert {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-warning-border);
-  border-radius: var(--radius-md);
-  background: var(--color-warning-bg);
-}
-
-.assistant-alert__icon {
-  flex-shrink: 0;
-  color: var(--color-warning);
-  // Optically aligns the glyph with the first line of the title rather than the top of its box.
-  margin-top: 2px;
-}
-
-.assistant-alert__body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.assistant-alert__title {
-  margin: 0;
-  font-size: var(--font-size-13);
-  font-weight: 600;
-  color: var(--color-warning);
-}
-
-.assistant-alert__text {
-  margin: 0;
-  font-size: var(--font-size-13);
-  // Semi-bold: this paragraph is the one thing in the card the user has to read — it says the message
-  // survived. Regular weight let it sit as ordinary body text beside a bolder title that says less.
-  font-weight: 600;
-  // The body reads on the surface's own text colour: warning-on-warning for a whole paragraph is
-  // harder to read than it looks, and the title plus the icon already carry the severity.
-  color: var(--color-text-primary);
-}
+// The failed-turn alert lives in assistant-alert.scss.
 
 .assistant-conversation__error {
   font-size: var(--font-size-13);
@@ -799,9 +497,15 @@
   border-radius: var(--radius-full);
 }
 
-.assistant-composer__disclaimer {
+// KAN-83 UX: the footer is the disclaimer alone again — the warning strip now sits above it, so nothing shares or
+// shifts this row. The remaining-tokens figure rides inside the sentence itself.
+.assistant-composer__foot {
   padding: var(--space-2) var(--space-3);
   border-top: 1px solid var(--color-border-subtle);
+}
+
+.assistant-composer__disclaimer {
+  margin: 0;
   font-size: var(--font-size-12);
   // Semibold for the same reason the welcome's read-only note is: this is the standing promise about
   // what the assistant will not do, and at 12px in tertiary grey it was the easiest thing on the panel
@@ -904,9 +608,17 @@
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-1);
+  padding-left: var(--space-1);
+  white-space: normal;
 
   font-size: var(--font-size-11);
   color: var(--color-text-tertiary);
+
+  // Under the user's bubble, right-aligned with it.
+  &--user {
+    padding-left: 0;
+    padding-right: var(--space-1);
+  }
 }
 
 .assistant-msg__time {
@@ -958,50 +670,6 @@
   color: var(--color-danger);
 }
 
-/**
- * ★ THE RETRY BUTTON WEARS THE ALERT'S COLOUR, not the page's neutral grey.
- *
- * It was `secondary`, which reads as "an option someone might take" — and this is the only thing to do
- * with a turn that failed. A grey button inside an amber card also belongs to neither: it looks like a
- * control that happened to land there rather than the alert's own answer.
- *
- * ★ WARNING, STILL NOT DANGER. The card is deliberately warning — nothing is broken and nothing was
- * lost, the question is stored and can be answered again — so the button is filled in the same amber.
- * A red one would say the opposite of what the card says.
- *
- * ★ `--color-text-inverse` IS THE RIGHT PARTNER FOR `--color-warning`, and not by luck: the two flip
- * together across the themes. Light and soft give a dark amber fill with near-white text; dark gives a
- * bright amber fill with near-black text. A hard-coded white would be unreadable in exactly one theme.
- *
- * Scoped to `.assistant-alert`, so the twin button beside a CANCELLED reply keeps its quiet secondary
- * look — that turn is a decision the user made, not a failure, and shouting about it would be wrong.
- */
-.assistant-alert ::ng-deep .ws-btn {
-  background: var(--color-warning);
-  border-color: var(--color-warning);
-  color: var(--color-text-inverse);
-
-  /**
-   * ★ THE HOVER HAS TO RE-DECLARE THE FILL, NOT JUST DIM IT — and forgetting that turned the button
-   * BLACK ON BLACK. `ws-btn--secondary` carries its own `:hover` rule setting
-   * `background: var(--color-bg-surface-sunken)`, so the amber above only ever applied at rest: the
-   * moment the pointer arrived, the primitive's grey won the background while the inverse text colour
-   * stayed. In the dark theme those are `#0a0e15` and `#0e1218` — the label simply disappeared.
-   *
-   * A `filter` could not have saved it either: it dims whatever colour is actually painted, and the
-   * colour actually painted was the primitive's, not this one's.
-   *
-   * The dimming is done by lowering the fill's own opacity against the card behind it, so there is
-   * still no second amber invented here.
-   */
-  &:hover:not(:disabled),
-  &:active:not(:disabled) {
-    background: color-mix(in srgb, var(--color-warning) 88%, transparent);
-    border-color: var(--color-warning);
-    color: var(--color-text-inverse);
-  }
-}
-
 // ── Clarify panel (KAN-58) ───────────────────────────────────────────────────
 //
 // ★★ THIS BLOCK IS LAYOUT ONLY. The surface, the border, the radius and the padding come from
@@ -1031,9 +699,27 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
-  background: var(--color-bg-surface-sunken);
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
+  // A breath of the brand across the caption: enough to mark the panel as Zeke asking something, not
+  // enough to make a question look like a warning.
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-accent-violet) 10%, transparent) 0%, transparent 62%),
+    var(--color-bg-surface-sunken);
   border-bottom: 1px solid var(--color-border-subtle);
+}
+
+// The icon gets a chip, the way the token warning and the add-on row do — one vocabulary for "this is
+// a labelled panel" across the product.
+.assistant-clarify__chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent-violet) 18%, transparent);
+  color: var(--color-accent-violet);
 }
 
 // The heading of a panel, one step below the body text and in the secondary ink: it names the panel
@@ -1046,7 +732,8 @@
   font-size: var(--font-size-13);
   font-weight: 600;
   line-height: 1.4;
-  color: var(--color-text-secondary);
+  // Primary ink: this is the question Zeke is asking, not a caption for something else on screen.
+  color: var(--color-text-primary);
 }
 
 // ★ WsModal's close button, to the pixel: 28×28, radius-sm, tertiary ink, sunken on hover. The hit
@@ -1091,7 +778,6 @@
 .assistant-clarify__options {
   display: flex;
   flex-direction: column;
-  counter-reset: clarify-option;
 }
 
 // The host has to be a block for the button inside it to take the full width, and it is also where
@@ -1103,7 +789,6 @@
 //   own border instead of doubling it into a two-pixel rule.
 .assistant-clarify__options ws-button {
   display: block;
-  counter-increment: clarify-option;
 
   & + ws-button {
     border-top: 1px solid var(--color-border-subtle);
@@ -1135,9 +820,12 @@
   text-align: left;
 }
 
-// The whole row lights up, which is what makes it feel like a target rather than a line of text.
+// ★ THE WHOLE ROW LIGHTS UP, with a rule of accent down its leading edge. `box-shadow` draws that rule
+//   rather than a border, because a border would change the row's width and shift every label 2px on
+//   hover — the kind of movement that makes a list feel loose.
 .assistant-clarify__options ::ng-deep .ws-btn:hover:not(:disabled) {
   background: var(--color-bg-surface-sunken);
+  box-shadow: inset 2px 0 0 0 var(--color-accent-violet);
 }
 
 .assistant-clarify__options ::ng-deep .ws-btn__content {
@@ -1145,35 +833,93 @@
   width: 100%;
   min-width: 0;
   flex-wrap: wrap;
-  align-items: baseline;
+  // Centred, not baseline: the ordinal and the chevron are boxes now, and a baseline would hang them
+  // off the text's own line rather than centring them against it.
+  align-items: center;
   gap: var(--space-1) var(--space-2);
 }
 
 // ★ THE INDEX, GENERATED. Tertiary ink and a fixed width so the labels of every row start on the
 //   same vertical line however many options there are — a number that pushed its own label sideways
 //   would undo the shared left edge the stacking exists to create.
-.assistant-clarify__options ::ng-deep .ws-btn__content::before {
-  content: counter(clarify-option);
+// ★ THE ICON REPLACES THE GENERATED ORDINAL. A number told you there were three options; the icon
+//   tells you WHICH lookup each one is, which is the question the panel is actually asking. Fixed box,
+//   so every label still starts on the same vertical line.
+.assistant-clarify__icon {
   flex: 0 0 auto;
-  width: 16px;
-  font-size: var(--font-size-12);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.5;
-  color: var(--color-text-tertiary);
-  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-secondary);
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base),
+    color var(--transition-base);
+}
+
+// Under the cursor the mark picks up the accent, so the row reads as one target rather than as a line
+// of text that happens to have an icon.
+.assistant-clarify__options ::ng-deep .ws-btn:hover:not(:disabled) .assistant-clarify__icon {
+  border-color: color-mix(in srgb, var(--color-accent-violet) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent-violet) 16%, transparent);
+  color: var(--color-accent-violet);
 }
 
 .assistant-clarify__label {
   min-width: 0;
   flex: 1 1 auto;
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 
 // The value the user already gave: subordinate to the action, so the row reads as "do this" with
 // the subject attached rather than as two competing pieces of text.
+// ★ A CHIP, NOT LOOSE TEXT. A row can carry the name, the code and the status, and as three plain
+//   strings they run together into one grey sentence. Boxed, each is legible as its own fact — and it
+//   stays visibly SUBORDINATE to the action, which is what the row is actually offering to do.
 .assistant-clarify__argument {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
   font-size: var(--font-size-12);
-  font-weight: 400;
+  font-weight: 500;
+  line-height: 1.5;
   color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+// ★ THE CHEVRON SAYS "THIS GOES SOMEWHERE". Pushed to the end and dimmed until the row is hovered, so
+//   at rest the list stays quiet and under the cursor it reads unmistakably as a target.
+.assistant-clarify__go {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+  opacity: 0.6;
+  transition: transform var(--transition-base), opacity var(--transition-base), color var(--transition-base);
+}
+
+.assistant-clarify__options ::ng-deep .ws-btn:hover:not(:disabled) .assistant-clarify__go {
+  color: var(--color-accent-violet);
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-clarify__go {
+    transition: none;
+  }
+
+  .assistant-clarify__options ::ng-deep .ws-btn:hover:not(:disabled) .assistant-clarify__go {
+    transform: none;
+  }
 }
 
 // ★ THE CLOSING STRIP, MIRRORING THE HEADER — same sunken ground, same hairline, same inset. That

@@ -1,0 +1,459 @@
+@reference "../../../../styles.scss";
+
+// ── The purchase surface, inside the dialog ─────────────────────────────────────────
+// ★ THE GROUND, THE WASH AND THE INK COME FROM `src/styles/_offer-surface.scss`, shared with the pricing card — this
+// file adds `.add-tokens__surface` to that selector rather than copying it, so the two can never drift apart.
+//
+// ★ WHY IT IS HERE AND NOT ON THE BILLING PAGE. On the page it outweighed the subscription and the invoices, which is
+// what an accountant opens that screen for. Inside the dialog there is nothing to outweigh: the purchase IS the
+// subject, and the treatment reads as considered rather than as a sales counter.
+.add-tokens__surface {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-8);
+  // Matches the dialog's own corners: the surface reaches every edge, so its radius has to be the same.
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+
+  @media (max-width: 720px) {
+    padding: var(--space-6);
+    gap: var(--space-4);
+  }
+}
+
+.add-tokens__glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(var(--offer-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--offer-line) 1px, transparent 1px);
+  background-size: var(--space-8) var(--space-8);
+  mask-image: radial-gradient(70% 90% at 15% 20%, rgba(0, 0, 0, 0.55), transparent 70%);
+  pointer-events: none;
+}
+
+.add-tokens__head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  // Room for the modal's floating close button, which sits in the top-right corner of this surface.
+  padding-right: var(--space-8);
+}
+
+.add-tokens__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--offer-line);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--offer-ink) 8%, transparent);
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--offer-ink);
+}
+
+.add-tokens__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-24);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--offer-ink);
+}
+
+.add-tokens__tagline {
+  margin: 0;
+  max-width: 62ch;
+  font-size: var(--font-size-14);
+  line-height: 1.6;
+  color: var(--offer-ink-muted);
+}
+
+// ── Choosing a pack ─────────────────────────────────────────────────────────────────
+.add-tokens__packs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.add-tokens__pack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  width: 100%;
+  height: 100%;
+  // ★ A FLOOR THE SKELETON CAN MATCH. A placeholder built from fixed bars never adds up to exactly what four lines of
+  // real type measure, so both states declare the same floor and agree by construction rather than by tuning bar
+  // heights until they nearly line up. It is a MIN, so a longer translation still gets the room it needs.
+  //
+  // ★★ MEASURE THIS WITH getComputedStyle, NOT getBoundingClientRect. The dialog carries a scale transform, so the
+  // rect reports every height inside it multiplied by that scale — it read 125px for a card that is really 180, and
+  // a floor set from that number was 55px short while looking correct.
+  min-height: 180px;
+  padding: var(--space-5);
+  border: 1px solid var(--offer-line);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--offer-ink) 7%, transparent);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast, 120ms) ease,
+    background var(--duration-fast, 120ms) ease,
+    transform var(--duration-fast, 120ms) ease;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--offer-ink) 34%, transparent);
+    background: color-mix(in srgb, var(--offer-ink) 12%, transparent);
+    transform: translateY(-2px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--offer-ink);
+    outline-offset: 2px;
+  }
+
+  &--best {
+    border-color: color-mix(in srgb, var(--color-success) 70%, transparent);
+    background: color-mix(in srgb, var(--offer-ink) 12%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+
+    &:hover {
+      transform: none;
+    }
+  }
+}
+
+.add-tokens__flag {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+}
+
+// ★ NOT ws-badge. Its success variant is tinted for an ordinary surface; on this wash the pale green all but vanished.
+.add-tokens__best {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-success) 82%, var(--offer-ink));
+  color: var(--offer-ground);
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+// ★ THE UNIT SITS UNDER THE FIGURE, ALWAYS. Beside it, "12,000,000 TOKENS" wrapped where "3,000,000 TOKENS" did
+// not, and that one card grew a line taller than its neighbours — the three stopped lining up at the widest pack,
+// which is exactly the one being recommended.
+.add-tokens__figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.add-tokens__tokens {
+  font-family: var(--font-display);
+  font-size: var(--font-size-24);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--offer-ink);
+}
+
+.add-tokens__unit {
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--offer-ink-muted);
+}
+
+.add-tokens__price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.add-tokens__amount {
+  font-size: var(--font-size-20);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--offer-ink);
+}
+
+.add-tokens__once {
+  font-size: var(--font-size-12);
+  color: var(--offer-ink-muted);
+}
+
+.add-tokens__rate {
+  font-size: var(--font-size-12);
+  color: var(--offer-ink-muted);
+}
+
+.add-tokens__divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--offer-line) 12%, var(--offer-line) 88%, transparent);
+}
+
+// ★ EQUAL ROWS. One note runs to two lines and the other three do not; with auto rows that single item pushed its
+// row taller and the four stopped reading as a set. `1fr` makes both rows the height of the tallest item in them, so
+// every check starts on the same line as its neighbour whatever the translation does to the text length.
+.add-tokens__notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: var(--space-3) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (max-width: 560px) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+  }
+}
+
+// ★ ONE LINE EACH, AND THE COPY IS KEPT SHORT ENOUGH TO STAY THAT WAY. The four notes only read as a set when they
+// are the same height; the long one used to wrap and take a second line. The floor is one line — enough to keep the
+// skeleton the same height as the answer — and NOT `nowrap`, so a future translation that does not fit wraps and
+// stays readable instead of being clipped.
+.add-tokens__note-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: calc(var(--font-size-14) * 1.45);
+  font-size: var(--font-size-14);
+  line-height: 1.45;
+  color: var(--offer-ink);
+}
+
+.add-tokens__check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-success) 80%, var(--offer-ink));
+  color: var(--offer-ground);
+}
+
+// ── Confirming ──────────────────────────────────────────────────────────────────────
+.add-tokens__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+// What is being bought, at the size that makes it impossible to confirm the wrong pack by accident.
+.add-tokens__summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.add-tokens__summary-tokens {
+  font-family: var(--font-display);
+  font-size: calc(var(--font-size-32) * 1.25);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--offer-ink);
+}
+
+.add-tokens__summary-unit {
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--offer-ink-muted);
+}
+
+.add-tokens__summary-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 0 var(--space-1);
+  background: var(--offer-line);
+}
+
+.add-tokens__summary-price {
+  font-size: var(--font-size-32);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--offer-ink);
+}
+
+.add-tokens__confirm-line {
+  margin: 0;
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+  color: var(--offer-ink-muted);
+}
+
+.add-tokens__method {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--offer-line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--offer-ink) 7%, transparent);
+  font-size: var(--font-size-14);
+  color: var(--offer-ink);
+}
+
+.add-tokens__method-chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--offer-ink) 14%, transparent);
+  color: var(--offer-ink);
+}
+
+.add-tokens__note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--offer-ink-muted);
+}
+
+.add-tokens__error {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 55%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  font-size: var(--font-size-14);
+  color: var(--offer-ink);
+}
+
+.add-tokens__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+// A quiet way back that still reads on the wash — ws-button's ghost is tinted for an ordinary surface.
+.add-tokens__back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--offer-ink-muted);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: var(--offer-line);
+    color: var(--offer-ink);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--offer-ink);
+    outline-offset: 2px;
+  }
+}
+
+// The inverted surface needs an inverted button, exactly as the pricing card does.
+.add-tokens__actions ::ng-deep .ws-btn--primary {
+  padding: 0 var(--space-6);
+  background: var(--offer-ink);
+  color: var(--offer-ground);
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--offer-ink) 88%, var(--color-accent-violet));
+  }
+}
+
+// ── Loading ─────────────────────────────────────────────────────────────────────────
+// ★ THE GLOBAL `.skeleton` SUPPLIES THE SHIMMER; only the colour changes. Its background is a light sunken grey meant
+// for an ordinary surface, which is invisible on this wash — so the ground is re-stated from the card's own ink and
+// the animation is inherited, not copied.
+.add-tokens__skeleton {
+  background: color-mix(in srgb, var(--offer-ink) 16%, transparent);
+  border-radius: var(--radius-xs);
+}
+
+// ★ NO MARGINS ON THE BARS. With them the placeholder came to 166px against the real card's 125 and the dialog now
+// SHRANK on load instead of growing. The bars only have to suggest the shape; the card's own min-height is what makes
+// the two states the same size, so the sum of the bars is deliberately kept under it.
+.add-tokens__skeleton--figure { width: 72%; height: 24px; }
+.add-tokens__skeleton--unit { width: 38%; height: 9px; }
+.add-tokens__skeleton--price { width: 54%; height: 16px; }
+.add-tokens__skeleton--rate { width: 46%; height: 9px; }
+.add-tokens__skeleton--note { width: 88%; height: 12px; }
+
+// Not a button while it is a placeholder: no hover, no lift, no pointer.
+.add-tokens__pack--ghost {
+  cursor: default;
+  justify-content: center;
+  gap: var(--space-2);
+
+  &:hover {
+    transform: none;
+    border-color: var(--offer-line);
+    background: color-mix(in srgb, var(--offer-ink) 7%, transparent);
+  }
+}
+
+.add-tokens__check--ghost {
+  background: color-mix(in srgb, var(--offer-ink) 16%, transparent);
+}
+
+.add-tokens__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

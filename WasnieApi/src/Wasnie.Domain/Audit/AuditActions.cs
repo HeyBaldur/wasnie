@@ -37,6 +37,13 @@ public static class AuditActions
     public const string PlanCreated = "PLAN_CREATED";
     public const string PlanActivated = "PLAN_ACTIVATED";
     public const string PlanArchived = "PLAN_ARCHIVED";
+
+    /// <summary>
+    /// A Draft plan was permanently deleted, with its rules. ★ THE ROW OUTLIVES THE PLAN: its Metadata
+    /// carries the name, version, currency, period and rule count, because after the delete nothing
+    /// else in the database can say what was removed.
+    /// </summary>
+    public const string PlanDeleted = "PLAN_DELETED";
     public const string PlanVersionCreated = "PLAN_VERSION_CREATED";
     public const string PlanRuleAdded = "PLAN_RULE_ADDED";
     public const string PlanRuleUpdated = "PLAN_RULE_UPDATED";
@@ -101,6 +108,11 @@ public static class AuditActions
     public const string SubscriptionCancelScheduled = "SUBSCRIPTION_CANCEL_SCHEDULED";
     public const string SubscriptionCancelReverted = "SUBSCRIPTION_CANCEL_REVERTED";
     public const string SubscriptionTierSyncedFromStripe = "SUBSCRIPTION_TIER_SYNCED_FROM_STRIPE";
+    /// <summary>KAN-77: the stored subscription was corrected from Stripe because a webhook never arrived.</summary>
+    public const string SubscriptionSyncedFromStripe = "SUBSCRIPTION_SYNCED_FROM_STRIPE";
+
+    /// <summary>KAN-83: a tenant bought extra assistant tokens — a one-off payment, not a subscription change.</summary>
+    public const string AssistantBoostPurchased = "ASSISTANT_BOOST_PURCHASED";
 
     // Profile self-service
     public const string ProfileNameUpdated = "PROFILE_NAME_UPDATED";

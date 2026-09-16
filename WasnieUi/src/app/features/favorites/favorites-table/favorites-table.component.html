@@ -1,0 +1,48 @@
+@if (store.visibleItems(entityType()); as items) {
+  @if (items.length > 0) {
+    <section class="favorites" data-testid="favorites-table" [attr.aria-label]="config.titleKey | translate">
+      <!-- Same header language as the dashboard bands (pill + rule across the row), in the star's warm tone. -->
+      <div class="favorites__head">
+        <h2 class="favorites__title">
+          <span class="favorites__icon"><app-icon name="star-filled" [size]="12" /></span>
+          {{ config.titleKey | translate }}
+          <span class="favorites__count">{{ items.length }}</span>
+        </h2>
+      </div>
+
+      <ws-table>
+        <table>
+          <thead>
+            <tr>
+              <th class="col-action favorites__star-col"><span class="sr-only">{{ 'FAVORITES.COL_FAVORITE' | translate }}</span></th>
+              <th>{{ 'FAVORITES.COL_NAME' | translate }}</th>
+              <th>{{ 'FAVORITES.COL_STATUS' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of items; track item.entityId) {
+              <tr [routerLink]="[config.route, item.entityId]" data-testid="favorites-row">
+                <td class="col-action favorites__star-col">
+                  <app-favorite-star [entityType]="entityType()" [entityId]="item.entityId" />
+                </td>
+                <td>
+                  <span class="favorites__name">{{ item.name }}</span>
+                  @if (item.code) {
+                    <span class="favorites__meta">{{ item.code }}</span>
+                  } @else if (item.version !== null) {
+                    <span class="favorites__meta">v{{ item.version }}</span>
+                  }
+                </td>
+                <td>
+                  <ws-badge [variant]="status(item.status).variant" [dot]="status(item.status).dot ?? false">
+                    {{ status(item.status).key | translate }}
+                  </ws-badge>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </ws-table>
+    </section>
+  }
+}

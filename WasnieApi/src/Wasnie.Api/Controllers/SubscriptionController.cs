@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -26,17 +26,20 @@ public sealed class SubscriptionController(
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
-    [HttpPost("select-free")]
-    public async Task<IActionResult> SelectFree(CancellationToken cancellationToken)
-    {
-        var result = await mediator.Send(new SelectFreePlanCommand(), cancellationToken);
-        return result.IsSuccess ? Ok() : BadRequest(new { message = result.Error });
-    }
+    // KAN-77: POST select-free is gone with the free plan. New accounts start in a trial at registration.
 
     [HttpGet("current")]
     public async Task<IActionResult> GetCurrent(CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new GetCurrentSubscriptionQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
+    }
+
+    /// <summary>KAN-77: Trial | Active | Locked, days left, assistant trial allowance. Exempt from the paywall.</summary>
+    [HttpGet("access")]
+    public async Task<IActionResult> GetAccess(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetAccountAccessQuery(), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
     }
 
@@ -70,12 +73,30 @@ public sealed class SubscriptionController(
         return Ok(new CheckoutSessionDto(dto.CheckoutUrl!));
     }
 
+    /// <summary>The boost packs on sale (KAN-83). An empty list means none are configured — not an error.</summary>
+    [HttpGet("boosts")]
+    public async Task<IActionResult> GetBoosts(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetBoostOffersQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    /// <summary>Starts a ONE-OFF checkout for extra assistant tokens (KAN-83) — not a second subscription.</summary>
+    [HttpPost("boosts/checkout")]
+    public async Task<IActionResult> CreateBoostCheckout(
+        [FromBody] CreateBoostCheckoutCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     [HttpPost("change-plan")]
     public async Task<IActionResult> ChangePlan(
         [FromBody] ChangePlanRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new ChangePlanCommand(request.TargetTier), cancellationToken);
+        var result = await mediator.Send(new ChangePlanCommand(request.TargetPlanCode), cancellationToken);
         if (!result.IsSuccess)
             return BadRequest(new { message = result.Error });
         var dto = result.Value!;
@@ -89,6 +110,14 @@ public sealed class SubscriptionController(
     {
         var result = await mediator.Send(new RevertSubscriptionCancellationCommand(), cancellationToken);
         return result.IsSuccess ? Ok() : BadRequest(new { message = result.Error });
+    }
+
+    /// <summary>Card on file and recent invoices, read live from Stripe. Requires Subscription.Manage.</summary>
+    [HttpGet("billing-details")]
+    public async Task<IActionResult> GetBillingDetails(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetBillingDetailsQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
     [HttpPost("billing-portal")]
@@ -117,4 +146,4 @@ public sealed class SubscriptionController(
     }
 }
 
-public sealed record ChangePlanRequest(string TargetTier);
+public sealed record ChangePlanRequest(string TargetPlanCode);

@@ -31,6 +31,14 @@ export interface TransactionRowValidationResult {
   rowNumber: number;
   originalData: Record<string, string>;
   issues: ValidationIssue[];
+  /**
+   * The amount this row will be imported as, read by the SERVER with the import job's own parse and
+   * normalisation. Null together with `currency` when either could not be read — the cell then shows the
+   * file's text beside its error. Never parse `originalData` in the browser: "1,000.50" is NaN to JS and
+   * 1000.50 to the import.
+   */
+  amount: number | null;
+  currency: string | null;
   hasErrors: boolean;
   hasWarnings: boolean;
 }

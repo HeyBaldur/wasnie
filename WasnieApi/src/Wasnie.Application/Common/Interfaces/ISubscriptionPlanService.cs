@@ -5,5 +5,5 @@ namespace Wasnie.Application.Common.Interfaces;
 
 public interface ISubscriptionPlanService
 {
-    Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(Tier currentTier, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(string? currentPlanCode, CancellationToken cancellationToken = default);
 }

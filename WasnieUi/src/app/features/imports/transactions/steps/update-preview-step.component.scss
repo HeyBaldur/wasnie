@@ -6,12 +6,6 @@
   gap: var(--space-4);
 }
 
-.preview-step__stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
-}
-
 // ── Row filter tabs — identical to IMPORT preview ───────────────────────────
 
 .row-filter {
@@ -46,96 +40,10 @@
   }
 }
 
-// ── Table — identical tokens to IMPORT preview ───────────────────────────────
-
-// Visual treatment mirrors the standard app table (WsTable / Credits): surface
-// background, card radius + subtle shadow, raised uppercase header, generous cell
-// padding and row hover. The sticky header + vertical scroll are kept (this table
-// shows all rows at once), and the Changes cell keeps its multi-line/multi-diff
-// capability — only colours/typography/padding/borders are aligned.
-.preview-table-wrap {
-  overflow-x: auto;
-  overflow-y: auto;
-  max-height: 440px;
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.preview-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--font-size-14);
-  font-weight: 400;
-
-  &__th {
-    padding: var(--space-3) var(--space-4);
-    text-align: left;
-    font-size: var(--font-size-12);
-    font-weight: 600;
-    color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    background: var(--color-bg-surface-raised);
-    border-bottom: 1px solid var(--color-border-default);
-    white-space: nowrap;
-    position: sticky;
-    top: 0;
-    z-index: 1;
-
-    &--num    { width: 36px; }
-    &--status { width: 80px; }
-    &--changes { width: 40%; }
-  }
-
-  &__td {
-    padding: var(--space-3) var(--space-4);
-    color: var(--color-text-primary);
-    border-bottom: 1px solid var(--color-border-subtle);
-    vertical-align: top;
-
-    &--num {
-      width: 36px;
-      color: var(--color-text-tertiary);
-      white-space: nowrap;
-    }
-
-    &--status {
-      white-space: nowrap;
-    }
-
-    // Changes cell: keep full multi-line / multi-diff content visible (not truncated).
-    &--changes {
-      white-space: normal;
-    }
-
-    &--truncated {
-      color: var(--color-text-tertiary);
-      font-style: italic;
-      font-size: var(--font-size-12);
-      text-align: center;
-    }
-  }
-
-  &__row {
-    transition: background var(--transition-fast);
-  }
-
-  &__row:hover {
-    background: var(--color-bg-surface-raised);
-  }
-
-  &__row:last-child &__td { border-bottom: none; }
-
-  &__row--error &__td { background: color-mix(in srgb, var(--color-danger) 5%, transparent); }
-
-  &__empty {
-    padding: var(--space-6);
-    text-align: center;
-    color: var(--color-text-tertiary);
-    font-size: var(--font-size-12);
-  }
+// A row that will not import reads as one at a glance. On the cells, not the <tr>: ws-table paints the row
+// hover on the <tr>, and a tint there would be replaced by the hover instead of sitting under it.
+.import-table__row--error td {
+  background: var(--color-danger-bg);
 }
 
 // ── Issues list — identical to IMPORT preview ────────────────────────────────
@@ -267,3 +175,6 @@
     gap: var(--space-2);
   }
 }
+
+// The shared visual layer of the import steps (mapping + review).
+@import '../../shared/import-steps-visual';

@@ -29,6 +29,9 @@ export interface StarterPrompt {
   readonly tool: string;
 
   readonly testId: string;
+
+  /** Decorative icon on the starter card (app-icon name). */
+  readonly icon: string;
 }
 
 export const STARTER_PROMPTS: readonly StarterPrompt[] = [
@@ -37,24 +40,28 @@ export const STARTER_PROMPTS: readonly StarterPrompt[] = [
     promptKey: 'ASSISTANT.STARTER_BALANCE_PROMPT',
     tool: 'get_payee_ledger_summary',
     testId: 'assistant-starter-balance',
+    icon: 'coin',
   },
   {
     labelKey: 'ASSISTANT.STARTER_PLANS_LABEL',
     promptKey: 'ASSISTANT.STARTER_PLANS_PROMPT',
     tool: 'get_payee_plans',
     testId: 'assistant-starter-plans',
+    icon: 'plans',
   },
   {
     labelKey: 'ASSISTANT.STARTER_TRANSACTION_LABEL',
     promptKey: 'ASSISTANT.STARTER_TRANSACTION_PROMPT',
     tool: 'get_transaction',
     testId: 'assistant-starter-transaction',
+    icon: 'receipt',
   },
   {
     labelKey: 'ASSISTANT.STARTER_PLAN_RULES_LABEL',
     promptKey: 'ASSISTANT.STARTER_PLAN_RULES_PROMPT',
     tool: 'get_plan_rules',
     testId: 'assistant-starter-plan-rules',
+    icon: 'layers',
   },
 ];
 

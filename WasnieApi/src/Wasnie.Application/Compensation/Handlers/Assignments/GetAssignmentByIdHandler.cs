@@ -19,11 +19,20 @@ public sealed class GetAssignmentByIdHandler(
     {
         await authorizationService.RequireAsync(Permission.AssignmentsRead, cancellationToken);
 
-        var result = await db.PlanAssignments
-            .Join(db.CompensationPlans,
-                a => a.PlanId,
-                pl => pl.Id,
-                (a, pl) => new { Assignment = a, PlanName = pl.Name, PlanVersion = pl.Version })
+        // Current payee name, not the snapshot — see ListAssignmentsHandler.
+        var result = await (
+                from a in db.PlanAssignments
+                join pl in db.CompensationPlans on a.PlanId equals pl.Id
+                join py in db.Payees on a.PayeeId equals py.Id into payees
+                from py in payees.DefaultIfEmpty()
+                select new
+                {
+                    Assignment = a,
+                    PlanName = pl.Name,
+                    PlanVersion = pl.Version,
+                    PayeeFullName = py != null ? py.FullName : a.PayeeSnapshot.FullName,
+                    PayeeEmployeeCode = py != null ? py.EmployeeCode : a.PayeeSnapshot.EmployeeCode,
+                })
             .Where(x => x.Assignment.Id == request.AssignmentId)
             .Select(x => new PlanAssignmentDto(
                 x.Assignment.Id,
@@ -32,8 +41,8 @@ public sealed class GetAssignmentByIdHandler(
                 x.PlanName,
                 x.PlanVersion,
                 x.Assignment.PayeeId,
-                x.Assignment.PayeeSnapshot.FullName,
-                x.Assignment.PayeeSnapshot.EmployeeCode,
+                x.PayeeFullName,
+                x.PayeeEmployeeCode,
                 x.Assignment.EffectivePeriod.Start,
                 x.Assignment.EffectivePeriod.End,
                 x.Assignment.Status.ToString(),

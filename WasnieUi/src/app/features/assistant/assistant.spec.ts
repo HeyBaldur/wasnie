@@ -1,3 +1,4 @@
+import { CurrentUserService } from '../../core/auth/current-user.service';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ApplicationRef } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
@@ -127,6 +128,23 @@ describe('AssistantStore', () => {
     await store.send('first words');
 
     expect(api.startConversation).toHaveBeenCalled();
+    expect(store.hasConversation()).toBeTrue();
+  });
+
+  it('★ "New conversation" clears the active thread without creating one; the first send does', async () => {
+    await store.startConversation();
+    api.startConversation.calls.reset();
+
+    store.startNewConversation();
+    store.startNewConversation();
+
+    // Clicking repeatedly must not leave empty rows behind.
+    expect(api.startConversation).not.toHaveBeenCalled();
+    expect(store.hasConversation()).toBeFalse();
+
+    await store.send('first words');
+
+    expect(api.startConversation).toHaveBeenCalledTimes(1);
     expect(store.hasConversation()).toBeTrue();
   });
 
@@ -341,7 +359,8 @@ describe('AssistantTriggerComponent — hide, do not disable', () => {
 
     const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a');
     expect(link).toBeTruthy('the locked entry point is rendered');
-    expect(link.getAttribute('href')).toBe('/subscription', 'clicking it goes where the plan is bought');
+    // KAN-77: the plan is bought on the Pricing page (Manage billing is for someone already paying).
+    expect(link.getAttribute('href')).toBe('/pricing', 'clicking it goes where the plan is bought');
   });
 
   it('shows nothing at all when there is no seat, whatever the plan says', async () => {
@@ -1288,6 +1307,53 @@ describe('AssistantPanelComponent — the retry button', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-retry"]')).toBeTruthy();
   });
 
+  /** The failed turn as the store holds it after a refused SEND: the words kept locally, the server's code. */
+  function renderFailure(errorKey: string): HTMLElement {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    store.setStreamState(store.activeDraftKey(), { errorKey, unsent: 'explain accelerators' });
+    fixture.detectChanges();
+    return fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]');
+  }
+
+  it('★ an exhausted trial offers Upgrade, NOT a retry that could never succeed', () => {
+    spyOn(TestBed.inject(CurrentUserService), 'hasPermission').and.returnValue(true);
+
+    const alert = renderFailure('ASSISTANT.ERROR_TRIAL_LIMIT_REACHED');
+
+    expect(alert).toBeTruthy();
+    expect(alert.classList).toContain('assistant-alert--limit');
+    expect(alert.querySelector('[data-testid="assistant-retry"]'))
+      .withContext('the server refuses the turn before the model runs — retrying changes nothing').toBeNull();
+    expect(alert.querySelector('[data-testid="assistant-upgrade"]')?.getAttribute('href')).toBe('/pricing');
+    expect(alert.querySelector('[data-testid="assistant-usage-link"]')?.getAttribute('href')).toBe('/billing');
+    expect(alert.textContent).toContain('ASSISTANT.TRIAL_LIMIT_TITLE');
+  });
+
+  it('hides Upgrade — never disables it — for someone who cannot subscribe (§5.8)', () => {
+    spyOn(TestBed.inject(CurrentUserService), 'hasPermission').and.returnValue(false);
+
+    const alert = renderFailure('ASSISTANT.ERROR_TRIAL_LIMIT_REACHED');
+
+    expect(alert.querySelector('[data-testid="assistant-upgrade"]')).toBeNull();
+    expect(alert.querySelector('[data-testid="assistant-retry"]')).toBeNull();
+    expect(alert.querySelector('[data-testid="assistant-error"]')).toBeTruthy();
+  });
+
+  it('an unconfigured assistant shows why, with no retry', () => {
+    const alert = renderFailure('ASSISTANT.ERROR_NOT_CONFIGURED');
+
+    expect(alert.classList).toContain('assistant-alert--info');
+    expect(alert.querySelector('[data-testid="assistant-retry"]')).toBeNull();
+  });
+
+  it('a transient failure keeps its retry', () => {
+    const alert = renderFailure('ASSISTANT.ERROR_UNAVAILABLE');
+
+    expect(alert.querySelector('[data-testid="assistant-retry"]')).toBeTruthy();
+    expect(alert.querySelector('[data-testid="assistant-upgrade"]')).toBeNull();
+  });
+
   it('hides the retry button when there is nothing to retry', () => {
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
@@ -1993,12 +2059,16 @@ describe('AssistantConversationComponent — the welcome', () => {
     // `align-items: stretch` widened the image box to the full column and `object-fit` centred the
     // mark inside it — left-aligned CSS, centred result. Comparing the logo's left edge to the
     // greeting's is what actually notices that.
+    //
+    // ★ The mark now sits inside Zeke's animated emblem (ring + halo), so the box that must share the
+    // greeting's left edge is the EMBLEM; the logo is centred inside it on purpose.
     const welcome = openEmpty();
     const logo = welcome.querySelector('.assistant-welcome__logo') as HTMLElement;
+    const emblem = welcome.querySelector('.assistant-welcome__emblem') as HTMLElement;
     const greeting = welcome.querySelector('.assistant-welcome__greeting') as HTMLElement;
 
     expect(logo).toBeTruthy();
-    expect(Math.round(logo.getBoundingClientRect().left))
+    expect(Math.round(emblem.getBoundingClientRect().left))
       .withContext('the mark lines up with the greeting under it')
       .toBe(Math.round(greeting.getBoundingClientRect().left));
   });

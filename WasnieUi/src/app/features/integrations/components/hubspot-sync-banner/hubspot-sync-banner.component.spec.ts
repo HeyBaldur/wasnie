@@ -1,3 +1,5 @@
+import { signal } from '@angular/core';
+import { AuthService } from '../../../../core/services/auth.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
@@ -35,7 +37,11 @@ function countingApi(status: HubSpotConnectionStatus): { calls: number; getStatu
 async function configure(api: unknown): Promise<void> {
   await TestBed.configureTestingModule({
     imports: [HubSpotSyncBannerComponent, TranslateModule.forRoot()],
-    providers: [provideRouter([]), { provide: HubSpotApiService, useValue: api }],
+    providers: [
+      provideRouter([]),
+      { provide: HubSpotApiService, useValue: api },
+      { provide: AuthService, useValue: { tenantId: signal('tenant-a') } },
+    ],
   }).compileComponents();
 }
 

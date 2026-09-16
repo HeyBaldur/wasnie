@@ -1,12 +1,5 @@
 <div class="preview-step">
-
-  <!-- Summary cards -->
-  <div class="preview-step__stats">
-    <ws-stat-card [value]="validateResponse().totalRows"    [label]="'IMPORTS.TRANSACTIONS.SUMMARY_TOTAL' | translate"       icon="list"           variant="default"  />
-    <ws-stat-card [value]="willImportCount"                 [label]="'IMPORTS.TRANSACTIONS.SUMMARY_WILL_IMPORT' | translate" icon="check-circle"   variant="success"  />
-    <ws-stat-card [value]="validateResponse().errorCount"   [label]="'IMPORTS.TRANSACTIONS.SUMMARY_ERRORS' | translate"      icon="x-circle"       variant="danger"   />
-    <ws-stat-card [value]="validateResponse().warningCount" [label]="'IMPORTS.TRANSACTIONS.SUMMARY_WARNINGS' | translate"    icon="alert-triangle" variant="warning"  />
-  </div>
+  <app-import-step-hero kind="review" titleKey="IMPORTS.SHARED.HERO_REVIEW_TITLE" descKey="IMPORTS.SHARED.HERO_REVIEW_DESC" />
 
   <!-- Row filter tabs -->
   <div class="row-filter">
@@ -20,14 +13,14 @@
   </div>
 
   <!-- Rows table -->
-  <div class="preview-table-wrap ws-scroll-thin">
-    <table class="preview-table">
+  <ws-table class="import-table import-table--scroll">
+    <table>
       <thead>
         <tr>
-          <th class="preview-table__th preview-table__th--num">#</th>
+          <th class="import-table__num">#</th>
 
           <!-- Reference Number (filterable) -->
-          <th class="preview-table__th">
+          <th>
             <div class="col-header">
               <span>{{ 'IMPORTS.TRANSACTIONS.FIELD_REFERENCE_NUMBER' | translate }}</span>
               <button class="col-filter-btn" [class.col-filter-btn--active]="colFilterReference()" (click)="toggleColFilter('reference', $event)" title="Filter">
@@ -37,7 +30,7 @@
           </th>
 
           <!-- Payee Code (filterable) -->
-          <th class="preview-table__th">
+          <th>
             <div class="col-header">
               <span>{{ 'IMPORTS.TRANSACTIONS.FIELD_PAYEE_CODE' | translate }}</span>
               <button class="col-filter-btn" [class.col-filter-btn--active]="colFilterPayee()" (click)="toggleColFilter('payee', $event)" title="Filter">
@@ -47,21 +40,21 @@
           </th>
 
           <!-- Amount (no filter) -->
-          <th class="preview-table__th">{{ 'IMPORTS.TRANSACTIONS.FIELD_AMOUNT' | translate }}</th>
+          <th class="col-amount">{{ 'IMPORTS.TRANSACTIONS.FIELD_AMOUNT' | translate }}</th>
 
           <!-- Currency (no filter) -->
-          <th class="preview-table__th">{{ 'IMPORTS.TRANSACTIONS.FIELD_CURRENCY' | translate }}</th>
+          <th>{{ 'IMPORTS.TRANSACTIONS.FIELD_CURRENCY' | translate }}</th>
 
           <!-- Quantity (no filter, optional) -->
           @if (columnMapping().quantityColumn) {
-            <th class="preview-table__th">{{ 'IMPORTS.TRANSACTIONS.FIELD_QUANTITY' | translate }}</th>
+            <th>{{ 'IMPORTS.TRANSACTIONS.FIELD_QUANTITY' | translate }}</th>
           }
 
           <!-- Transaction Date (no filter) -->
-          <th class="preview-table__th">{{ 'IMPORTS.TRANSACTIONS.FIELD_TRANSACTION_DATE' | translate }}</th>
+          <th>{{ 'IMPORTS.TRANSACTIONS.FIELD_TRANSACTION_DATE' | translate }}</th>
 
           <!-- Status (filterable) -->
-          <th class="preview-table__th">
+          <th>
             <div class="col-header">
               <span>{{ 'IMPORTS.TRANSACTIONS.COL_STATUS' | translate }}</span>
               <button class="col-filter-btn" [class.col-filter-btn--active]="isStatusFilterActive()" (click)="toggleColFilter('status', $event)" title="Filter">
@@ -70,32 +63,39 @@
             </div>
           </th>
 
-          <th class="preview-table__th preview-table__th--issues">{{ 'IMPORTS.TRANSACTIONS.COL_ISSUES' | translate }}</th>
+          <th class="import-table__wide">{{ 'IMPORTS.TRANSACTIONS.COL_ISSUES' | translate }}</th>
         </tr>
       </thead>
       <tbody>
         @if (filteredRows().length === 0) {
           <tr>
-            <td colspan="8" class="preview-table__empty">{{ 'IMPORTS.TRANSACTIONS.FILTER_EMPTY' | translate }}</td>
+            <td colspan="8" class="import-table__note">{{ 'IMPORTS.TRANSACTIONS.FILTER_EMPTY' | translate }}</td>
           </tr>
         }
         @for (row of filteredRows(); track row.rowNumber) {
-          <tr class="preview-table__row">
-            <td class="preview-table__td preview-table__td--num">{{ row.rowNumber }}</td>
-            <td class="preview-table__td">{{ getCell(row, columnMapping().referenceNumberColumn) }}</td>
-            <td class="preview-table__td">{{ getCell(row, columnMapping().payeeCodeColumn) }}</td>
-            <td class="preview-table__td">{{ getCell(row, columnMapping().amountColumn) }}</td>
-            <td class="preview-table__td">{{ getCell(row, columnMapping().currencyColumn) }}</td>
+          <tr>
+            <td class="import-table__num">{{ row.rowNumber }}</td>
+            <td>{{ getCell(row, columnMapping().referenceNumberColumn) }}</td>
+            <td>{{ getCell(row, columnMapping().payeeCodeColumn) }}</td>
+            <!-- The server's reading of the amount, as money; the raw text only when it could not be read. -->
+            <td class="col-amount" data-testid="tx-preview-amount">
+              @if (row.amount !== null && row.currency) {
+                {{ row.amount | currencyFormat: row.currency }}
+              } @else {
+                {{ getCell(row, columnMapping().amountColumn) }}
+              }
+            </td>
+            <td>{{ getCell(row, columnMapping().currencyColumn) }}</td>
             @if (columnMapping().quantityColumn) {
-              <td class="preview-table__td">{{ getCell(row, columnMapping().quantityColumn!) }}</td>
+              <td>{{ getCell(row, columnMapping().quantityColumn!) }}</td>
             }
-            <td class="preview-table__td">{{ getCell(row, columnMapping().transactionDateColumn) }}</td>
-            <td class="preview-table__td preview-table__td--status">
+            <td>{{ getCell(row, columnMapping().transactionDateColumn) }}</td>
+            <td class="import-table__nowrap">
               <ws-badge [variant]="rowBadgeVariant(row)" size="sm">
                 {{ rowBadgeKey(row) | translate }}
               </ws-badge>
             </td>
-            <td class="preview-table__td preview-table__td--issues">
+            <td class="import-table__wide">
               @if (row.issues.length > 0) {
                 <ul class="preview-issues">
                   @for (issue of row.issues; track issue.message) {
@@ -115,7 +115,7 @@
         }
       </tbody>
     </table>
-  </div>
+  </ws-table>
 
   <!-- Column filter dropdown (fixed, escapes table overflow) -->
   @if (openFilterCol() && filterDropdownPos()) {

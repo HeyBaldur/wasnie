@@ -1,0 +1,132 @@
+// ── The trial, as a topbar status ──────────────────────────────────────────────────────────────────────────────────
+//
+// ★ IT USED TO BE A FULL-WIDTH STRIP under the topbar, which pushed every page down and read as an alert on every
+// screen for the whole week. A trial with days left is information, not a problem: it now sits in the topbar beside
+// the assistant, the height of the controls around it. The past-due banner stays a strip on purpose — that one IS an
+// alert.
+
+:host {
+  display: inline-flex;
+}
+
+.trial-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+// Neutral while there is time: the surface of the topbar controls, a hairline border, the clock in the info tone.
+.trial-banner__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
+  font-size: var(--font-size-12);
+  white-space: nowrap;
+  cursor: default;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.trial-banner__icon {
+  color: var(--color-info);
+}
+
+.trial-banner__label {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.trial-banner__sep {
+  width: 1px;
+  height: 12px;
+  background: var(--color-border-strong);
+}
+
+.trial-banner__msg {
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+// ── Upgrade: the violet, filled ─────────────────────────────────────────────────────────────────────────────────────
+//
+// Same height (32px) and radius as "Ask Zeke" so the topbar reads as one row of controls. A soft-to-deep violet
+// gradient from the product's own accent tokens, a faint inner highlight on top for depth, and a violet glow that
+// grows on hover with a one-pixel lift — pressed, it settles back.
+.trial-banner__upgrade {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-accent-violet) 70%, transparent);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--color-accent-violet-soft) 0%, var(--color-accent-violet) 60%, var(--color-accent-violet) 100%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-accent-violet-soft) 60%, transparent),
+    0 6px 16px -8px color-mix(in srgb, var(--color-accent-violet) 70%, transparent);
+  // ★ WHITE IN EVERY THEME, as a literal — the one exception, and the same one "Ask Zeke" makes for its label on
+  // purple. No token is white everywhere: --color-brand-contrast and --color-text-inverse turn DARK in the dark
+  // theme, which would put dark text on violet.
+  color: #fff;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), filter var(--transition-fast);
+
+  &:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--color-accent-violet-soft) 70%, transparent),
+      0 10px 22px -10px color-mix(in srgb, var(--color-accent-violet) 85%, transparent);
+  }
+
+  &:active {
+    transform: translateY(0);
+    filter: brightness(0.97);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--color-bg-surface-raised),
+      0 0 0 4px var(--color-accent-violet-soft);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trial-banner__upgrade,
+  .trial-banner__upgrade:hover {
+    transform: none;
+  }
+}
+
+// The last days: the paywall is close, so the pill takes the warm tone.
+.trial-banner--ending {
+  .trial-banner__pill {
+    border-color: var(--color-warning-border);
+    background: var(--color-warning-bg);
+  }
+
+  .trial-banner__icon,
+  .trial-banner__msg {
+    color: var(--color-warning);
+  }
+}
+
+// A narrow topbar keeps the count and drops the word "Free trial": the clock already says what it counts.
+@media (max-width: 900px) {
+  .trial-banner__label,
+  .trial-banner__sep {
+    display: none;
+  }
+}

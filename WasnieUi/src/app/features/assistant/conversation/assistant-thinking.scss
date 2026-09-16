@@ -1,0 +1,318 @@
+// ── The thinking card ───────────────────────────────────────────────────────
+//
+// The wait between Enter and the first token, as one card: Zeke's orb, the status line with a light
+// sweeping across it, an activity bar, and — when the server reports enough of them — the steps as a small
+// timeline. Split from the main stylesheet only to keep each file under the component style budget.
+//
+// ★ NOTHING HERE CLAIMS PROGRESS. The bar moves to say "working", never how far along: the server sends no
+// fraction, and a bar that fills on a timer would be the one untrue thing on this screen.
+
+.assistant-thinking {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: min(100%, 260px);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-accent-violet) 25%, var(--color-border-subtle));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--color-accent-violet) 10%, transparent), transparent 60%),
+    var(--color-bg-surface);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent-violet) 20%, transparent);
+  animation: assistant-thinking-in 350ms cubic-bezier(0.2, 0.8, 0.2, 1) both, assistant-thinking-glow 2.8s ease-in-out 350ms infinite;
+  // The bubble preserves whitespace for the user's typed text; nothing in here is typed text.
+  white-space: normal;
+}
+
+.assistant-thinking__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+// ── Zeke's orb ── (keeps the avatar's class and size: 32px, full radius — the topbar avatar's numbers)
+.assistant-msg__avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+}
+
+.assistant-thinking__orb {
+  display: grid;
+  place-items: center;
+
+  > * {
+    grid-area: 1 / 1;
+  }
+}
+
+.assistant-thinking__orb-ring {
+  width: 100%;
+  height: 100%;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  background: conic-gradient(from 0deg, var(--color-accent-violet), var(--color-accent-blue), transparent 70%, var(--color-accent-violet));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  animation: assistant-thinking-spin 1.1s linear infinite;
+}
+
+.assistant-thinking__orb-core {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
+  animation: assistant-thinking-breathe 1.8s ease-in-out infinite;
+}
+
+.assistant-msg__avatar-still {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+// ── Status line ──
+.assistant-thinking__title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.assistant-thinking__eyebrow {
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent-violet);
+}
+
+.assistant-msg__waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.assistant-msg__waiting-text {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+// A light passing over the words: the text stays the secondary colour, the sweep only brightens it.
+.assistant-thinking__shimmer {
+  background: linear-gradient(
+      100deg,
+      var(--color-text-secondary) 0%,
+      var(--color-text-secondary) 40%,
+      var(--color-text-primary) 50%,
+      var(--color-text-secondary) 60%,
+      var(--color-text-secondary) 100%
+    );
+  background-size: 250% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: assistant-thinking-shimmer 2.2s linear infinite;
+}
+
+// ── Activity bar (indeterminate) ──
+.assistant-thinking__bar {
+  position: relative;
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
+
+  > span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -40%;
+    width: 40%;
+    border-radius: var(--radius-full);
+    background: linear-gradient(90deg, transparent, var(--color-accent-violet), var(--color-accent-blue), transparent);
+    animation: assistant-thinking-bar 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+}
+
+// ── Long wait ──
+.assistant-msg__waiting-long {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+  color: var(--color-text-tertiary);
+  animation: assistant-thinking-in 400ms ease-out both;
+  /**
+   * ★ `.assistant-msg` sets `white-space: pre-wrap` for the user's typed text, and it inherits. This is a
+   * translated UI string on its own indented template line; with pre-wrap the indentation becomes content
+   * and the last word lands under nothing (the "…few seconds." bug). Refused here, where it does not belong.
+   */
+  white-space: normal;
+}
+
+.assistant-msg__waiting-long-icon {
+  flex: none;
+  display: flex;
+  margin-top: 1px;
+  color: var(--color-accent-violet);
+}
+
+// ── The steps: a small timeline ──
+.assistant-steps {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-steps__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  animation: assistant-thinking-in 300ms ease-out both;
+
+  // The rail to the next step.
+  &:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 18px;
+    left: 8px;
+    width: 2px;
+    height: calc(100% - 10px);
+    background: var(--color-border-subtle);
+  }
+}
+
+// ★ SMALL AND TIGHT, NOT SMALL AND FAINT: a running step must never look disabled.
+.assistant-steps__label {
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+// ★ A FINISHED STEP RECEDES; IT DOES NOT CELEBRATE — the eye belongs on the step still running.
+.assistant-steps__item--done {
+  color: var(--color-text-tertiary);
+
+  &:not(:last-child)::after {
+    background: color-mix(in srgb, var(--color-success) 45%, var(--color-border-subtle));
+  }
+}
+
+.assistant-steps__marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+}
+
+.assistant-steps__check {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  animation: assistant-thinking-pop 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+// Sized to the tick so labels do not shift sideways as a step completes.
+.assistant-steps__spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  border: 2px solid color-mix(in srgb, var(--color-accent-violet) 20%, transparent);
+  border-top-color: var(--color-accent-violet);
+  animation: assistant-thinking-spin 0.7s linear infinite;
+}
+
+@keyframes assistant-thinking-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes assistant-thinking-glow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent-violet) 0%, transparent); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent-violet) 10%, transparent); }
+}
+
+@keyframes assistant-thinking-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes assistant-thinking-breathe {
+  0%, 100% { transform: scale(0.92); }
+  50%      { transform: scale(1); }
+}
+
+@keyframes assistant-thinking-shimmer {
+  from { background-position: 100% 0; }
+  to   { background-position: -150% 0; }
+}
+
+@keyframes assistant-thinking-bar {
+  from { left: -40%; }
+  to   { left: 100%; }
+}
+
+@keyframes assistant-thinking-pop {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+
+// The reader asked for calm: everything holds still. The ring and the spinner stay visible — they still
+// mark that Zeke is working and which step is running — they simply stop turning.
+@media (prefers-reduced-motion: reduce) {
+  .assistant-thinking,
+  .assistant-thinking__orb-ring,
+  .assistant-thinking__orb-core,
+  .assistant-thinking__shimmer,
+  .assistant-thinking__bar > span,
+  .assistant-msg__waiting-long,
+  .assistant-steps__item,
+  .assistant-steps__check,
+  .assistant-steps__spinner {
+    animation: none;
+  }
+
+  .assistant-thinking__shimmer {
+    color: var(--color-text-secondary);
+    background: none;
+  }
+
+  .assistant-thinking__bar > span {
+    left: 0;
+    width: 100%;
+    opacity: 0.4;
+  }
+}
+
+// While Zeke is thinking, the card IS the bubble: the grey bubble around it would draw a second border.
+.assistant-msg--thinking {
+  padding: 0;
+  border: none;
+  background: transparent;
+}

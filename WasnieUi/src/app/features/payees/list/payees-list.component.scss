@@ -28,6 +28,12 @@
 .payee-identity {
   @apply flex items-center;
   gap: var(--space-3);
+
+  // The favorite star leads the row (KAN-64). A tighter gap to the avatar than avatar-to-name, so the two read as one
+  // leading group rather than three spaced items.
+  app-favorite-star {
+    margin-right: calc(var(--space-1) * -1);
+  }
 }
 
 .payee-avatar {

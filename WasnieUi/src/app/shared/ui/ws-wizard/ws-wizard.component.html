@@ -1,21 +1,27 @@
 @if (showIndicator()) {
-  <nav class="ws-wz__steps" aria-label="Progress">
-    @for (step of stepsWithState(); track step.name; let last = $last) {
-      <div class="ws-wz__step ws-wz__step--{{ step.state }}">
+  <nav class="ws-wz__steps" aria-label="Progress" [style.--wz-progress]="progressRatio()" [style.--wz-count]="stepsWithState().length">
+    <!-- The track the steps sit on, and its fill up to the active step. Decorative: the step states carry the meaning. -->
+    <span class="ws-wz__track" aria-hidden="true"><span class="ws-wz__track-fill"></span></span>
+
+    @for (step of stepsWithState(); track step.name) {
+      <div
+        class="ws-wz__step ws-wz__step--{{ step.state }}"
+        [attr.aria-current]="step.state === 'active' ? 'step' : null"
+      >
         <div class="ws-wz__circle">
+          @if (step.state === 'active') {
+            <span class="ws-wz__halo" aria-hidden="true"></span>
+          }
           @if (step.state === 'done') {
-            <app-icon name="check" [size]="14" />
+            <app-icon name="check" [size]="14" class="ws-wz__check" />
           } @else if (step.icon) {
-            <app-icon [name]="step.icon" [size]="14" />
+            <app-icon [name]="step.icon" [size]="15" />
           } @else {
             {{ $index + 1 }}
           }
         </div>
         <span class="ws-wz__label">{{ step.title }}</span>
       </div>
-      @if (!last) {
-        <div class="ws-wz__line ws-wz__line--{{ step.state === 'done' ? 'done' : 'pending' }}"></div>
-      }
     }
   </nav>
 }

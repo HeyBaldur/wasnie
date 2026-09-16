@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Stripe;
@@ -7,8 +7,8 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
+using Wasnie.Application.Features.Subscription;
 using Wasnie.Domain.Audit;
-using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Subscription;
 
@@ -17,8 +17,11 @@ namespace Wasnie.Infrastructure.Services;
 public sealed class StripeWebhookService(
     IApplicationDbContext db,
     IOptions<StripeOptions> options,
+    IOptions<BillingOptions> billingOptions,
+    IAssistantPeriodCloser periodCloser,
     IAuditService auditService,
     IClock clock,
+    ISubscriptionPlanCatalog catalog,
     ILogger<StripeWebhookService> logger)
     : IStripeWebhookService
 {
@@ -70,6 +73,23 @@ public sealed class StripeWebhookService(
                     logger.LogError("Stripe webhook {EventId}: could not cast data object to Session", stripeEvent.Id);
                     return Result<bool>.Failure("Unexpected event payload.");
                 }
+                // KAN-83: a boost is bought with a ONE-OFF checkout, and Stripe announces it with this very same event.
+                // Routing on the session's own mode/metadata BEFORE anything else is what keeps the two apart.
+                if (IsBoostPurchase(session))
+                {
+                    var credited = await HandleBoostPurchaseAsync(stripeEvent.Id, session, cancellationToken);
+                    if (!credited.IsSuccess)
+                    {
+                        // ★★ A PAID BOOST THAT COULD NOT BE CREDITED IS NOT ACKNOWLEDGED (§B1). Returning success here
+                        // would mark the event processed and the customer's money would buy nothing, silently. Failing
+                        // makes Stripe redeliver, and leaves the event visible as failed in its dashboard.
+                        return Result<bool>.Failure(credited.Error!);
+                    }
+
+                    auditEntry = credited.Value;
+                    break;
+                }
+
                 auditEntry = await HandleCheckoutSessionCompletedAsync(session, cancellationToken);
                 break;
 
@@ -122,13 +142,133 @@ public sealed class StripeWebhookService(
 
         // 4. Mark the event as processed — saved atomically with any subscription changes above
         db.ProcessedStripeEvents.Add(ProcessedStripeEvent.Create(stripeEvent.Id, clock.UtcNowOffset));
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            if (!await db.ProcessedStripeEvents.AsNoTracking().AnyAsync(e => e.EventId == stripeEvent.Id, CancellationToken.None))
+                throw;
+
+            // ★ Two deliveries of the same event raced past the check above; the other one already saved it (the
+            // event id is the key). Nothing of ours was applied twice — this save was rolled back whole.
+            logger.LogInformation("Stripe webhook {EventId} was processed concurrently — skipping", stripeEvent.Id);
+            return Result<bool>.Success(true);
+        }
 
         // 5. Audit log after the main save (separate transaction — not critical to be atomic)
         if (auditEntry is not null)
             await auditService.LogAsync(auditEntry, cancellationToken);
 
         return Result<bool>.Success(true);
+    }
+
+    /// <summary>
+    /// Whether this completed checkout bought TOKENS rather than a subscription (KAN-83).
+    ///
+    /// ★★ THE OLD HANDLER ASSUMED EVERY CHECKOUT WAS A SUBSCRIPTION and asked Stripe for
+    /// <c>session.SubscriptionId</c>, which a one-off payment does not have. Without this fork a paid boost threw,
+    /// was logged as an error, and the event was still marked processed — the customer paid and got nothing.
+    ///
+    /// ★ MODE FIRST, METADATA SECOND. The mode is Stripe's own fact about the session; the metadata is ours. Either
+    /// one alone would be enough, and requiring both would mean a session created before this tag existed is treated
+    /// as a subscription.
+    /// </summary>
+    private static bool IsBoostPurchase(Session session) =>
+        string.Equals(session.Mode, "payment", StringComparison.OrdinalIgnoreCase)
+        || (session.Metadata is not null
+            && session.Metadata.TryGetValue(StripeBoostService.BoostMetadataKey, out var kind)
+            && string.Equals(kind, StripeBoostService.BoostMetadataValue, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Credits a bought boost to the tenant's balance (KAN-83).
+    ///
+    /// ★ THE AMOUNT COMES FROM THE PRODUCT, not from our configuration and not from the price id. Resizing a pack in
+    /// Stripe then needs no deploy, and the row keeps what was actually granted.
+    ///
+    /// ★ THE STRIPE EVENT ID IS THE IDEMPOTENCY KEY, enforced by a unique index. The dedup check at the top of
+    /// ProcessAsync already stops an ordinary redelivery; the index is what stops two deliveries racing past it.
+    /// </summary>
+    private async Task<Result<AuditEntry?>> HandleBoostPurchaseAsync(
+        string eventId, Session session, CancellationToken cancellationToken)
+    {
+        if (session.Metadata is null
+            || !session.Metadata.TryGetValue("tenantId", out var tenantIdRaw)
+            || !Guid.TryParse(tenantIdRaw, out var tenantId))
+        {
+            logger.LogError(
+                "Boost checkout {SessionId} carries no usable tenantId metadata; nothing credited", session.Id);
+            return Result<AuditEntry?>.Failure("Boost checkout has no tenant.");
+        }
+
+        var client = new StripeClient(options.Value.SecretKey);
+
+        // The webhook payload does not carry line items; the product (and its token metadata) has to be fetched.
+        Session full;
+        try
+        {
+            full = await new SessionService(client).GetAsync(
+                session.Id,
+                new SessionGetOptions { Expand = ["line_items.data.price.product"] },
+                cancellationToken: cancellationToken);
+        }
+        catch (StripeException ex)
+        {
+            logger.LogError(ex, "Could not read boost checkout {SessionId} back from Stripe", session.Id);
+            return Result<AuditEntry?>.Failure("Boost checkout could not be read.");
+        }
+
+        var line = full.LineItems?.Data?.FirstOrDefault();
+        if (line?.Price?.Product is not Product product)
+        {
+            logger.LogError("Boost checkout {SessionId} has no product on its first line item", session.Id);
+            return Result<AuditEntry?>.Failure("Boost checkout has no product.");
+        }
+
+        if (!StripeBoostService.TryReadTokens(product, out var tokens))
+        {
+            logger.LogError(
+                "Boost product {ProductId} has no usable '{Key}' metadata; refusing to credit an invented amount for {SessionId}",
+                product.Id, AssistantBoostOptions.TokensMetadataKey, session.Id);
+            return Result<AuditEntry?>.Failure("Boost product does not say how many tokens it grants.");
+        }
+
+        var tenant = await db.Tenants
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken);
+
+        if (tenant is null)
+        {
+            logger.LogError("Tenant {TenantId} not found for boost checkout {SessionId}", tenantId, session.Id);
+            return Result<AuditEntry?>.Failure("Tenant not found.");
+        }
+
+        var now = clock.UtcNowOffset;
+
+        db.AssistantTokenBoosts.Add(Wasnie.Domain.Assistant.AssistantTokenBoost.Create(
+            id: Guid.NewGuid(),
+            tenantId: tenantId,
+            stripeEventId: eventId,
+            stripeProductId: product.Id,
+            stripeSessionId: session.Id,
+            tokens: tokens,
+            purchasedAt: now,
+            // Frozen per lot: changing the setting later must never shorten a boost already sold.
+            expiresAt: now.AddDays(billingOptions.Value.Boosts.ExpiryDays)));
+
+        logger.LogInformation(
+            "Tenant {TenantId} credited a boost of {Tokens} tokens from product {ProductId} (session {SessionId})",
+            tenantId, tokens, product.Id, session.Id);
+
+        return Result<AuditEntry?>.Success(new AuditEntry(
+            TenantId: tenantId,
+            Action: AuditActions.AssistantBoostPurchased,
+            ResourceType: ResourceTypes.Subscription,
+            ResourceId: session.Id,
+            ActorUserId: "stripe-webhook",
+            ActorEmail: "webhook@stripe.com",
+            DisplayName: $"Assistant boost purchased: {tokens} tokens ({product.Id})"));
     }
 
     // Returns an AuditEntry to be persisted after the main save, or null if no audit is needed.
@@ -166,7 +306,7 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        // Resolve the Wasnie tier from the product
+        // Resolve the plan from the product (KAN-77: the plan catalog, not the old tier enum)
         var item = stripeSubscription.Items?.Data?.FirstOrDefault();
         if (item?.Price?.Product is not Product product)
         {
@@ -176,13 +316,11 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        var tierSlug = StripeSubscriptionPlanService.ResolveTier(
-            product.Id, product.Metadata, options.Value.ProductTierMap, logger);
-
-        if (tierSlug is null || !Enum.TryParse<Tier>(tierSlug, ignoreCase: true, out var tier) || tier == Tier.Free)
+        var plan = catalog.ResolveStripeProduct(product.Id, product.Metadata);
+        if (plan is null)
         {
             logger.LogError(
-                "Could not resolve a valid paid tier for product {ProductId} in session {SessionId}",
+                "Could not resolve a plan for product {ProductId} in session {SessionId}",
                 product.Id, session.Id);
             return null;
         }
@@ -210,7 +348,7 @@ public sealed class StripeWebhookService(
 
         if (subscription is null)
         {
-            subscription = UserSubscription.CreateFree(
+            subscription = UserSubscription.CreatePending(
                 id: Guid.NewGuid(),
                 tenantId: tenantId,
                 billingEmail: session.CustomerEmail ?? string.Empty,
@@ -219,7 +357,7 @@ public sealed class StripeWebhookService(
         }
 
         subscription.UpdateFromStripe(
-            tier: tier,
+            planCode: plan.Code,
             status: SubscriptionStatus.Active,
             stripeSubscriptionId: stripeSubscription.Id,
             stripeCustomerId: stripeSubscription.CustomerId,
@@ -231,11 +369,11 @@ public sealed class StripeWebhookService(
             now: now);
 
 
-        tenant.SelectPlan(tier);
+        tenant.SelectPlan(plan.Code);
 
         logger.LogInformation(
-            "Tenant {TenantId} subscription activated: tier={Tier} subscription={SubscriptionId}",
-            tenantId, tier, stripeSubscription.Id);
+            "Tenant {TenantId} subscription activated: plan={Plan} subscription={SubscriptionId}",
+            tenantId, plan.Code, stripeSubscription.Id);
 
         return new AuditEntry(
             TenantId: tenantId,
@@ -244,7 +382,7 @@ public sealed class StripeWebhookService(
             ResourceId: stripeSubscription.Id,
             ActorUserId: "stripe-webhook",
             ActorEmail: "webhook@stripe.com",
-            DisplayName: $"Subscription activated: {tier} via Stripe session {session.Id}");
+            DisplayName: $"Subscription activated: {plan.Code} via Stripe session {session.Id}");
     }
 
     private async Task<AuditEntry?> HandleSubscriptionUpdatedAsync(
@@ -279,13 +417,11 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        var tierSlug = StripeSubscriptionPlanService.ResolveTier(
-            product.Id, product.Metadata, options.Value.ProductTierMap, logger);
-
-        if (tierSlug is null || !Enum.TryParse<Tier>(tierSlug, ignoreCase: true, out var newTier) || newTier == Tier.Free)
+        var newPlan = catalog.ResolveStripeProduct(product.Id, product.Metadata);
+        if (newPlan is null)
         {
             logger.LogError(
-                "subscription.updated: could not resolve a valid paid tier for product {ProductId}",
+                "subscription.updated: could not resolve a plan for product {ProductId}",
                 product.Id);
             return null;
         }
@@ -314,119 +450,33 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        var now = clock.UtcNowOffset;
-        var periodStart = new DateTimeOffset(item.CurrentPeriodStart, TimeSpan.Zero);
-        var periodEnd = new DateTimeOffset(item.CurrentPeriodEnd, TimeSpan.Zero);
-        var previousTier = subscription.Tier;
-        var wasCancelScheduled = subscription.CancelAtPeriodEnd;
-
-        var mappedStatus = fullSubscription.Status switch
-        {
-            "active"             => SubscriptionStatus.Active,
-            "past_due"           => SubscriptionStatus.PastDue,
-            "canceled"           => SubscriptionStatus.Canceled,
-            "incomplete"         => SubscriptionStatus.Incomplete,
-            "incomplete_expired" => SubscriptionStatus.Incomplete,
-            "trialing"           => SubscriptionStatus.Trialing,
-            _                    => SubscriptionStatus.Active,
-        };
-
-        subscription.UpdateFromStripe(
-            tier: newTier,
-            status: mappedStatus,
-            stripeSubscriptionId: fullSubscription.Id,
-            stripeCustomerId: fullSubscription.CustomerId,
-            stripePriceId: item.Price.Id,
-            stripeProductId: product.Id,
-            periodStart: periodStart,
-            periodEnd: periodEnd,
-            nextBillingDate: periodEnd,
-            now: now);
-
-        tenant.SelectPlan(newTier);
-
-        // Log cancellation signal values for diagnosis (flexible billing uses cancel_at, not cancel_at_period_end).
-        logger.LogInformation(
-            "subscription.updated: CancelAtPeriodEnd={CancelAtPeriodEnd} CancelAt={CancelAt} for {SubscriptionId}",
-            stripeSubscription.CancelAtPeriodEnd, stripeSubscription.CancelAt, stripeSubscription.Id);
-
-        // Classic mode: cancel_at_period_end=true. Flexible (billing_mode=flexible / dahlia): cancel_at != null, cancel_at_period_end stays false.
-        var isCancelScheduled = stripeSubscription.CancelAtPeriodEnd || stripeSubscription.CancelAt.HasValue;
-        if (isCancelScheduled)
-        {
-            var cancelAt = stripeSubscription.CancelAt.HasValue
-                ? new DateTimeOffset(stripeSubscription.CancelAt.Value, TimeSpan.Zero)
-                : periodEnd;
-
-            subscription.ScheduleCancellation(cancelAt, now);
-
-            logger.LogInformation(
-                "Tenant {TenantId} subscription scheduled for cancellation at {CancelAt}",
-                subscription.TenantId, cancelAt);
-
-            return new AuditEntry(
-                TenantId: subscription.TenantId,
-                Action: AuditActions.SubscriptionCancelScheduled,
-                ResourceType: ResourceTypes.Subscription,
-                ResourceId: fullSubscription.Id,
-                ActorUserId: "stripe-webhook",
-                ActorEmail: "webhook@stripe.com",
-                DisplayName: $"Subscription cancel scheduled at {cancelAt:O}: {fullSubscription.Id}");
-        }
-
-        if (wasCancelScheduled)
-        {
-            subscription.ClearCancellationSchedule(now);
-
-            logger.LogInformation(
-                "Tenant {TenantId} subscription cancellation reverted",
-                subscription.TenantId);
-
-            return new AuditEntry(
-                TenantId: subscription.TenantId,
-                Action: AuditActions.SubscriptionCancelReverted,
-                ResourceType: ResourceTypes.Subscription,
-                ResourceId: fullSubscription.Id,
-                ActorUserId: "stripe-webhook",
-                ActorEmail: "webhook@stripe.com",
-                DisplayName: $"Subscription cancellation reverted: {fullSubscription.Id}");
-        }
-
-        var action = newTier > previousTier
-            ? AuditActions.SubscriptionUpgraded
-            : AuditActions.SubscriptionDowngraded;
-
-        logger.LogInformation(
-            "Tenant {TenantId} subscription updated: {Previous} → {New}",
-            subscription.TenantId, previousTier, newTier);
-
-        return new AuditEntry(
-            TenantId: subscription.TenantId,
-            Action: action,
-            ResourceType: ResourceTypes.Subscription,
-            ResourceId: fullSubscription.Id,
-            ActorUserId: "stripe-webhook",
-            ActorEmail: "webhook@stripe.com",
-            DisplayName: $"Subscription {(newTier > previousTier ? "upgraded" : "downgraded")}: {previousTier} → {newTier}");
+        return await StripeSubscriptionApplier.ApplyUpdate(
+            subscription, tenant, fullSubscription, stripeSubscription, item, product, newPlan, catalog,
+            clock.UtcNowOffset, StripeChangeActor.Webhook, logger, periodCloser, cancellationToken);
     }
 
     private async Task<AuditEntry?> HandleSubscriptionDeletedAsync(
         Subscription stripeSubscription,
         CancellationToken cancellationToken)
     {
+        // ★★ BY SUBSCRIPTION ID, NOT BY CUSTOMER (KAN-77, runtime). One customer can own an old cancelled
+        // subscription and a new paid one. Matched by customer, the old one's deletion — delivered late, retried or
+        // resent — cancelled the row that already follows the NEW subscription, and locked out a customer who had
+        // just paid. A deletion only ends the subscription the row actually holds.
         var subscription = await db.UserSubscriptions
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.StripeCustomerId == stripeSubscription.CustomerId, cancellationToken);
+            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeSubscription.Id, cancellationToken);
 
         if (subscription is null)
         {
             logger.LogWarning(
-                "subscription.deleted: no UserSubscription found for StripeCustomerId {CustomerId}",
-                stripeSubscription.CustomerId);
+                "subscription.deleted: no UserSubscription holds {SubscriptionId} (customer {CustomerId}); ignored",
+                stripeSubscription.Id, stripeSubscription.CustomerId);
             return null;
         }
 
-        subscription.Cancel(clock.UtcNowOffset);
+        var endedAt = stripeSubscription.EndedAt ?? stripeSubscription.CanceledAt;
+        subscription.Cancel(clock.UtcNowOffset, endedAt.HasValue ? new DateTimeOffset(endedAt.Value, TimeSpan.Zero) : null);
 
         logger.LogInformation(
             "Tenant {TenantId} subscription canceled via webhook",
@@ -452,14 +502,12 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        var subscription = await db.UserSubscriptions
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.StripeCustomerId == invoice.CustomerId, cancellationToken);
+        var subscription = await FindInvoiceSubscriptionAsync(invoice, cancellationToken);
 
         if (subscription is null)
         {
             logger.LogWarning(
-                "invoice.payment_failed: no UserSubscription found for StripeCustomerId {CustomerId}",
+                "invoice.payment_failed: no UserSubscription holds the invoice's subscription (customer {CustomerId})",
                 invoice.CustomerId);
             return null;
         }
@@ -487,9 +535,7 @@ public sealed class StripeWebhookService(
         if (string.IsNullOrEmpty(invoice.CustomerId))
             return null;
 
-        var subscription = await db.UserSubscriptions
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.StripeCustomerId == invoice.CustomerId, cancellationToken);
+        var subscription = await FindInvoiceSubscriptionAsync(invoice, cancellationToken);
 
         if (subscription is null)
             return null;
@@ -512,5 +558,23 @@ public sealed class StripeWebhookService(
             ActorUserId: "stripe-webhook",
             ActorEmail: "webhook@stripe.com",
             DisplayName: $"Payment succeeded for invoice {invoice.Id} — subscription recovered");
+    }
+
+    /// <summary>
+    /// The row an invoice belongs to. ★ When the invoice names its subscription, the row must hold THAT subscription:
+    /// a failed invoice of a customer's old subscription must not mark their new one PastDue. Invoices that do not name
+    /// one (older payload shapes) fall back to the customer, as before.
+    /// </summary>
+    private async Task<UserSubscription?> FindInvoiceSubscriptionAsync(Invoice invoice, CancellationToken cancellationToken)
+    {
+        var subscriptionId = invoice.Parent?.SubscriptionDetails?.SubscriptionId;
+
+        return string.IsNullOrEmpty(subscriptionId)
+            ? await db.UserSubscriptions
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.StripeCustomerId == invoice.CustomerId, cancellationToken)
+            : await db.UserSubscriptions
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.StripeSubscriptionId == subscriptionId, cancellationToken);
     }
 }

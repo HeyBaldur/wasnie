@@ -51,10 +51,18 @@ public interface IApplicationDbContext
     // Assistant chat. Tenant-filtered like everything else, but note that tenant is only HALF the
     // isolation here: every read must also match the owning UserId (see AssistantConversation).
     DbSet<Wasnie.Domain.Assistant.AssistantConversation> AssistantConversations { get; }
+    DbSet<Wasnie.Domain.Settings.UserUiPreference> UserUiPreferences { get; }
+    DbSet<Wasnie.Domain.Settings.Favorite> Favorites { get; }
     DbSet<Wasnie.Domain.Assistant.AssistantMessage> AssistantMessages { get; }
 
     /// <summary>One user's standing on one conversation — pinned, and later archived/read.</summary>
     DbSet<Wasnie.Domain.Assistant.AssistantConversationState> AssistantConversationStates { get; }
+    DbSet<Wasnie.Domain.Assistant.AssistantTokenUsage> AssistantTokenUsages { get; }
+
+    // KAN-83: the tenant's purchased token lots and the overage of each CLOSED billing period. Together with the usage
+    // rows above they are everything the balance is derived from — there is no stored total anywhere.
+    DbSet<Wasnie.Domain.Assistant.AssistantTokenBoost> AssistantTokenBoosts { get; }
+    DbSet<Wasnie.Domain.Assistant.AssistantBoostDebit> AssistantBoostDebits { get; }
 
     DbSet<HubSpotConnection> HubSpotConnections { get; }
     DbSet<HubSpotOAuthState> HubSpotOAuthStates { get; }

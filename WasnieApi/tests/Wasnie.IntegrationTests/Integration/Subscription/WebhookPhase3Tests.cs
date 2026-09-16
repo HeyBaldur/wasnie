@@ -39,9 +39,9 @@ public sealed class WebhookPhase3Tests : IAsyncLifetime
             $"DELETE FROM ProcessedStripeEvents WHERE EventId LIKE 'evt_webhook_p3_%'");
 
         var now = DateTimeOffset.UtcNow;
-        var sub = UserSubscription.CreateFree(Guid.NewGuid(), tid, "test@wasnie.io", now);
+        var sub = UserSubscription.CreatePending(Guid.NewGuid(), tid, "test@wasnie.io", now);
         sub.UpdateFromStripe(
-            tier: Tier.Growth,
+            planCode: "pro",
             status: SubscriptionStatus.Active,
             stripeSubscriptionId: SubscriptionId,
             stripeCustomerId: CustomerId,

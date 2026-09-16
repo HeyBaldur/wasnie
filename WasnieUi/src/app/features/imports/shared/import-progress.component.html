@@ -1,5 +1,17 @@
 <div class="import-progress">
   @if (!errorMessage()) {
+    <!-- The work, drawn: rows travelling into a spinning ring. Decorative; the title and bar say it in words. -->
+    <div class="import-progress__orb" aria-hidden="true">
+      <span class="import-progress__orb-ring"></span>
+      <span class="import-progress__orb-core">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="5" y="5" width="14" height="3" rx="1.5" class="import-progress__row" />
+          <rect x="5" y="10.5" width="14" height="3" rx="1.5" class="import-progress__row import-progress__row--2" />
+          <rect x="5" y="16" width="14" height="3" rx="1.5" class="import-progress__row import-progress__row--3" />
+        </svg>
+      </span>
+    </div>
+
     <div class="import-progress__title">{{ title() }}</div>
 
     @if (progress() === null) {

@@ -7,7 +7,11 @@
     measure and centred. One element cannot be both: capping the scroller would drag the scrollbar into
     the middle of the page. In the drawer this wrapper has no max-width and is simply a plain block.
   -->
-  <div class="assistant-conversation__stream">
+  <!--
+    #stream is watched by a ResizeObserver: anything that appears or grows in here — an alert, the
+    thinking card, the clarify panel — pulls the view down when the reader was already at the bottom.
+  -->
+  <div #stream class="assistant-conversation__stream">
   @if (store.messages().length === 0) {
     <!--
       The welcome, in three levels: the greeting, what to ask, and the promise about what this
@@ -30,43 +34,64 @@
     -->
     <div class="assistant-welcome" data-testid="assistant-welcome">
       <!--
-        The product's own mark, the same asset the sidebar and the sign-in pages use. Decorative
-        here — the greeting beside it already says which product this is — so it carries an empty
-        alt rather than making a screen reader announce "Incentra" twice.
+        ★ ZEKE'S MARK, ALIVE. The product's own logo (the same asset the sidebar uses) inside a slowly
+        turning gradient ring, with a soft halo and two orbiting sparks. Decorative: the greeting beside it
+        already says which product this is, so the whole emblem is hidden from screen readers. Still with
+        prefers-reduced-motion.
       -->
-      <img
-        src="wasnie_logo.png"
-        alt=""
-        aria-hidden="true"
-        class="assistant-welcome__logo"
-      />
+      <div class="assistant-welcome__emblem" aria-hidden="true">
+        <span class="assistant-welcome__halo"></span>
+        <span class="assistant-welcome__ring"></span>
+        <span class="assistant-welcome__orbit"><span class="assistant-welcome__spark"></span></span>
+        <span class="assistant-welcome__orbit assistant-welcome__orbit--slow"><span class="assistant-welcome__spark assistant-welcome__spark--alt"></span></span>
+        <span class="assistant-welcome__core">
+          <img src="wasnie_logo.png" alt="" class="assistant-welcome__logo" />
+        </span>
+      </div>
+
+      <span class="assistant-welcome__eyebrow">
+        <span class="assistant-welcome__live" aria-hidden="true"></span>
+        {{ 'ASSISTANT.WELCOME_EYEBROW' | translate }}
+      </span>
 
       <h2 class="assistant-welcome__greeting">{{ 'ASSISTANT.WELCOME_GREETING' | translate }}</h2>
 
       <p class="assistant-welcome__subtitle">{{ 'ASSISTANT.WELCOME_SUBTITLE' | translate }}</p>
 
+      <!--
+        ★ THE READ-ONLY NOTE IS NOT SMALL PRINT. It is the guarantee that makes the assistant safe to hand a
+        finance team: semibold, the subtitle's colour and the subtitle's left edge (a test pins all three).
+        The shield is the only decoration it gets.
+      -->
       <p class="assistant-welcome__readonly" data-testid="assistant-welcome-readonly">
-        {{ 'ASSISTANT.WELCOME_READ_ONLY' | translate }}
+        <app-icon name="shield-check" [size]="14" class="assistant-welcome__readonly-icon" />
+        <span>{{ 'ASSISTANT.WELCOME_READ_ONLY' | translate }}</span>
       </p>
 
       <!--
-        ★ FOUR EXAMPLES, ONE PER TOOL THE SERVER ACTUALLY REGISTERS. The rule above did not get
-        relaxed to allow these; they were written to satisfy it. See starter-prompts.ts — the tool
+        ★ FOUR EXAMPLES, ONE PER TOOL THE SERVER ACTUALLY REGISTERS. See starter-prompts.ts — the tool
         each one reaches is declared there and a test checks the list against the real four.
 
-        ★ THEY FILL THE COMPOSER, THEY DO NOT SEND IT. Each sentence has a hole in it, and asking
-        about a payee called "[payee name]" would find nobody. The click drops the text in the box
-        with the placeholder selected; the user types the real name over it and sends.
+        ★ THEY FILL THE COMPOSER, THEY DO NOT SEND IT. Each card shows the question it will drop in, with
+        the placeholder the user replaces before sending.
       -->
+      <p class="assistant-welcome__starters-title">{{ 'ASSISTANT.WELCOME_TRY_ASKING' | translate }}</p>
       <div class="assistant-welcome__starters" data-testid="assistant-starters">
-        @for (starter of starters; track starter.promptKey) {
+        @for (starter of starters; track starter.promptKey; let i = $index) {
           <ws-button
             variant="secondary"
             size="sm"
+            class="assistant-starter"
+            [style.--i]="i"
             (click)="useStarter(starter)"
             [attr.data-testid]="starter.testId"
           >
-            {{ starter.labelKey | translate }}
+            <span class="assistant-starter__icon" aria-hidden="true"><app-icon [name]="starter.icon" [size]="16" /></span>
+            <span class="assistant-starter__text">
+              <span class="assistant-starter__label">{{ starter.labelKey | translate }}</span>
+              <span class="assistant-starter__prompt">{{ starter.promptKey | translate }}</span>
+            </span>
+            <app-icon name="arrow-right" [size]="14" class="assistant-starter__arrow" />
           </ws-button>
         }
       </div>
@@ -79,6 +104,18 @@
         [class.assistant-msg--assistant]="message.role === 'Assistant'"
         [attr.data-role]="message.role"
       >
+        <!--
+          ★ WHO IS SPEAKING, AT A GLANCE. Zeke's turns carry the same mark the thinking card shows while
+          it works, so the answer visibly comes from the thing that was just thinking. Decorative for a
+          screen reader — the role is already on the row.
+        -->
+        @if (message.role === 'Assistant') {
+          <span class="assistant-msg__avatar assistant-msg__avatar--zeke" aria-hidden="true">
+            <img class="assistant-msg__avatar-still" src="wasnie_logo.png" alt="" />
+          </span>
+          <span class="assistant-msg__author">Zeke</span>
+        }
+
         <!--
           The assistant's stand-in reply is stored as a language-neutral sentinel, so it is
           TRANSLATED here rather than printed. Real answers (a later piece) print as they came.
@@ -109,6 +146,10 @@
             path — the shape every injection takes.
           -->
           <span class="assistant-msg__text">{{ message.content }}</span>
+          <!-- The user's turn gets its time too, under the bubble — a conversation reads by both sides' clocks. -->
+          <span class="assistant-msg__meta assistant-msg__meta--user">
+            <span class="assistant-msg__time">{{ messageTime(message.createdAt) }}</span>
+          </span>
         }
 
         <!--
@@ -232,8 +273,17 @@
     real reply so nothing shifts when the persisted message replaces it.
   -->
   @if (store.streamingReply() !== null) {
-    <div class="assistant-msg assistant-msg--assistant" data-testid="assistant-streaming">
+    <div
+      class="assistant-msg assistant-msg--assistant"
+      [class.assistant-msg--thinking]="store.streamingReply()!.length === 0"
+      data-testid="assistant-streaming"
+    >
       @if (store.streamingReply()!.length > 0) {
+        <!-- The same mark and name as a stored reply, so nothing shifts when the stored row replaces this one. -->
+        <span class="assistant-msg__avatar assistant-msg__avatar--zeke" aria-hidden="true">
+          <img class="assistant-msg__avatar-still" src="wasnie_logo.png" alt="" />
+        </span>
+        <span class="assistant-msg__author">Zeke</span>
         <!--
           Markdown is rendered WHILE it streams, from whatever has arrived. A half-written `**`
           simply has not become bold yet and shows as the characters themselves; the next fragment
@@ -258,58 +308,72 @@
           so below the threshold this degrades to the plain loader, in the same place and the same
           type. The dots have not been replaced; they are what a simple turn still looks like.
         -->
-        @if (showSteps()) {
-          <ul class="assistant-steps" role="status" data-testid="assistant-steps">
-            @for (step of store.progressSteps(); track step.phase) {
-              <li
-                class="assistant-steps__item"
-                [class.assistant-steps__item--done]="step.done"
-                [attr.data-phase]="step.phase"
-                [attr.data-state]="step.done ? 'done' : 'running'"
-              >
-                @if (step.done) {
-                  <app-icon name="check" [size]="14" class="assistant-steps__check" />
-                } @else {
-                  <span class="assistant-steps__spinner" aria-hidden="true"></span>
-                }
-                <span class="assistant-steps__label">{{ phaseLabel(step.phase) | translate }}</span>
-              </li>
-            }
-          </ul>
-        } @else {
+        <!--
+          ★ THE THINKING CARD. One surface for the whole wait: Zeke's mark (a CSS orb — the GIF could not be
+          paused and did not match the product's look), what is happening, and an activity bar that shows
+          MOVEMENT, never a percentage — the server reports no progress fraction, so none is drawn.
+        -->
+        <div class="assistant-thinking">
           <!--
-            ★ THE DOTS STAY; THE WORDS JOIN THEM. Three silent dots cannot tell "working" apart
-            from "hung", and this assistant can genuinely take several seconds.
-
-            ★ AND THE WORDS ARE TRUE AT EVERY MOMENT. No stage is named here: this is the branch for
-            turns that reported no steps at all — an older backend, or the instant before the first
-            one lands — and naming one would be the single place in this feature that asserts
-            something it cannot verify.
+            ★ THE WORDS ARE TRUE AT EVERY MOMENT. No stage is named in this line. While the turn has reported
+            too few steps for a list (an older backend, a simple question, or the instant before the first
+            one lands) this head IS the plain loader — the mark beside the honest sentence.
           -->
-          <div class="assistant-msg__waiting" role="status" data-testid="assistant-waiting">
-            <!--
-              The assistant's own face while it thinks — an avatar, in the shape every chat uses for
-              one. It replaces the three dots: the dots said "something is happening", the mark says
-              WHO is doing it, which is the same information plus an identity.
-
-              ★ TWO IMAGES, ONE VISIBLE. The animated mark is a GIF, and a GIF cannot be paused from
-              CSS — so a reader who has asked for less motion gets the STILL assistant mark in the
-              same circle, swapped in stylesheet-side. Both are square and already served from the
-              app root, so neither crops badly and neither is a new asset.
-            -->
-            <span class="assistant-msg__avatar" aria-hidden="true">
-              <img class="assistant-msg__avatar-motion" src="/brain.gif" alt="" />
-              <img class="assistant-msg__avatar-still" src="wasnie_logo.png" alt="" />
+          <div
+            class="assistant-thinking__head"
+            [class.assistant-msg__waiting]="!showSteps()"
+            [attr.role]="showSteps() ? null : 'status'"
+            [attr.data-testid]="showSteps() ? null : 'assistant-waiting'"
+          >
+            <span class="assistant-msg__avatar assistant-thinking__orb" aria-hidden="true">
+              <span class="assistant-thinking__orb-ring"></span>
+              <span class="assistant-thinking__orb-core">
+                <img class="assistant-msg__avatar-still" src="wasnie_logo.png" alt="" />
+              </span>
             </span>
-            <span class="assistant-msg__waiting-text">{{ 'ASSISTANT.PROCESSING' | translate }}</span>
-          </div>
-        }
 
-        @if (waitingLong()) {
-          <p class="assistant-msg__waiting-long" data-testid="assistant-waiting-long">
-            {{ 'ASSISTANT.PROCESSING_LONG' | translate }}
-          </p>
-        }
+            <div class="assistant-thinking__title">
+              <span class="assistant-thinking__eyebrow">Zeke</span>
+              <span class="assistant-msg__waiting-text assistant-thinking__shimmer">{{ 'ASSISTANT.PROCESSING' | translate }}</span>
+            </div>
+          </div>
+
+          <span class="assistant-thinking__bar" aria-hidden="true"><span></span></span>
+
+          <!--
+            ★ THE STEPS ARE THE SERVER'S, NOT A STORYBOARD. Each item exists because the backend reported
+            starting that work, and turns green because it reported finishing it. Below the threshold (a
+            plain understand-then-answer turn) the list is not shown — see showSteps().
+          -->
+          @if (showSteps()) {
+            <ul class="assistant-steps" role="status" data-testid="assistant-steps">
+              @for (step of store.progressSteps(); track step.phase) {
+                <li
+                  class="assistant-steps__item"
+                  [class.assistant-steps__item--done]="step.done"
+                  [attr.data-phase]="step.phase"
+                  [attr.data-state]="step.done ? 'done' : 'running'"
+                >
+                  <span class="assistant-steps__marker" aria-hidden="true">
+                    @if (step.done) {
+                      <app-icon name="check" [size]="12" class="assistant-steps__check" />
+                    } @else {
+                      <span class="assistant-steps__spinner"></span>
+                    }
+                  </span>
+                  <span class="assistant-steps__label">{{ phaseLabel(step.phase) | translate }}</span>
+                </li>
+              }
+            </ul>
+          }
+
+          @if (waitingLong()) {
+            <p class="assistant-msg__waiting-long" data-testid="assistant-waiting-long">
+              <app-icon name="clock" [size]="13" class="assistant-msg__waiting-long-icon" />
+              <span>{{ 'ASSISTANT.PROCESSING_LONG' | translate }}</span>
+            </p>
+          }
+        </div>
       }
     </div>
   }
@@ -332,30 +396,115 @@
     resolved: retry successfully, or ask something new.
   -->
   @if (store.retryable(); as failed) {
-    <div class="assistant-alert" role="alert" data-testid="assistant-failed-alert">
-      <app-icon name="alert-triangle" [size]="16" class="assistant-alert__icon" />
+    @switch (failureKind()) {
+      <!--
+        ★ THE TRIAL IS OUT OF ASSISTANT TOKENS. Not a failure to retry — the server refuses the turn before the
+        model runs, so "Try again" could never succeed. The card says what happened and offers the only way
+        forward: subscribing. The actions are hidden (never disabled) for someone who cannot subscribe (§5.8).
+      -->
+      @case ('trialLimit') {
+        <div class="assistant-alert assistant-alert--limit" role="alert" data-testid="assistant-failed-alert">
+          <span class="assistant-alert__chip" aria-hidden="true"><app-icon name="zap" [size]="16" /></span>
 
-      <div class="assistant-alert__body">
-        <p class="assistant-alert__title">{{ 'ASSISTANT.FAILED_TITLE' | translate }}</p>
-        <!--
-          The specific reason when this session watched it happen; the general one after a reload,
-          because the reason was never stored and claiming a specific one would be inventing it.
-        -->
-        <p class="assistant-alert__text" data-testid="assistant-error">
-          {{ (store.errorKey() ?? 'ASSISTANT.FAILED_DESC') | translate }}
-        </p>
+          <div class="assistant-alert__body">
+            <p class="assistant-alert__title">{{ 'ASSISTANT.TRIAL_LIMIT_TITLE' | translate }}</p>
+            <p class="assistant-alert__text" data-testid="assistant-error">{{ 'ASSISTANT.ERROR_TRIAL_LIMIT_REACHED' | translate }}</p>
 
-        <ws-button
-          variant="secondary"
-          size="sm"
-          [disabled]="store.sending()"
-          (click)="retry()"
-          data-testid="assistant-retry"
-        >
-          {{ 'ASSISTANT.RETRY' | translate }}
-        </ws-button>
-      </div>
-    </div>
+            @if ('Subscription.Manage' | hasPermission) {
+              <div class="assistant-alert__actions">
+                <a class="assistant-alert__upgrade" routerLink="/pricing" data-testid="assistant-upgrade">
+                  <app-icon name="zap" [size]="14" />
+                  {{ 'ASSISTANT.TRIAL_LIMIT_UPGRADE' | translate }}
+                </a>
+                <a class="assistant-alert__link" routerLink="/billing" data-testid="assistant-usage-link">
+                  {{ 'ASSISTANT.TRIAL_LIMIT_USAGE' | translate }}
+                </a>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!--
+        ★ A PAYING TENANT IS OUT OF TOKENS (KAN-83). Deliberately NOT the trial card: this customer already pays, so
+        sending them to /pricing would be telling them to buy what they have. The way out is a boost, and the CTA is
+        hidden — never disabled — for a user who cannot buy one (§5.8).
+      -->
+      @case ('tokensExhausted') {
+        <div class="assistant-alert assistant-alert--limit" role="alert" data-testid="assistant-failed-alert">
+          <span class="assistant-alert__chip" aria-hidden="true"><app-icon name="zap" [size]="16" /></span>
+
+          <div class="assistant-alert__body">
+            <p class="assistant-alert__title">{{ 'ASSISTANT.TOKENS_EXHAUSTED_TITLE' | translate }}</p>
+            <p class="assistant-alert__text" data-testid="assistant-error">{{ 'ASSISTANT.ERROR_TOKENS_EXHAUSTED' | translate }}</p>
+
+            @if ('Subscription.Manage' | hasPermission) {
+              <div class="assistant-alert__actions">
+                <!--
+                  ★★ THE PURCHASE OPENS HERE, over the chat. Sending someone to Settings > Billing to fix a question
+                  that just stopped mid-sentence makes them navigate back to it afterwards; the dialog is the same one
+                  billing opens, so there is one flow and one confirmation, not two.
+                -->
+                <button
+                  type="button"
+                  class="assistant-alert__upgrade"
+                  (click)="addTokensOpen.set(true)"
+                  data-testid="assistant-add-tokens"
+                >
+                  <app-icon name="zap" [size]="14" />
+                  {{ 'ASSISTANT.TOKENS_EXHAUSTED_BUY' | translate }}
+                </button>
+                <a class="assistant-alert__link" routerLink="/billing" data-testid="assistant-usage-link">
+                  {{ 'ASSISTANT.TRIAL_LIMIT_USAGE' | translate }}
+                </a>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- No model configured in this environment: nothing to retry, so no button. -->
+      @case ('notConfigured') {
+        <div class="assistant-alert assistant-alert--info" role="alert" data-testid="assistant-failed-alert">
+          <span class="assistant-alert__chip" aria-hidden="true"><app-icon name="info-circle" [size]="16" /></span>
+
+          <div class="assistant-alert__body">
+            <p class="assistant-alert__title">{{ 'ASSISTANT.FAILED_TITLE' | translate }}</p>
+            <p class="assistant-alert__text" data-testid="assistant-error">{{ 'ASSISTANT.ERROR_NOT_CONFIGURED' | translate }}</p>
+          </div>
+        </div>
+      }
+
+      @default {
+        <div class="assistant-alert" role="alert" data-testid="assistant-failed-alert">
+          <span class="assistant-alert__chip" aria-hidden="true"><app-icon name="alert-triangle" [size]="16" /></span>
+
+          <div class="assistant-alert__body">
+            <p class="assistant-alert__title">{{ 'ASSISTANT.FAILED_TITLE' | translate }}</p>
+            <!--
+              The specific reason when this session watched it happen; the general one after a reload,
+              because the reason was never stored and claiming a specific one would be inventing it.
+            -->
+            <p class="assistant-alert__text" data-testid="assistant-error">
+              {{ (store.errorKey() ?? 'ASSISTANT.FAILED_DESC') | translate }}
+            </p>
+
+            <div class="assistant-alert__actions">
+              <ws-button
+                variant="secondary"
+                size="sm"
+                [disabled]="store.sending()"
+                (click)="retry()"
+                data-testid="assistant-retry"
+              >
+                <app-icon name="refresh" [size]="14" />
+                {{ 'ASSISTANT.RETRY' | translate }}
+              </ws-button>
+            </div>
+          </div>
+        </div>
+      }
+    }
   }
 
   @if (store.error()) {
@@ -436,7 +585,7 @@
     <ws-card variant="raised" padding="none" class="assistant-clarify" data-testid="assistant-clarify">
       <div class="assistant-clarify__head">
         <span class="assistant-clarify__title">
-          <app-icon name="help-circle" [size]="14" />
+          <span class="assistant-clarify__chip" aria-hidden="true"><app-icon name="help-circle" [size]="14" /></span>
           {{ 'ASSISTANT.CLARIFY.TITLE' | translate }}
         </span>
         <!--
@@ -469,6 +618,15 @@
             (click)="chooseClarify(option)"
             data-testid="assistant-clarify-option"
           >
+            <!--
+              ★ THE MARK OF THE LOOKUP, not decoration. Five options that all read "See a payee's …"
+              are told apart faster by their icon than by their sentence, which is what this panel is
+              for. Whitelisted by function, with a neutral fallback (§C2).
+            -->
+            <span class="assistant-clarify__icon" aria-hidden="true">
+              <app-icon [name]="clarifyIcon(option)" [size]="15" />
+            </span>
+
             @if (clarifyEntity(option); as entity) {
               <!--
                 ★★ A RECORD, NOT A FUNCTION. Every option on this form runs the SAME lookup, so
@@ -496,6 +654,8 @@
                 <span class="assistant-clarify__argument">{{ option.argument }}</span>
               }
             }
+            <!-- Decorative: the row is already a button, and its accessible name is the label above. -->
+            <app-icon class="assistant-clarify__go" name="chevron-right" [size]="14" />
           </ws-button>
         }
       </div>
@@ -615,8 +775,21 @@
       Always rendered — not collapsible, not first-run-only. It is a permanent guard rail: the
       assistant reads and explains, it does not compute pay or change data, and it can be wrong.
     -->
-    <p class="assistant-composer__disclaimer" data-testid="assistant-disclaimer">
-      {{ 'ASSISTANT.DISCLAIMER' | translate }}
-    </p>
+    <!--
+      KAN-83 UX — the warning sits ABOVE the standing promise, never below it. The disclaimer is the last thing the
+      panel says and it stays there; a transient alert pushing it down would move the one line that must not move.
+    -->
+    <app-assistant-token-status display="warning" (addTokens)="addTokensOpen.set(true)" />
+
+    <div class="assistant-composer__foot">
+      <p class="assistant-composer__disclaimer" data-testid="assistant-disclaimer">
+        {{ 'ASSISTANT.DISCLAIMER' | translate }}
+        <!-- What the workspace has left, on the same line as the promise rather than as a row of its own. -->
+        <app-assistant-token-status display="inline" />
+      </p>
+    </div>
   </div>
 </footer>
+
+<!-- KAN-83 — the same purchase dialog the billing screen opens. -->
+<app-add-tokens-dialog [(open)]="addTokensOpen" returnTo="Assistant" />

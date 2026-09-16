@@ -80,7 +80,8 @@ public sealed class AssistantChatHandlerTests
 
     private static PostMessageHandler Post(Principal p) =>
         new(p.Db, p.Tenant, p.User, new FakeClock(Now.UtcDateTime), p.Guids, Entitled(),
-            UnconfiguredProvider(), NoKnowledge(), NoNavigation(), NoRouter(), NoTools(), Options.Create(new GroqOptions()), NullLogger<PostMessageHandler>.Instance);
+            UnconfiguredProvider(), NoKnowledge(), NoNavigation(), NoRouter(), NoTools(), Options.Create(new GroqOptions()), NullLogger<PostMessageHandler>.Instance,
+            Substitute.For<Wasnie.Application.Assistant.Abstractions.IModelUsageRecorder>());
 
     /// <summary>
     /// No model configured, so these tests keep exercising the stand-in reply they were written
@@ -223,6 +224,12 @@ public sealed class AssistantChatHandlerTests
 
     // ── 3. The entitlement, tested through its own seam ───────────────────────
 
+    // The seat and the plan are the subject here; the trial allowance (KAN-77) is tested on its own, so the
+    // account is simply a paying one.
+    private static AssistantEntitlement NewEntitlement(IClaimsService claims, IPaidPlanGate gate) =>
+        new(claims, gate, new FakeAccountAccessReader(),
+            Substitute.For<IAssistantTokenBalanceReader>(), Substitute.For<ITenantContext>());
+
     [Fact]
     public async Task Only_an_entitled_user_reaches_the_chat_and_today_that_means_the_tenant_admin()
     {
@@ -230,7 +237,7 @@ public sealed class AssistantChatHandlerTests
         // CompManager this test is EXTENDED with a new case rather than rewritten: the question
         // ("is this principal entitled?") does not change, only the answer for a given principal.
         var claims = Substitute.For<IClaimsService>();
-        var entitlement = new AssistantEntitlement(claims, new FakePaidPlanGate());
+        var entitlement = NewEntitlement(claims, new FakePaidPlanGate());
 
         claims.GetRole().Returns("TenantAdmin");
         (await entitlement.IsEnabledAsync()).Should().BeTrue("today the admin holds the only seat");
@@ -250,7 +257,7 @@ public sealed class AssistantChatHandlerTests
         // Two gates, two different refusals — the whole reason the UI can lock one and hide the other.
         var claims = Substitute.For<IClaimsService>();
 
-        var adminOnFree = new AssistantEntitlement(claims, new FakePaidPlanGate(onPaidPlan: false));
+        var adminOnFree = NewEntitlement(claims, new FakePaidPlanGate(onPaidPlan: false));
         claims.GetRole().Returns("TenantAdmin");
 
         (await adminOnFree.IsEnabledAsync()).Should().BeFalse("Free does not include the assistant");
@@ -263,7 +270,7 @@ public sealed class AssistantChatHandlerTests
         // buying a bigger plan would not give THEM the assistant, so offering it would be a lie.
         foreach (var gate in new[] { new FakePaidPlanGate(true), new FakePaidPlanGate(false) })
         {
-            var seatless = new AssistantEntitlement(claims, gate);
+            var seatless = NewEntitlement(claims, gate);
             claims.GetRole().Returns("Rep");
 
             (await seatless.IsEnabledAsync()).Should().BeFalse();
@@ -363,7 +370,8 @@ public sealed class AssistantChatHandlerTests
         var laterClock = new FakeClock(Now.AddHours(1).UtcDateTime);
         var post = new PostMessageHandler(
             alice.Db, alice.Tenant, alice.User, laterClock, alice.Guids, Entitled(),
-            UnconfiguredProvider(), NoKnowledge(), NoNavigation(), NoRouter(), NoTools(), Options.Create(new GroqOptions()), NullLogger<PostMessageHandler>.Instance);
+            UnconfiguredProvider(), NoKnowledge(), NoNavigation(), NoRouter(), NoTools(), Options.Create(new GroqOptions()), NullLogger<PostMessageHandler>.Instance,
+            Substitute.For<Wasnie.Application.Assistant.Abstractions.IModelUsageRecorder>());
         await post.Handle(new PostMessageCommand(older.Value!.Id, "bump"), CancellationToken.None);
 
         var list = await List(alice).Handle(new ListConversationsQuery(), CancellationToken.None);

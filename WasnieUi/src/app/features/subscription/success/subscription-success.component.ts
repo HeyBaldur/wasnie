@@ -38,16 +38,17 @@ export class SubscriptionSuccessComponent implements OnInit, OnDestroy {
     void this.router.navigateByUrl('/dashboard');
   }
 
+  /** KAN-77: back to the pricing page (the plan wizard it used to return to is gone). */
   backToWizard(): void {
     this.stopPolling();
-    void this.router.navigateByUrl('/onboarding/plan');
+    void this.router.navigateByUrl('/pricing');
   }
 
   private poll(): void {
     this.attempts++;
     this.subscriptionService.getCurrent().subscribe({
       next: sub => {
-        if (sub.status === 'Active' && sub.tier !== 'Free') {
+        if (sub.status === 'Active' && !!sub.stripeSubscriptionId) {
           this.confirmed.set(true);
           this.stopPolling();
           setTimeout(() => this.enterApp(), 1_500);

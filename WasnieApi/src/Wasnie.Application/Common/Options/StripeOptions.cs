@@ -7,10 +7,8 @@ public sealed class StripeOptions
     public string SecretKey { get; init; } = string.Empty;
     public string PublishableKey { get; init; } = string.Empty;
 
-    // Maps Stripe ProductId (prod_...) → Wasnie Tier name (e.g. "Starter").
-    // Used when product.Metadata["tier"] is absent (the common case for existing products).
-    // Precedence: metadata["tier"] → this map → discard with WARNING.
-    public Dictionary<string, string> ProductTierMap { get; init; } = new();
+    // KAN-77: the old ProductTierMap is gone. Which Stripe product is which plan now lives in the plan
+    // catalog (Billing:Plans / product metadata.plan) — see SubscriptionPlanCatalog.
 
     // Webhook signing secret (whsec_...) — used to verify Stripe webhook signatures.
     // Never hardcode; set in appsettings.Development.json (dev) or env var (prod).

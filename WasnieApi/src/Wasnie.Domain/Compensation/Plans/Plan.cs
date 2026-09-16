@@ -291,13 +291,22 @@ public sealed class Plan : AggregateRoot
         RaiseDomainEvent(new PlanArchivedEvent(eventId, now, Id, TenantId));
     }
 
+    /// <summary>
+    /// The part of "can this plan be deleted" the aggregate can answer on its own: only a Draft.
+    ///
+    /// ★ RULES NO LONGER BLOCK (KAN-69). They used to — "a Draft with active rules cannot be deleted" —
+    /// but a rule is configuration, and the rule said nothing about money: it refused clean Drafts that
+    /// had rules, and let through a Draft whose rules had been removed after it generated credits. The
+    /// money question needs the database (assignments, quotas, credits, payouts, ledger, closures), so
+    /// it lives in <c>PlanDeletionBlockers</c>, and the handler asks both.
+    /// </summary>
     public void CheckDeletable()
     {
         if (Status != PlanStatus.Draft)
-            throw new DomainException("Only Draft plans can be deleted.");
-
-        if (_rules.Any(r => r.IsActive))
-            throw new DomainException("Draft plans with active rules cannot be deleted. Archive the plan instead.");
+            throw new DomainCodedException(PlanDeleteInvariant.NotDraft, new Dictionary<string, object?>
+            {
+                ["status"] = Status.ToString(),
+            });
     }
 
     public Plan CloneAsNewVersion(string createdBy, DateTimeOffset now, Func<Guid> newId)

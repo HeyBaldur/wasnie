@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Wasnie.Application.Assistant.Abstractions;
 using Microsoft.Extensions.Options;
 using Wasnie.Application.Common.Options;
 using Wasnie.Infrastructure.Integrations.OpenAiCompatible;
@@ -21,8 +22,9 @@ namespace Wasnie.Infrastructure.Integrations.Groq;
 public sealed class GroqChatProvider(
     IHttpClientFactory httpClientFactory,
     IOptions<GroqOptions> options,
-    ILogger<GroqChatProvider> logger)
-    : OpenAiCompatibleChatProvider(httpClientFactory, logger)
+    ILogger<GroqChatProvider> logger,
+    IModelUsageRecorder? usageRecorder = null)
+    : OpenAiCompatibleChatProvider(httpClientFactory, logger, usageRecorder)
 {
     /// <summary>Named client, matching how Resend and HubSpot are wired.</summary>
     public const string HttpClientName = "Groq";

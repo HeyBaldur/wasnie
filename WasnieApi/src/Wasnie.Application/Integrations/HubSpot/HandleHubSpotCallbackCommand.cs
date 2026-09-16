@@ -28,6 +28,7 @@ public sealed class HandleHubSpotCallbackHandler(
     IClock clock,
     IGuidGenerator guid,
     IOptions<HubSpotOptions> options,
+    IAccountAccessReader accessReader,
     ILogger<HandleHubSpotCallbackHandler> logger)
     : IRequestHandler<HandleHubSpotCallbackCommand, Result<Unit>>
 {
@@ -60,17 +61,14 @@ public sealed class HandleHubSpotCallbackHandler(
         // and land back here after downgrading (or after the subscription lapses mid-handshake). Without
         // this, that returns with live tokens the sync would then refuse to use, leaving credentials
         // stored for a workspace that is not entitled to them.
-        var tier = await db.Tenants
-            .IgnoreQueryFilters()
-            .Where(t => t.Id == state.TenantId)
-            .Select(t => (Tier?)t.Tier)
-            .FirstOrDefaultAsync(cancellationToken);
+        // KAN-77: the question is whether the ACCOUNT has access (trial or paying), same rule as the paywall.
+        var access = await accessReader.GetAsync(state.TenantId, cancellationToken);
 
-        if (tier is null || !TierFeatures.IncludesPaidFeatures(tier.Value))
+        if (access is not { HasAccess: true })
         {
             logger.LogWarning(
-                "HubSpot callback refused for tenant {TenantId}: tier {Tier} does not include the integration.",
-                state.TenantId, tier);
+                "HubSpot callback refused for tenant {TenantId}: account is {State} ({Reason}).",
+                state.TenantId, access?.State.ToString() ?? "missing", access?.LockReason);
             await db.SaveChangesAsync(cancellationToken); // persist state consumption
             return Result<Unit>.Failure("The HubSpot integration is not included in your current plan.");
         }

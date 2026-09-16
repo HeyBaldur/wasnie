@@ -12,11 +12,12 @@ import {
 import { ParseResponse } from '../models/transaction-import.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
 import { detectField, TRANSACTION_FIELD_PATTERNS } from '../helpers/column-auto-detect';
+import { ImportStepHeroComponent } from '../../shared/import-step-hero.component';
 
 @Component({
   selector: 'app-tx-update-mapping-step',
   standalone: true,
-  imports: [TranslateModule, ReactiveFormsModule, IconComponent, WsButtonComponent, WsSelectComponent],
+  imports: [ImportStepHeroComponent, TranslateModule, ReactiveFormsModule, IconComponent, WsButtonComponent, WsSelectComponent],
   templateUrl: './update-mapping-step.component.html',
   styleUrl: './update-mapping-step.component.scss',
 })

@@ -15,8 +15,6 @@ import {
   ValidateResponse,
 } from './models/payee-import.models';
 import { PayeesStore } from '../../payees/state/payees.store';
-import { SubscriptionStateService } from '../../subscription/services/subscription-state.service';
-import { TIER_LIMITS } from '../../../shared/services/tier-limits';
 
 type WizardStep = 'upload' | 'map' | 'preview' | 'importing' | 'complete';
 
@@ -50,22 +48,15 @@ interface PersistedWizardState {
 })
 export class PayeeImportWizardComponent implements OnInit {
   private readonly payeesStore = inject(PayeesStore);
-  private readonly subState = inject(SubscriptionStateService);
   private readonly router = inject(Router);
 
   readonly currentStep = signal<WizardStep>('upload');
   readonly cancelConfirmOpen = signal(false);
 
-  private get payeesTierLimit(): number {
-    const tier = this.subState.subscription()?.tier ?? 'Free';
-    return TIER_LIMITS[tier]?.maxPayees ?? -1;
-  }
-
-  readonly atPayeesLimit = computed(() => {
-    const limit = this.payeesTierLimit;
-    if (limit < 0) return false;
-    return this.payeesStore.unfilteredTotal() >= limit;
-  });
+  // KAN-77: no client-side plan limit. This used to pre-check a hard-coded tier table (Free: 1 plan / 5 payees)
+  // and — reading "Free" whenever the tenant had no subscription — would have blocked every TRIAL at its second
+  // plan. The server enforces the plan's real limit and answers 403 TierLimitExceeded, which
+  // the import endpoint answers 409 blocked, which the importing step turns into the limit modal.
 
   parseResult = signal<(ParseResponse & { fileName: string; fileSize: number }) | null>(null);
   columnMapping = signal<PayeeImportColumnMapping | null>(null);

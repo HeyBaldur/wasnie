@@ -3,16 +3,16 @@ using Microsoft.Extensions.Options;
 using Stripe;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
-using Wasnie.Domain.Authorization;
+using Wasnie.Application.Features.Subscription;
 
 namespace Wasnie.Infrastructure.Services;
 
 public sealed class StripeSubscriptionManagementService(
     IOptions<StripeOptions> options,
-    ILogger<StripeSubscriptionManagementService> logger)
+    ISubscriptionPlanCatalog catalog)
     : IStripeSubscriptionManagementService
 {
-    public async Task<Tier?> GetCurrentTierFromStripeAsync(
+    public async Task<string?> GetCurrentPlanCodeFromStripeAsync(
         string subscriptionId,
         CancellationToken cancellationToken = default)
     {
@@ -27,16 +27,7 @@ public sealed class StripeSubscriptionManagementService(
         if (price?.Product is not Product product)
             return null;
 
-        var tierSlug = StripeSubscriptionPlanService.ResolveTier(
-            product.Id,
-            product.Metadata,
-            options.Value.ProductTierMap,
-            logger);
-
-        if (tierSlug is null)
-            return null;
-
-        return Enum.TryParse<Tier>(tierSlug, ignoreCase: true, out var tier) ? tier : null;
+        return catalog.ResolveStripeProduct(product.Id, product.Metadata)?.Code;
     }
 
     public async Task<Subscription> GetSubscriptionWithProductAsync(

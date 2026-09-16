@@ -1,7 +1,7 @@
 namespace Wasnie.Application.Features.Subscription.DTOs;
 
 public sealed record UserSubscriptionDto(
-    string Tier,
+    string? PlanCode,
     string Status,
     string BillingEmail,
     string? StripeSubscriptionId,

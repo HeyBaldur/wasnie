@@ -147,7 +147,9 @@
 
   display: block;
   text-align: left;
-  padding: var(--space-2);
+  // Slightly more horizontal room than vertical: the titles are long and truncated, so the space that
+  // matters is at their ends.
+  padding: var(--space-2) var(--space-3);
   border: none;
   background: none;
   cursor: pointer;
@@ -160,6 +162,13 @@
 .assistant-clist__item-title {
   display: block;
   font-size: var(--font-size-13);
+  // ★ SEMIBOLD, AND IT IS THE TITLE OF A THING, NOT A LINE OF PROSE. At regular weight a column of
+  // sentences read as a paragraph broken into rows; the weight is what makes each one scan as a named
+  // conversation. The ink stays SECONDARY so the active row — same weight, accent colour — is still
+  // the one that stands out, and hover still has somewhere to go.
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
   color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Extensions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Application.Compensation.Queries.Plans;
@@ -78,11 +79,18 @@ public sealed class ListPlansHandler(IApplicationDbContext db, IAuthorizationSer
             .Select(g => new { PlanId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.PlanId, x => x.Count, cancellationToken);
 
+        // Only a Draft can be deleted, so only Drafts are asked about dependencies.
+        var draftIds = paged.Items.Where(x => x.Status == PlanStatus.Draft).Select(x => x.Id).ToList();
+        var blockers = await PlanDeletionBlockers.FindAsync(db, draftIds, cancellationToken);
+
         return Result<PagedResult<PlanSummaryDto>>.Success(new PagedResult<PlanSummaryDto>
         {
             // GetValueOrDefault: a plan with no assignments has no group, and 0 is the truth there.
             Items = paged.Items
-                .Select(plan => CompensationMapper.ToPlanSummaryDto(plan, assignmentCounts.GetValueOrDefault(plan.Id)))
+                .Select(plan => CompensationMapper.ToPlanSummaryDto(
+                    plan,
+                    assignmentCounts.GetValueOrDefault(plan.Id),
+                    isDeletable: plan.Status == PlanStatus.Draft && !blockers.ContainsKey(plan.Id)))
                 .ToList(),
             TotalCount = paged.TotalCount,
             Page = paged.Page,

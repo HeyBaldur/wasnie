@@ -32,7 +32,8 @@ public sealed class CreateBillingPortalSessionCommandHandler(
             return Result<BillingPortalSessionDto>.Failure(
                 "No Stripe customer associated with this subscription.");
 
-        var returnUrl = $"{stripeOptions.Value.FrontendBaseUrl}/subscription";
+        // KAN-77: billing lives at /billing ("Manage billing"); /subscription only redirects there.
+        var returnUrl = $"{stripeOptions.Value.FrontendBaseUrl}/billing";
 
         try
         {

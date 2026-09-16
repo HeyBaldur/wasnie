@@ -2,7 +2,8 @@ import { Component, DestroyRef, HostListener, OnInit, computed, inject, signal }
 import { createRowMenu } from '../../../shared/utils/row-menu';
 import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { extractApiError } from '../../../shared/utils/api-error';
+import { extractApiError, extractApiErrorCode } from '../../../shared/utils/api-error';
+import { deletePlanErrorKey } from './delete-plan-error';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
@@ -13,9 +14,6 @@ import { PlansStore } from '../state/plans.store';
 import { ToastService } from '../../../shared/services/toast.service';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { PlanStatus } from '../models/plan.model';
-import { SubscriptionStateService } from '../../subscription/services/subscription-state.service';
-import { TierLimitModalService } from '../../../shared/components/tier-limit-modal/tier-limit-modal.service';
-import { TIER_LIMITS } from '../../../shared/services/tier-limits';
 import {
   WsButtonComponent,
   WsInputComponent,
@@ -31,11 +29,16 @@ import {
   type SegOption,
 } from '../../../shared/ui';
 
+import { FavoritesTableComponent } from '../../favorites/favorites-table/favorites-table.component';
+import { FavoriteStarComponent } from '../../favorites/favorite-star/favorite-star.component';
+
 @Component({
   selector: 'app-plans-list',
   standalone: true,
   imports: [
     AppShellComponent,
+    FavoritesTableComponent,
+    FavoriteStarComponent,
     RefreshOnEnterDirective,
     IconComponent,
     RouterLink,
@@ -64,31 +67,12 @@ export class PlansListComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
-  private readonly subState = inject(SubscriptionStateService);
-  private readonly tierLimitModal = inject(TierLimitModalService);
 
-  readonly atPlansLimit = computed(() => {
-    const tier = this.subState.subscription()?.tier ?? 'Free';
-    const max = TIER_LIMITS[tier]?.maxPlans ?? -1;
-    return max !== -1 && this.store.unfilteredTotal() >= max;
-  });
-
-  get plansTierLimit(): number {
-    const tier = this.subState.subscription()?.tier ?? 'Free';
-    return TIER_LIMITS[tier]?.maxPlans ?? -1;
-  }
-
+  // KAN-77: no client-side plan limit. This used to pre-check a hard-coded tier table (Free: 1 plan / 5 payees)
+  // and — reading "Free" whenever the tenant had no subscription — would have blocked every TRIAL at its second
+  // plan. The server enforces the plan's real limit and answers 403 TierLimitExceeded, which
+  // forbiddenResponseInterceptor turns into the same limit modal.
   onCreatePlan(): void {
-    if (this.atPlansLimit()) {
-      const tier = this.subState.subscription()?.tier ?? 'Free';
-      this.tierLimitModal.show({
-        tier,
-        currentCount: this.store.unfilteredTotal(),
-        limit: this.plansTierLimit,
-        entityKey: 'plans',
-      });
-      return;
-    }
     void this.router.navigate(['new'], { relativeTo: this.route });
   }
 
@@ -192,7 +176,17 @@ export class PlansListComponent implements OnInit {
       this.deleteOpen.set(false);
       this.pendingDeleteId.set(null);
     } catch (err) {
-      this.toast.show(extractApiError(err), 'error');
+      // The refusal arrives as a code (KAN-69), with no `message` on purpose: translate it through the
+      // whitelist. Only a response that is not coded at all (404, network) uses the plain message path.
+      const coded = extractApiErrorCode(err);
+      this.toast.show(coded ? deletePlanErrorKey(coded) : extractApiError(err), 'error');
+      // A coded refusal means the plan changed since the list loaded: close the dialog and reload, so the
+      // menu stops offering a delete the server will not do.
+      if (coded) {
+        this.deleteOpen.set(false);
+        this.pendingDeleteId.set(null);
+        await this.store.loadPlans();
+      }
     } finally {
       this.deleteSaving.set(false);
     }
@@ -200,16 +194,6 @@ export class PlansListComponent implements OnInit {
 
   async onClone(planId: string): Promise<void> {
     this.closeMenu();
-    if (this.atPlansLimit()) {
-      const tier = this.subState.subscription()?.tier ?? 'Free';
-      this.tierLimitModal.show({
-        tier,
-        currentCount: this.store.unfilteredTotal(),
-        limit: this.plansTierLimit,
-        entityKey: 'plans',
-      });
-      return;
-    }
     try {
       await this.store.clonePlan(planId);
       this.toast.show('PLANS.TOAST_CLONED', 'success');

@@ -1,97 +1,103 @@
 <form [formGroup]="form" class="mapping-step">
-  <!-- Required fields -->
-  <div class="mapping-section">
-    <h3 class="mapping-section__title">{{ 'IMPORTS.TRANSACTIONS.MAP_REQUIRED' | translate }}</h3>
-    <div class="mapping-rows">
+  <app-import-step-hero kind="map" titleKey="IMPORTS.SHARED.HERO_MAP_TITLE" descKey="IMPORTS.SHARED.HERO_MAP_DESC" />
 
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_REFERENCE_NUMBER' | translate }}</span>
-          <span class="mapping-row__required">*</span>
-        </div>
-        <ws-select formControlName="referenceNumberColumn" [options]="columnOptions()" />
-      </div>
+  <!-- ★ ONE COMPACT CARD: required fields on the left, optional on the right, so the whole mapping fits
+       without scrolling. Stacks to one column on narrow screens. -->
+  <div class="mapping-columns">
+    <!-- Required fields -->
+    <div class="mapping-section">
+      <h3 class="mapping-section__title">{{ 'IMPORTS.TRANSACTIONS.MAP_REQUIRED' | translate }}</h3>
+      <div class="mapping-rows">
 
-      <!-- Payee code sits here only while the tenant's "Require payee on new transactions"
-           setting is Required; otherwise it renders in the Optional section below and a row
-           without it imports as Unassigned, the same as an unmatched HubSpot deal owner. -->
-      @if (payeeRequired()) {
         <div class="mapping-row">
           <div class="mapping-row__field">
-            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PAYEE_CODE' | translate }}</span>
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_REFERENCE_NUMBER' | translate }}</span>
             <span class="mapping-row__required">*</span>
           </div>
-          <ws-select formControlName="payeeCodeColumn" [options]="columnOptions()" />
+          <ws-select formControlName="referenceNumberColumn" [options]="columnOptions()" />
         </div>
-      }
 
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_AMOUNT' | translate }}</span>
-          <span class="mapping-row__required">*</span>
-        </div>
-        <ws-select formControlName="amountColumn" [options]="columnOptions()" />
-      </div>
+        <!-- Payee code sits here only while the tenant's "Require payee on new transactions"
+             setting is Required; otherwise it renders in the Optional section below and a row
+             without it imports as Unassigned, the same as an unmatched HubSpot deal owner. -->
+        @if (payeeRequired()) {
+          <div class="mapping-row">
+            <div class="mapping-row__field">
+              <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PAYEE_CODE' | translate }}</span>
+              <span class="mapping-row__required">*</span>
+            </div>
+            <ws-select formControlName="payeeCodeColumn" [options]="columnOptions()" />
+          </div>
+        }
 
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_CURRENCY' | translate }}</span>
-          <span class="mapping-row__required">*</span>
-        </div>
-        <ws-select formControlName="currencyColumn" [options]="columnOptions()" />
-      </div>
-
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_TRANSACTION_DATE' | translate }}</span>
-          <span class="mapping-row__required">*</span>
-        </div>
-        <ws-select formControlName="transactionDateColumn" [options]="columnOptions()" />
-      </div>
-    </div>
-  </div>
-
-  <!-- Optional fields -->
-  <div class="mapping-section">
-    <h3 class="mapping-section__title">{{ 'IMPORTS.TRANSACTIONS.MAP_OPTIONAL' | translate }}</h3>
-    <div class="mapping-rows">
-      @if (!payeeRequired()) {
         <div class="mapping-row">
           <div class="mapping-row__field">
-            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PAYEE_CODE' | translate }}</span>
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_AMOUNT' | translate }}</span>
+            <span class="mapping-row__required">*</span>
           </div>
-          <ws-select formControlName="payeeCodeColumn" [options]="columnOptions()" />
+          <ws-select formControlName="amountColumn" [options]="columnOptions()" />
         </div>
-      }
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_EXTERNAL_ID' | translate }}</span>
+
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_CURRENCY' | translate }}</span>
+            <span class="mapping-row__required">*</span>
+          </div>
+          <ws-select formControlName="currencyColumn" [options]="columnOptions()" />
         </div>
-        <ws-select formControlName="externalIdColumn" [options]="columnOptions()" />
+
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_TRANSACTION_DATE' | translate }}</span>
+            <span class="mapping-row__required">*</span>
+          </div>
+          <ws-select formControlName="transactionDateColumn" [options]="columnOptions()" />
+        </div>
       </div>
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_DESCRIPTION' | translate }}</span>
+    </div>
+
+    <!-- Optional fields -->
+    <div class="mapping-section">
+      <h3 class="mapping-section__title">{{ 'IMPORTS.TRANSACTIONS.MAP_OPTIONAL' | translate }}</h3>
+      <div class="mapping-rows">
+        @if (!payeeRequired()) {
+          <div class="mapping-row">
+            <div class="mapping-row__field">
+              <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PAYEE_CODE' | translate }}</span>
+            </div>
+            <ws-select formControlName="payeeCodeColumn" [options]="columnOptions()" />
+          </div>
+        }
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_EXTERNAL_ID' | translate }}</span>
+          </div>
+          <ws-select formControlName="externalIdColumn" [options]="columnOptions()" />
         </div>
-        <ws-select formControlName="descriptionColumn" [options]="columnOptions()" />
-      </div>
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PRODUCT_NAME' | translate }}</span>
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_DESCRIPTION' | translate }}</span>
+          </div>
+          <ws-select formControlName="descriptionColumn" [options]="columnOptions()" />
         </div>
-        <ws-select formControlName="productNameColumn" [options]="columnOptions()" />
-      </div>
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PRODUCT_SKU' | translate }}</span>
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PRODUCT_NAME' | translate }}</span>
+          </div>
+          <ws-select formControlName="productNameColumn" [options]="columnOptions()" />
         </div>
-        <ws-select formControlName="productSkuColumn" [options]="columnOptions()" />
-      </div>
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_QUANTITY' | translate }}</span>
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PRODUCT_SKU' | translate }}</span>
+          </div>
+          <ws-select formControlName="productSkuColumn" [options]="columnOptions()" />
         </div>
-        <ws-select formControlName="quantityColumn" [options]="columnOptions()" />
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_QUANTITY' | translate }}</span>
+          </div>
+          <ws-select formControlName="quantityColumn" [options]="columnOptions()" />
+        </div>
       </div>
     </div>
   </div>
@@ -100,8 +106,8 @@
   @if (previewRows.length > 0 && mappedPreviewHeaders.length > 0) {
     <div class="preview-section">
       <h3 class="preview-section__title">{{ 'IMPORTS.TRANSACTIONS.PREVIEW_SAMPLE' | translate }}</h3>
-      <div class="preview-table-wrap">
-        <table class="preview-table">
+      <ws-table class="import-table">
+        <table>
           <thead>
             <tr>
               @for (h of mappedPreviewHeaders; track h.label) {
@@ -119,7 +125,7 @@
             }
           </tbody>
         </table>
-      </div>
+      </ws-table>
     </div>
   }
 

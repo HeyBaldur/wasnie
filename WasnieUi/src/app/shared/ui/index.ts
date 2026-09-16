@@ -17,6 +17,7 @@ export { WsSegmentedControlComponent, type SegOption } from './ws-segmented-cont
 export { WsTabsComponent, type WsTab } from './ws-tabs/ws-tabs.component';
 export { WsBadgeComponent, type BadgeVariant, type BadgeSize } from './ws-badge/ws-badge.component';
 export { WsCopyButtonComponent, CopiedFeedbackMs } from './ws-copy-button/ws-copy-button.component';
+export { WsFavoriteToggleComponent } from './ws-favorite-toggle/ws-favorite-toggle.component';
 export { WsTooltipDirective } from './ws-tooltip/ws-tooltip.directive';
 export { WsTableComponent } from './ws-table/ws-table.component';
 export { WsTablePaginationComponent } from './ws-table/ws-table-pagination.component';

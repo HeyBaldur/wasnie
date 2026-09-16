@@ -3,6 +3,7 @@ import {
   Component,
   effect,
   ElementRef,
+  inject,
   input,
   OnDestroy,
   output,
@@ -13,29 +14,37 @@ import {
   BarElement,
   CategoryScale,
   Chart,
+  ChartArea,
   LinearScale,
+  Plugin,
+  ScriptableContext,
   Tooltip,
 } from 'chart.js';
 import type { BarChartPoint } from '../ws-bar-chart/ws-bar-chart.component';
+import {
+  ChartPalette,
+  chartTooltip,
+  prefersReducedMotion,
+  readChartPalette,
+  replayWhenVisible,
+  withAlpha,
+} from '../chart-theme';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
-
-const BLUE      = '#3b82f6';
-const GRAY      = '#4b5563';
-const TICK_LBL  = '#374151';
-const TICK_AXIS = '#6b7280';
-const GRID      = 'rgba(0,0,0,0.06)';
 
 /**
  * Horizontal bar chart comparing two periods (prior vs current).
  *
- * Single dataset with a per-bar backgroundColor array — Chart.js assigns
- * one colour per row without creating ghost space. Two separate datasets
- * with null values would double each channel height because Chart.js still
- * reserves layout room for the null slot.
+ * Single dataset with per-bar styling — Chart.js assigns one style per row without creating ghost space. Two
+ * separate datasets with null values would double each channel height because Chart.js still reserves layout
+ * room for the null slot.
  *
- * minBarLength: 8 guarantees the prior bar renders even when its value is
- * orders of magnitude smaller than the current (e.g. €94k vs €5.9T).
+ * minBarLength guarantees the prior bar renders even when its value is orders of magnitude smaller than the
+ * current (e.g. €94k vs €5.9T).
+ *
+ * ★ SAME LANGUAGE AS THE PAYEE'S SALES TREND (ws-bar-chart): the current period is a blue→violet gradient that
+ * glows, the prior one a soft neutral bar; each bar carries its amount at its end; hovering lights the row; the
+ * bars grow in from the axis the first time the chart is seen. Colours come from the design tokens.
  */
 @Component({
   selector: 'ws-hbar-chart',
@@ -46,6 +55,7 @@ const GRID      = 'rgba(0,0,0,0.06)';
 })
 export class WsHBarChartComponent implements OnDestroy {
   @ViewChild('canvas', { static: true }) private canvasRef!: ElementRef<HTMLCanvasElement>;
+  private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly points = input<BarChartPoint[]>([]);
 
@@ -56,8 +66,8 @@ export class WsHBarChartComponent implements OnDestroy {
    */
   readonly barClick = output<BarChartPoint>();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private chart: Chart<'bar', number[], string> | null = null;
+  private visibility: IntersectionObserver | null = null;
 
   constructor() {
     afterNextRender(() => { if (!this.chart) this.initChart(); });
@@ -67,18 +77,34 @@ export class WsHBarChartComponent implements OnDestroy {
       if (!this.chart || !prior || !current) return;
       this.chart.data.labels           = [prior.label, current.label];
       this.chart.data.datasets[0].data = [prior.value, current.value];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.chart.data.datasets[0] as any).backgroundColor = [GRAY, BLUE];
       this.chart.update('none');
     });
   }
 
   private initChart(): void {
     const canvas = this.canvasRef.nativeElement;
-    if (!canvas.getContext('2d')) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
     const [prior, current] = this.splitPoints();
     if (!prior || !current) return;
+
+    const palette = readChartPalette(this.host.nativeElement, ctx);
+    const reducedMotion = prefersReducedMotion();
+
+    const barFill = (context: ScriptableContext<'bar'>, hover: boolean): CanvasGradient | string => {
+      const area = context.chart.chartArea as ChartArea | undefined;
+      if (!area) return palette.blue;
+      const g = context.chart.ctx.createLinearGradient(area.left, 0, area.right, 0);
+      if (context.dataIndex === 1) {
+        g.addColorStop(0, palette.blue);
+        g.addColorStop(1, palette.violet);
+      } else {
+        g.addColorStop(0, withAlpha(palette.tick, hover ? 0.55 : 0.35));
+        g.addColorStop(1, withAlpha(palette.tick, hover ? 0.8 : 0.6));
+      }
+      return g;
+    };
 
     this.chart = new Chart<'bar', number[], string>(canvas, {
       type: 'bar',
@@ -87,20 +113,29 @@ export class WsHBarChartComponent implements OnDestroy {
         datasets: [{
           label: 'Amount',
           data: [prior.value, current.value],
-          // Per-bar colours via array: index 0 = prior (gray), index 1 = current (blue)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          backgroundColor: [GRAY, BLUE] as any,
+          backgroundColor: (c) => barFill(c, false),
+          hoverBackgroundColor: (c) => barFill(c, true),
           borderWidth: 0,
-          borderRadius: 4,
-          barThickness: 14,
-          minBarLength: 8,
+          borderRadius: 999,
+          borderSkipped: false,
+          barThickness: 16,
+          minBarLength: 10,
         }],
       },
       options: {
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 300 },
+        // Room at the end of the longest bar for its amount label.
+        layout: { padding: { right: 64 } },
+        interaction: { mode: 'nearest', axis: 'y', intersect: false },
+        animation: reducedMotion
+          ? false
+          : {
+              duration: 900,
+              easing: 'easeOutQuart',
+              delay: (c) => (c.type === 'data' && c.mode === 'default' ? c.dataIndex * 140 : 0),
+            },
         // Bars are drill-down handles. The points are re-read from the input rather than captured from
         // the closure, so a click always resolves against the data currently rendered.
         onClick: (_evt, elements) => {
@@ -118,22 +153,22 @@ export class WsHBarChartComponent implements OnDestroy {
         plugins: {
           legend: { display: false },
           tooltip: {
-            enabled: true,
+            ...chartTooltip(palette),
             callbacks: {
-              label: (ctx) => {
-                const pt    = ctx.dataIndex === 1 ? current : prior;
-                const value = ctx.parsed.x ?? 0;
-                return ` ${this.fmt(value, pt?.currency ?? '')}`;
+              label: (tooltipCtx) => {
+                const [p, c] = this.splitPoints();
+                const pt = tooltipCtx.dataIndex === 1 ? c : p;
+                return this.fmt(tooltipCtx.parsed.x ?? 0, pt?.currency ?? '');
               },
             },
           },
         },
         scales: {
           x: {
-            grid:   { color: GRID },
-            border: { display: false },
+            grid:   { color: palette.grid, tickBorderDash: [4, 4] },
+            border: { display: false, dash: [4, 4] },
             ticks: {
-              color: TICK_AXIS,
+              color: palette.tick,
               font:  { size: 11 },
               maxTicksLimit: 5,
               callback: (val) => this.fmtAxis(Number(val)),
@@ -143,16 +178,86 @@ export class WsHBarChartComponent implements OnDestroy {
             grid:   { display: false },
             border: { display: false },
             ticks: {
-              color: TICK_LBL,
-              font:  { size: 12, weight: 'bold' as const },
+              color: (c) => (c.index === 1 ? palette.violet : palette.label),
+              font:  (c) => ({ size: 12, weight: c.index === 1 ? 700 : 600 }),
             },
           },
         },
       },
+      plugins: [this.hoverRow(palette), this.currentGlow(palette), this.valueLabels(palette)],
+    });
+
+    this.visibility?.disconnect();
+    this.visibility = replayWhenVisible(canvas, () => {
+      this.chart?.reset();
+      this.chart?.update();
     });
   }
 
+  // ── Plugins ────────────────────────────────────────────────────────────────
+
+  /** A soft band behind the hovered row. */
+  private hoverRow(palette: ChartPalette): Plugin<'bar'> {
+    return {
+      id: 'wsHoverRow',
+      beforeDatasetsDraw: (chart) => {
+        const active = chart.getActiveElements();
+        if (!active.length) return;
+        const bar = chart.getDatasetMeta(0).data[active[0].index] as unknown as { y: number; height: number };
+        const { left, right } = chart.chartArea;
+        const height = bar.height * 2;
+        const c = chart.ctx;
+        c.save();
+        c.fillStyle = withAlpha(palette.violet, 0.08);
+        c.beginPath();
+        c.roundRect(left, bar.y - height / 2, right - left, height, 8);
+        c.fill();
+        c.restore();
+      },
+    };
+  }
+
+  /** The current period's bar glows. */
+  private currentGlow(palette: ChartPalette): Plugin<'bar'> {
+    return {
+      id: 'wsCurrentGlow',
+      afterDatasetDraw: (chart) => {
+        const bar = chart.getDatasetMeta(0).data[1] as unknown as { draw: (ctx: CanvasRenderingContext2D) => void } | undefined;
+        if (!bar) return;
+        const c = chart.ctx;
+        c.save();
+        c.shadowColor = withAlpha(palette.violet, 0.45);
+        c.shadowBlur = 14;
+        c.shadowOffsetY = 3;
+        bar.draw(c);
+        c.restore();
+      },
+    };
+  }
+
+  /** Each bar's amount, just past its end. */
+  private valueLabels(palette: ChartPalette): Plugin<'bar'> {
+    return {
+      id: 'wsValueLabels',
+      afterDatasetsDraw: (chart) => {
+        const [prior, current] = this.splitPoints();
+        const c = chart.ctx;
+        c.save();
+        c.textBaseline = 'middle';
+        [prior, current].forEach((pt, i) => {
+          const bar = chart.getDatasetMeta(0).data[i] as unknown as { x: number; y: number } | undefined;
+          if (!pt || !bar) return;
+          c.font = `${i === 1 ? 700 : 600} 11px system-ui, -apple-system, "Segoe UI", sans-serif`;
+          c.fillStyle = i === 1 ? palette.violet : palette.label;
+          c.fillText(this.fmtCompact(pt.value, pt.currency ?? ''), bar.x + 8, bar.y);
+        });
+        c.restore();
+      },
+    };
+  }
+
   ngOnDestroy(): void {
+    this.visibility?.disconnect();
     this.chart?.destroy();
   }
 
@@ -177,5 +282,13 @@ export class WsHBarChartComponent implements OnDestroy {
           minimumFractionDigits: 0, maximumFractionDigits: 0,
         }).format(value)
       : value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  }
+
+  private fmtCompact(value: number, currency: string): string {
+    return currency
+      ? new Intl.NumberFormat('en-US', {
+          style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1,
+        }).format(value)
+      : new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
   }
 }

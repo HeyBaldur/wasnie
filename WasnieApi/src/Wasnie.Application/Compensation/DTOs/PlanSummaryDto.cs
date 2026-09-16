@@ -11,4 +11,7 @@ public sealed record PlanSummaryDto(
     int ActiveRuleCount,
     // Active assignments. The list screen archives plans too, and its confirmation must name the
     // same number the detail screen does.
-    int ActiveAssignmentCount);
+    int ActiveAssignmentCount,
+    // Draft AND nothing points at it (PlanDeletionBlockers) — the same answer DeletePlanHandler gives, so
+    // the list offers Delete exactly when the delete would succeed. Derived on every read, never stored.
+    bool IsDeletable);

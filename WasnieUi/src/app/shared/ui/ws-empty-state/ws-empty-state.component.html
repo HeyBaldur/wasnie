@@ -4,7 +4,7 @@
       <ws-video [src]="video()" [poster]="videoPoster()" />
     </div>
   } @else if (illustrationHtml()) {
-    <div class="ws-es__illustration" [innerHTML]="illustrationHtml()"></div>
+    <div class="ws-es__illustration" [class.ws-es__illustration--art]="isArtwork()" [innerHTML]="illustrationHtml()"></div>
   } @else if (icon()) {
     <div class="ws-es__icon-wrap">
       <app-icon [name]="icon()" [size]="36" />

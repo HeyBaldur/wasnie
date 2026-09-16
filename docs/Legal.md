@@ -15,7 +15,7 @@
 > Cuando las brechas de nivel 1 estén cerradas, este documento pasa a ser el **insumo** del anexo legal,
 > no el anexo mismo.
 
-**Última actualización:** 2026-08-26
+**Última actualización:** 2026-09-15
 **Alcance:** el asistente de IA de Wasnie y su flujo de datos hacia el proveedor de LLM.
 **Fuera de alcance:** el resto del producto (importaciones, HubSpot, Stripe, emails) — no auditado bajo
 esta óptica todavía.
@@ -246,8 +246,9 @@ Configuración activa en el momento de la auditoría:
 **Nota:** existe un segundo proveedor implementado (Groq, también EEUU), seleccionable por configuración.
 Cualquier DPA debe contemplar qué proveedores quedan habilitados.
 
-**⚠️ PENDIENTE:** identificar **qué vendor downstream** sirve efectivamente `openai/gpt-oss-20b` a través
-de OpenRouter. No es determinable desde el repositorio; hay que obtenerlo del proveedor.
+**✅ RESPONDIDO (2026-09-15, ver §5.2):** el vendor downstream **sí es determinable** — OpenRouter lo
+devuelve en cada respuesta y la API ahora lo registra. Con el ruteo por defecto servían **AkashML** y
+**Darkbloom**, variables de una llamada a otra. En Development el ruteo pasó a estar **declarado**.
 
 ### 5.1 La selección de proveedor es explícita y obligatoria (2026-08-26)
 
@@ -282,6 +283,50 @@ configuración. Que hoy ningún entorno lo seleccione **no lo saca de la cadena 
 tiene que nombrar a **todos los proveedores habilitados en el código**, no solo al activo. La alternativa
 —si se decide que Groq no debe poder elegirse— es quitarlo del código, y eso es una decisión de negocio
 que este cambio deliberadamente no toma.
+
+### 5.2 Vendors downstream: medidos y, en Development, declarados (2026-09-15, KAN-74)
+
+**Hecho medido, no supuesto.** OpenRouter incluye en cada respuesta el campo `provider` (quién ejecutó el
+modelo). Desde KAN-74 la API lo registra por llamada, **solo metadatos** (vendor, modelo, tokens; nunca
+contenido) — log «Model call {Call} served by {Upstream}» (`OpenAiCompatibleChatProvider.cs`, `LogServedBy`).
+
+**Con el ruteo por defecto de OpenRouter** (elige el host **más barato**), las llamadas de Zeke del
+2026-09-15 las sirvieron:
+
+| Llamada | Modelo | Vendor observado | Observación |
+|---|---|---|---|
+| Router de secciones | `gpt-oss-20b` | **AkashML** | 8,96 s para 35 tokens |
+| Selector de tools | `gpt-oss-20b` | **Darkbloom** | 6,2 s para 176 tokens |
+
+Es decir: **la cadena de subencargados era variable y ninguno de esos vendors había sido elegido ni
+declarado.** Además de lento, eso es un problema de DPA: el DPA no puede nombrar a quien cambia por petición.
+
+**Ruteo declarado en Development** (`appsettings.Development.json`, sección `OpenRouter`):
+
+| Clave | Valor | Efecto |
+|---|---|---|
+| `ProviderOnly` | `cerebras`, `sambanova` | OpenRouter **no puede** usar ningún otro vendor. No hay caída silenciosa al ruteo por precio |
+| `ProviderOrder` | `cerebras`, `sambanova` | Cerebras primero; SambaNova solo si Cerebras falla |
+| `RequireZeroDataRetention` | `true` | Se envía `provider.zdr = true` en **cada** petición, no solo por el toggle de la cuenta (§6) |
+| `RequireParameters` | `true` | Un vendor que no soporte un parámetro enviado (p. ej. modo JSON) se salta en vez de ignorarlo |
+| `Model` / `GenerationModel` | `openai/gpt-oss-120b` | Cerebras y SambaNova no sirven `gpt-oss-20b` |
+
+**Verificado en runtime (2026-09-15):** las tres llamadas de un turno las sirvió **Cerebras**, con `zdr`
+exigido y aceptado.
+
+| Vendor | País de procesamiento | In-region UE |
+|---|---|---|
+| **Cerebras** | **Estados Unidos** | ❌ No por la API pública. Ofrece despliegues dedicados "in-region" por contrato — sin verificar |
+| **SambaNova** (respaldo) | **Estados Unidos** | ❌ No verificado. Disponibilidad del 52 % en OpenRouter en la medición del 2026-09-15 |
+| OpenRouter (agregador) | Estados Unidos | Ruteo in-region UE **solo para clientes Enterprise** (documentación de OpenRouter) |
+
+**⚠️ LO QUE ESTO NO ARREGLA.**
+- **Production no cambió:** `appsettings.Production.json` no declara ruteo, así que sigue con el ruteo por
+  defecto de OpenRouter. Esto es un puente de velocidad para Development, decidido en KAN-74.
+- **La residencia UE sigue abierta.** Cerebras y SambaNova procesan en EEUU → transferencia internacional
+  (SCCs + TIA). La decisión de fondo —ir directo a un vendor con región UE, OpenRouter Enterprise, o
+  self-hosting (KAN-75)— es de **KAN-35**, no de KAN-74.
+- **No cierra la §3.1** (DPA ausente).
 
 ---
 
@@ -331,6 +376,7 @@ El orden importa: cada paso abarata el siguiente.
 
 | Fecha | Cambio |
 |---|---|
+| 2026-09-15 | **§5.2 nueva** (KAN-74) — el vendor downstream pasa a registrarse por llamada (solo metadatos). Con el ruteo por defecto de OpenRouter servían AkashML y Darkbloom (variables, no declarados). En **Development** el ruteo queda declarado: solo `cerebras` y `sambanova`, ZDR exigido por petición, modelo `gpt-oss-120b`; verificado en runtime que sirve Cerebras. **Production no cambia; la residencia UE sigue abierta (KAN-35); no cierra la §3.1.** |
 | 2026-08-26 | **§5.1 nueva** — la selección de proveedor pasa a ser explícita y obligatoria (FAIL-CLOSED). Se elimina el valor por defecto `Groq` del `appsettings.json` base y de la clase de opciones, y el fallback ante valor no reconocido; sin proveedor declarado la API no arranca. Corrige la contradicción entre esta §5 (que documentaba OpenRouter como activo) y el archivo base (que decía Groq). **No cambia de proveedor y no cierra la §3.1.** |
 | 2026-08-04 | Documento creado a partir de la auditoría GDPR read-only del 2026-08-04 (§§2-5), la configuración del proveedor reportada el 2026-08-03 (§6) y las decisiones de producto registradas (§§3-4). **Cuatro brechas abiertas: 2 de nivel 1, 2 de nivel 2. Un riesgo descartado con justificación.** |
 

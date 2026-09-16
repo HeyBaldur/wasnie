@@ -35,7 +35,8 @@ namespace Wasnie.Infrastructure.Integrations.OpenAiCompatible;
 /// </summary>
 public abstract class OpenAiCompatibleChatProvider(
     IHttpClientFactory httpClientFactory,
-    ILogger logger)
+    ILogger logger,
+    IModelUsageRecorder? usageRecorder = null)
     : IChatCompletionProvider
 {
     /// <summary>Which endpoint, which key, which model — the whole of what a vendor contributes.</summary>
@@ -107,6 +108,12 @@ public abstract class OpenAiCompatibleChatProvider(
             await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var reader = new StreamReader(body, Encoding.UTF8);
 
+            // ★ KAN-80: the usage of a streamed answer arrives in the LAST SSE message, after the text. It is recorded in
+            // the `finally`, so a stream that ends early (the user pressed Stop, the connection dropped) still leaves a
+            // row — with null tokens, because the provider never said how many were spent.
+            ModelUsage? reported = null;
+            try
+            {
             while (!reader.EndOfStream)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -131,11 +138,21 @@ public abstract class OpenAiCompatibleChatProvider(
                     yield break;
                 }
 
+                if (payload.Contains("\"usage\"", StringComparison.Ordinal))
+                {
+                    reported = ReadUsage(ModelCall.Answer, Settings.GenerationModel, payload) ?? reported;
+                }
+
                 var fragment = ReadFragment(payload);
                 if (!string.IsNullOrEmpty(fragment))
                 {
                     yield return fragment;
                 }
+            }
+            }
+            finally
+            {
+                Report(reported ?? new ModelUsage(ModelCall.Answer, Settings.GenerationModel, null, null, null, null, null));
             }
         }
     }
@@ -158,7 +175,8 @@ public abstract class OpenAiCompatibleChatProvider(
             Stream: stream,
             Messages: messages.Select(m => new GroqRequestMessage(m.Role, m.Content)).ToList(),
             ResponseFormat: jsonObject ? new GroqResponseFormat("json_object") : null,
-            Temperature: temperature);
+            Temperature: temperature,
+            Provider: RoutingPayload());
 
         var request = new HttpRequestMessage(HttpMethod.Post, $"{Settings.BaseUrl.TrimEnd('/')}/chat/completions")
         {
@@ -270,6 +288,8 @@ public abstract class OpenAiCompatibleChatProvider(
             }
 
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            Report(ReadUsage(ModelCall.Router, Settings.Model, body)
+                ?? new ModelUsage(ModelCall.Router, Settings.Model, null, null, null, null, null));
 
             try
             {
@@ -341,7 +361,8 @@ public abstract class OpenAiCompatibleChatProvider(
                 "function",
                 new GroqFunction(t.Name, t.Description, JsonSerializer.Deserialize<JsonElement>(t.ParametersJson))))
                 .ToList(),
-            ToolChoice: "auto");
+            ToolChoice: "auto",
+            Provider: RoutingPayload());
 
         using var request = new HttpRequestMessage(
             HttpMethod.Post, $"{Settings.BaseUrl.TrimEnd('/')}/chat/completions")
@@ -378,6 +399,8 @@ public abstract class OpenAiCompatibleChatProvider(
             }
 
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            Report(ReadUsage(ModelCall.Dispatcher, Settings.Model, body)
+                ?? new ModelUsage(ModelCall.Dispatcher, Settings.Model, null, null, null, null, null));
 
             try
             {
@@ -396,6 +419,79 @@ public abstract class OpenAiCompatibleChatProvider(
         }
     }
 
+    /// <summary>
+    /// Which upstream served a call and what it spent, read from a response body or the final SSE message (KAN-74, KAN-80).
+    ///
+    /// ★ WHY THIS EXISTS. An aggregator (OpenRouter) routes each request to one of several vendors, and the same model can
+    /// answer in 0.8 s from one and 11 s from another; and the tokens it reports are what the account is charged for. The
+    /// same reading feeds the log (who served it, how long) and the account's token usage (how much it spent).
+    ///
+    /// ★ METADATA ONLY, NEVER CONTENT. The body is read for `provider`, `model` and `usage` and nothing else; the messages
+    /// and the answer never reach the log. A body without `usage` returns null — the caller records the call with null
+    /// tokens rather than inventing zero.
+    /// </summary>
+    private static ModelUsage? ReadUsage(ModelCall call, string requestedModel, string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("usage", out var usage)
+                || usage.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            static string? Str(JsonElement e, string name) =>
+                e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
+                    ? v.GetString() : null;
+            static int? Int(JsonElement e, string name) =>
+                e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number
+                    && v.TryGetInt32(out var n) ? n : null;
+            static decimal? Dec(JsonElement e, string name) =>
+                e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number
+                    && v.TryGetDecimal(out var d) ? d : null;
+
+            var details = usage.TryGetProperty("completion_tokens_details", out var cd) ? cd : default;
+
+            return new ModelUsage(
+                call,
+                Str(root, "model") ?? requestedModel,
+                Str(root, "provider"),
+                Int(usage, "prompt_tokens"),
+                Int(usage, "completion_tokens"),
+                Int(details, "reasoning_tokens"),
+                Dec(usage, "cost"));
+        }
+        catch (JsonException)
+        {
+            // Diagnostics and accounting must never fail a turn; the caller records the call with null tokens.
+            return null;
+        }
+    }
+
+    /// <summary>Logs who served the call and hands its usage to the account's recorder, when one is present.</summary>
+    private void Report(ModelUsage usage)
+    {
+        logger.LogInformation(
+            "Model call {Call} served by {Upstream} ({Model}): {PromptTokens} prompt tokens, {CompletionTokens} completion tokens, {ReasoningTokens} of them reasoning.",
+            usage.Call.ToString().ToLowerInvariant(), usage.Upstream, usage.Model,
+            usage.PromptTokens, usage.CompletionTokens, usage.ReasoningTokens);
+
+        usageRecorder?.Record(usage);
+    }
+
+    /// <summary>The configured routing as the request field, or null to send none (KAN-74).</summary>
+    private GroqProviderPreferences? RoutingPayload() => Settings.Routing is not { } r
+        ? null
+        : new GroqProviderPreferences(
+            Only: r.Only.Count > 0 ? r.Only : null,
+            Order: r.Order.Count > 0 ? r.Order : null,
+            AllowFallbacks: r.AllowFallbacks,
+            Zdr: r.Zdr ? true : null,
+            RequireParameters: r.RequireParameters ? true : null);
+
     // ── Wire shapes, private on purpose: nothing outside this file models the vendor ──
 
     /// <param name="Temperature">
@@ -409,7 +505,19 @@ public abstract class OpenAiCompatibleChatProvider(
         GroqResponseFormat? ResponseFormat = null,
         IReadOnlyList<GroqTool>? Tools = null,
         string? ToolChoice = null,
-        double? Temperature = null);
+        double? Temperature = null,
+        GroqProviderPreferences? Provider = null);
+
+    /// <summary>
+    /// OpenRouter's `provider` object on the wire. Null fields are omitted (see <see cref="JsonOptions"/>), and the whole
+    /// object is omitted when no routing is configured — which is always the case for Groq.
+    /// </summary>
+    private sealed record GroqProviderPreferences(
+        IReadOnlyList<string>? Only,
+        IReadOnlyList<string>? Order,
+        bool AllowFallbacks,
+        bool? Zdr,
+        bool? RequireParameters);
 
     private sealed record GroqTool(
         [property: JsonPropertyName("type")] string Type,

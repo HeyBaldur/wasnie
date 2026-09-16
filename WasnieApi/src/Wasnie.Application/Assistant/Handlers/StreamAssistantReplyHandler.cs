@@ -42,14 +42,68 @@ public sealed class StreamAssistantReplyHandler(
     AssistantSectionRouter router,
     AssistantToolRunner toolRunner,
     IOptions<GroqOptions> options,
-    ILogger<StreamAssistantReplyHandler> logger)
+    ILogger<StreamAssistantReplyHandler> logger,
+    IModelUsageRecorder usageRecorder)
     : IStreamRequestHandler<StreamAssistantReplyCommand, AssistantStreamEvent>
 {
+    /// <summary>
+    /// Runs the turn and logs where its time went (KAN-74).
+    ///
+    /// ★ A WRAPPER, SO THE LOG LINE CANNOT BE SKIPPED. The turn below has a dozen exits — errors, a stopped stream, a
+    /// refused allowance — and a timing log placed at the end of the happy path would only ever measure the turns that
+    /// went well. The `finally` runs on every one of them, including when the client disconnects and the enumerator is
+    /// disposed mid-stream.
+    /// </summary>
     public async IAsyncEnumerable<AssistantStreamEvent> Handle(
         StreamAssistantReplyCommand request,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        var timer = new AssistantTurnTimer();
+        var outcome = "abandoned";
+
+        try
+        {
+            await foreach (var e in HandleTurn(request, timer, cancellationToken).WithCancellation(cancellationToken))
+            {
+                if (e.Type == AssistantStreamEvent.Done && e.Message is not null)
+                {
+                    outcome = "done";
+                }
+                else if (e.Type == AssistantStreamEvent.Error)
+                {
+                    outcome = e.ErrorKey ?? "error";
+                }
+
+                yield return e;
+            }
+        }
+        finally
+        {
+            var t = timer.Snapshot();
+            logger.LogInformation(
+                "Assistant turn timing ({Outcome}): total {TotalMs} ms = provider {ProviderMs} ms + ours {OursMs} ms. " +
+                "Provider: classifiers {ClassifiersMs} ms (router {RouterMs} ms, dispatcher {DispatcherMs} ms, in parallel), answer first token {AnswerTtftMs} ms of {AnswerMs} ms. " +
+                "Ours: before the first model call {BeforeFirstModelCallMs} ms, tool {ToolMs} ms.",
+                outcome, t.TotalMs, t.ProviderMs, t.OursMs,
+                t.ClassifiersMs, t.RouterMs, t.DispatcherMs, t.AnswerTimeToFirstTokenMs, t.AnswerMs,
+                t.BeforeFirstModelCallMs, t.ToolMs);
+        }
+    }
+
+    private async IAsyncEnumerable<AssistantStreamEvent> HandleTurn(
+        StreamAssistantReplyCommand request,
+        AssistantTurnTimer timer,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         await entitlement.RequireAsync(cancellationToken);
+
+        // KAN-77 / KAN-83: an account out of tokens gets no NEW turn — nothing is stored, the model is not called.
+        // A retry re-answers a question already counted, so it is not refused here.
+        if (!request.IsRetry && await entitlement.TokenRefusalKeyAsync(cancellationToken) is { Length: > 0 } refusal)
+        {
+            yield return AssistantStreamEvent.OfError(refusal);
+            yield break;
+        }
 
         var conversation = await OwnedConversations.FindMineAsync(
             db, currentUser, request.ConversationId, cancellationToken);
@@ -59,6 +113,9 @@ public sealed class StreamAssistantReplyHandler(
             yield return AssistantStreamEvent.OfError(OwnedConversations.NotFoundKey);
             yield break;
         }
+
+        // KAN-80: every model call below is charged to this account and attributed to this conversation.
+        usageRecorder.ForConversation(conversation.Id);
 
         var now = clock.UtcNowOffset;
 
@@ -181,45 +238,103 @@ public sealed class StreamAssistantReplyHandler(
             yield return AssistantStreamEvent.OfPhaseStart(AssistantPhase.Understanding);
         }
 
-        // ── Step 1: which sections does this question need? ──────────────────
-        // A small call against the table of contents only. Its result decides what step 2 carries.
-        // Failing here is the same class of failure as failing to answer, and reaches the user the
-        // same way — nothing was written for the assistant, so there is nothing to undo.
-        IReadOnlyList<string> sectionIds = [];
-        string? routingFailure = null;
-        try
-        {
-            sectionIds = await router.RouteAsync(question, cancellationToken);
-        }
-        catch (ChatCompletionException ex)
-        {
-            routingFailure = ex.ReasonKey;
-        }
-        catch (OperationCanceledException)
-        {
-            yield break;
-        }
-
-        if (routingFailure is not null)
-        {
-            yield return AssistantStreamEvent.OfError(routingFailure);
-            yield break;
-        }
-
-        // ── Step 1.5, first half: does this question need a RECORD, not just the documentation? ──
-        // Read-only, through the domain, with this user's identity — see GetTransactionTool.
+        // ── Steps 1 and 1.5 (first half), IN PARALLEL: which sections, and does it need a record? ──
         //
-        // ★ THE DECISION IS TAKEN BEFORE THE STEP IS ANNOUNCED, which is why the runner is now two
-        // calls. "Searching your records" is only worth showing before the search and only on the turns
-        // where a search happens; both need the choice to be visible before the read.
+        // ★★ PARALLEL SINCE KAN-74, AND THAT IS SAFE BECAUSE NEITHER DEPENDS ON THE OTHER. The router reads only the
+        // question against the table of contents; the dispatcher reads the question and the thread already in memory.
+        // Neither touches the DbContext (which is not thread-safe) and neither's input is the other's output. In series
+        // the turn waited for both one after the other — measured at 1 to 9 s of pure waiting per turn, on greetings too.
         //
-        // ★ A LOOKUP THAT COULD NOT RUN ENDS THE TURN. It used to degrade to "answer without live
-        // data", and the model did not treat the absence as an absence: asked about a named
-        // transaction with nothing in hand, it told the user the record could not be found — about a
-        // row it never queried and that they can see on their own screen. The user now gets the
-        // warning card and the retry button, both of which are true, instead of a confident wrong
+        // The router: a small call against the table of contents only. Its result decides what step 2 carries.
+        // Failing here is the same class of failure as failing to answer, and reaches the user the same way — nothing
+        // was written for the assistant, so there is nothing to undo.
+        //
+        // The dispatcher: does this question need a RECORD, not just the documentation? Read-only, through the domain,
+        // with this user's identity — see GetTransactionTool.
+        //
+        // ★ THE DECISION IS TAKEN BEFORE THE STEP IS ANNOUNCED, which is why the runner is two calls. "Searching your
+        // records" is only worth showing before the search and only on the turns where a search happens; both need the
+        // choice to be visible before the read.
+        //
+        // ★ A LOOKUP THAT COULD NOT RUN ENDS THE TURN. It used to degrade to "answer without live data", and the model
+        // did not treat the absence as an absence: asked about a named transaction with nothing in hand, it told the
+        // user the record could not be found — about a row it never queried and that they can see on their own screen.
+        // The user now gets the warning card and the retry button, both of which are true, instead of a confident wrong
         // answer that looks exactly like a correct refusal.
-        var selection = await toolRunner.SelectAsync(question, history, cancellationToken);
+        //
+        // ★ A FAILED ROUTER CANCELS THE DISPATCHER. The turn is over either way, so its call is not left running to
+        // spend tokens on an answer nobody will read — and it is still AWAITED, so nothing faults unobserved.
+        using var classifiers = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        async Task<(IReadOnlyList<string> Ids, string? Failure, bool Cancelled)> RouteAsync()
+        {
+            timer.RouterStarted();
+            try
+            {
+                return (await router.RouteAsync(question, classifiers.Token), null, false);
+            }
+            catch (ChatCompletionException ex)
+            {
+                return ([], ex.ReasonKey, false);
+            }
+            catch (OperationCanceledException)
+            {
+                return ([], null, true);
+            }
+            finally
+            {
+                timer.RouterEnded();
+            }
+        }
+
+        async Task<AssistantToolSelection?> SelectAsync()
+        {
+            timer.DispatcherStarted();
+            try
+            {
+                return await toolRunner.SelectAsync(question, history, classifiers.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // Null = cancelled, which is not a selection of any kind.
+                return null;
+            }
+            finally
+            {
+                timer.DispatcherEnded();
+            }
+        }
+
+        var routingTask = RouteAsync();
+        var selectionTask = SelectAsync();
+
+        var routing = await routingTask;
+
+        if (routing.Failure is not null || routing.Cancelled)
+        {
+            await classifiers.CancelAsync();
+            await selectionTask;
+
+            if (routing.Cancelled)
+            {
+                yield break;
+            }
+
+            yield return AssistantStreamEvent.OfError(routing.Failure!);
+            yield break;
+        }
+
+        IReadOnlyList<string> sectionIds = routing.Ids;
+
+        var selected = await selectionTask;
+
+        if (selected is null)
+        {
+            // The client went away while the dispatcher was deciding.
+            yield break;
+        }
+
+        var selection = selected;
 
         // Both classifier calls are behind us: the one step the user was shown is genuinely finished.
         // A FAILED decision gets no `done` — the error frame below is what ends that turn.
@@ -261,7 +376,9 @@ public sealed class StreamAssistantReplyHandler(
         {
             yield return AssistantStreamEvent.OfPhaseStart(AssistantPhase.SearchingData);
 
+            timer.ToolStarted();
             var lookup = await toolRunner.ExecuteAsync(selection, cancellationToken);
+            timer.ToolEnded();
 
             if (lookup.DidFail)
             {
@@ -319,6 +436,7 @@ public sealed class StreamAssistantReplyHandler(
         // The enumerator is stepped by hand so a provider failure can be caught: `yield return` is not
         // allowed inside a try/catch that has a catch clause, and wrapping the whole loop would mean
         // choosing between catching errors and streaming at all.
+        timer.AnswerStarted();
         await using var fragments = provider.StreamAsync(prompt, cancellationToken).GetAsyncEnumerator(cancellationToken);
 
         while (true)
@@ -332,6 +450,7 @@ public sealed class StreamAssistantReplyHandler(
                 if (await fragments.MoveNextAsync())
                 {
                     fragment = fragments.Current;
+                    timer.AnswerFragment();
                 }
             }
             catch (ChatCompletionException ex)
@@ -404,6 +523,7 @@ public sealed class StreamAssistantReplyHandler(
 
             if (fragment is null)
             {
+                timer.AnswerEnded();
                 break;
             }
 
@@ -494,11 +614,18 @@ public sealed class StreamAssistantReplyHandler(
         AssistantMessageStatus status = AssistantMessageStatus.Complete,
         string? resolvedPayload = null)
     {
-        // Truncated rather than rejected: a model that overruns the column has still written something
-        // the user watched arrive, and refusing to store it would erase what they just read.
-        var stored = content.Length > AssistantMessage.MaxContentLength
-            ? content[..AssistantMessage.MaxContentLength]
-            : content;
+        // ★ NOT TRUNCATED IN SILENCE ANY MORE. Replies used to be cut to the USER's 8,000-character limit here, so a
+        // long answer the user had watched arrive in full was stored — and re-rendered — cut mid-sentence (§B1). The
+        // reply limit now equals the degeneration guard's ceiling, so a reply that got this far fits. If that ever
+        // stops being true, the cut is still made (refusing would erase what the user read) but it is LOGGED.
+        var stored = content;
+        if (content.Length > AssistantMessage.MaxReplyLength)
+        {
+            logger.LogError(
+                "An assistant reply of {Length} characters exceeded the stored limit of {Limit} and was truncated.",
+                content.Length, AssistantMessage.MaxReplyLength);
+            stored = content[..AssistantMessage.MaxReplyLength];
+        }
 
         var message = AssistantMessage.Create(
             guid.NewGuid(), conversationId, tenantContext.TenantId,

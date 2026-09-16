@@ -25,7 +25,7 @@ public static class CompensationMapper
             plan.ClawbackMaturationDays,
             plan.ClawbackCapPercent);
 
-    public static PlanSummaryDto ToPlanSummaryDto(CompensationPlan plan, int activeAssignmentCount) =>
+    public static PlanSummaryDto ToPlanSummaryDto(CompensationPlan plan, int activeAssignmentCount, bool isDeletable) =>
         new(
             plan.Id,
             plan.Name,
@@ -35,7 +35,8 @@ public static class CompensationMapper
             plan.EffectivePeriod.End,
             plan.Currency,
             plan.Rules.Count(r => r.IsActive),
-            activeAssignmentCount);
+            activeAssignmentCount,
+            isDeletable);
 
     public static RuleDto ToRuleDto(CompensationRule rule) =>
         new(
@@ -53,7 +54,9 @@ public static class CompensationMapper
             rule.StoppedBy,
             rule.StopReason);
 
-    public static PlanAssignmentDto ToPlanAssignmentDto(PlanAssignment assignment, string planName, int planVersion) =>
+    /// <param name="payeeFullName">The payee's CURRENT name — see ListAssignmentsHandler for why not the snapshot.</param>
+    public static PlanAssignmentDto ToPlanAssignmentDto(
+        PlanAssignment assignment, string planName, int planVersion, string payeeFullName, string payeeEmployeeCode) =>
         new(
             assignment.Id,
             assignment.TenantId,
@@ -61,8 +64,8 @@ public static class CompensationMapper
             planName,
             planVersion,
             assignment.PayeeId,
-            assignment.PayeeSnapshot.FullName,
-            assignment.PayeeSnapshot.EmployeeCode,
+            payeeFullName,
+            payeeEmployeeCode,
             assignment.EffectivePeriod.Start,
             assignment.EffectivePeriod.End,
             assignment.Status.ToString(),

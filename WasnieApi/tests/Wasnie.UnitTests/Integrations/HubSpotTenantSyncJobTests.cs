@@ -65,25 +65,28 @@ public sealed class HubSpotTenantSyncJobTests
             db, dealSource, guid, Substitute.For<MediatR.ISender>());
 
         var job = new HubSpotTenantSyncJob(
-            tenantCtx, db, dealSource, reconciler, dealLostReconciler, clock, NullLogger<HubSpotTenantSyncJob>.Instance);
+            tenantCtx, db, dealSource, reconciler, dealLostReconciler, clock,
+            new AccountAccessReader(db, clock), NullLogger<HubSpotTenantSyncJob>.Instance);
 
         return new Harness { Db = db, Job = job, DealSource = dealSource, TenantId = tenantId };
     }
 
     // The job refuses to sync a tenant whose plan does not include the integration, so the harness has
     // to state the plan: a connection with no tenant row behind it is skipped before any CRM call.
-    private static void SeedTenant(ApplicationDbContext db, Guid tenantId, Tier tier = Tier.Growth)
+    private static void SeedTenant(ApplicationDbContext db, Guid tenantId, bool locked = false)
     {
+        // KAN-77: the gate is ACCESS, not tier. An open trial stands for "has access"; an ended one for a
+        // locked account (trial over, never paid) — the case that must not spend on HubSpot.
         var tenant = Tenant.Create($"T{tenantId:N}", $"t-{tenantId:N}", tenantId, ConnectedAt);
-        tenant.SetTier(tier);
+        tenant.StartTrial(locked ? ConnectedAt.AddDays(-1) : ConnectedAt.AddYears(10));
         db.Tenants.Add(tenant);
         db.SaveChanges();
     }
 
     private static void SeedConnection(
-        ApplicationDbContext db, Guid tenantId, HubSpotConnectionStatus status, Tier tier = Tier.Growth)
+        ApplicationDbContext db, Guid tenantId, HubSpotConnectionStatus status, bool locked = false)
     {
-        SeedTenant(db, tenantId, tier);
+        SeedTenant(db, tenantId, locked);
         var c = HubSpotConnection.Create(
             Guid.NewGuid(), tenantId, 42, "enc-access", "enc-refresh",
             ConnectedAt.AddHours(1), "owner", ConnectedAt);
@@ -125,7 +128,7 @@ public sealed class HubSpotTenantSyncJobTests
         // can change between fan-out and execution. The CRM must not be called at all in that window.
         var tenantId = Guid.NewGuid();
         var h = BuildHarness(nameof(A_job_for_a_tenant_that_downgraded_after_it_was_scheduled_touches_nothing), tenantId);
-        SeedConnection(h.Db, tenantId, HubSpotConnectionStatus.Connected, Tier.Free);
+        SeedConnection(h.Db, tenantId, HubSpotConnectionStatus.Connected, locked: true);
         SeedPayee(h.Db, tenantId, "alice@example.com");
         SetupSource(h.DealSource, tenantId, new[] { Deal("101", 5000m, new DateOnly(2026, 6, 1)) });
 

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Wasnie.Application.Assistant.Abstractions;
 using Microsoft.Extensions.Options;
 using Wasnie.Application.Common.Options;
 using Wasnie.Infrastructure.Integrations.OpenAiCompatible;
@@ -23,8 +24,9 @@ namespace Wasnie.Infrastructure.Integrations.OpenRouter;
 public sealed class OpenRouterChatProvider(
     IHttpClientFactory httpClientFactory,
     IOptions<OpenRouterOptions> options,
-    ILogger<OpenRouterChatProvider> logger)
-    : OpenAiCompatibleChatProvider(httpClientFactory, logger)
+    ILogger<OpenRouterChatProvider> logger,
+    IModelUsageRecorder? usageRecorder = null)
+    : OpenAiCompatibleChatProvider(httpClientFactory, logger, usageRecorder)
 {
     public const string HttpClientName = "OpenRouter";
 
@@ -40,7 +42,13 @@ public sealed class OpenRouterChatProvider(
             ? options.Value.Model
             : options.Value.GenerationModel,
         options.Value.TimeoutSeconds,
-        HttpClientName);
+        HttpClientName,
+        ProviderRouting.From(
+            options.Value.ProviderOnly,
+            options.Value.ProviderOrder,
+            options.Value.ProviderAllowFallbacks,
+            options.Value.RequireZeroDataRetention,
+            options.Value.RequireParameters));
 
     /// <summary>
     /// The key, plus OpenRouter's two optional attribution headers.

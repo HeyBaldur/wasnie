@@ -28,7 +28,12 @@ import {
 type WizardStep = 'upload' | 'map' | 'preview' | 'progress' | 'complete';
 type WizardMode = 'create' | 'update';
 
-const STORAGE_KEY_CREATE = 'wasnie:import-wizard:transactions';
+// ★ VERSIONED BECAUSE IT HOLDS A SERVER ANSWER. The review step is restored from here on reload, so a
+// preview saved before the validate contract changed would come back WITHOUT the new fields — the Amount
+// column showed raw numbers after `amount`/`currency` were added, with the new API already running.
+// Bump the version whenever TransactionValidateResponse changes shape; the old entry is dropped on init.
+const STORAGE_KEY_CREATE_LEGACY = ['wasnie:import-wizard:transactions'];
+const STORAGE_KEY_CREATE = 'wasnie:import-wizard:transactions:v2';
 const STORAGE_KEY_UPDATE = 'wasnie:update-wizard:transactions';
 
 interface PersistedCreateState {
@@ -112,6 +117,7 @@ export class TransactionImportWizardComponent implements OnInit {
 
   ngOnInit(): void {
     if (this.mode() !== 'create') return;
+    STORAGE_KEY_CREATE_LEGACY.forEach((key) => sessionStorage.removeItem(key));
     const raw = sessionStorage.getItem(STORAGE_KEY_CREATE);
     if (!raw) return;
     try {

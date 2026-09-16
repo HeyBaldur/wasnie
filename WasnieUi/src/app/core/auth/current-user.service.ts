@@ -13,7 +13,7 @@ export class CurrentUserService {
 
   readonly currentUser = this._user.asReadonly();
   readonly isLoaded = this._loaded.asReadonly();
-  readonly tier = computed(() => this._user()?.tier ?? null);
+  readonly planCode = computed(() => this._user()?.planCode ?? null);
 
   hasPermission(permission: string): boolean {
     return this._user()?.permissions.includes(permission) ?? false;

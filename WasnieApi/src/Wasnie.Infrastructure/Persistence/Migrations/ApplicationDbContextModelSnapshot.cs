@@ -220,6 +220,42 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantBoostDebit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long>("IncludedLimit")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("PeriodEnd")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("PeriodStart")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("Tokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UsedInPeriod")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PeriodStart")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AssistantBoostDebits_TenantId_PeriodStart");
+
+                    b.ToTable("AssistantBoostDebits", (string)null);
+                });
+
             modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantConversation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -305,7 +341,7 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasMaxLength(8000)
+                        .HasMaxLength(20000)
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<Guid>("ConversationId")
@@ -340,6 +376,105 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_AssistantMessages_ConversationId_Sequence");
 
                     b.ToTable("AssistantMessages", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantTokenBoost", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("PurchasedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("StripeEventId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("StripeProductId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("StripeSessionId")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("Tokens")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StripeEventId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AssistantTokenBoosts_StripeEventId");
+
+                    b.HasIndex("TenantId", "PurchasedAt")
+                        .HasDatabaseName("IX_AssistantTokenBoosts_TenantId_PurchasedAt");
+
+                    b.ToTable("AssistantTokenBoosts", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantTokenUsage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Call")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int?>("CompletionTokens")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("Cost")
+                        .HasPrecision(18, 10)
+                        .HasColumnType("decimal(18,10)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int?>("PromptTokens")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ReasoningTokens")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Upstream")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .HasDatabaseName("IX_AssistantTokenUsages_TenantId_CreatedAt");
+
+                    b.ToTable("AssistantTokenUsages", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Audit.AuditLog", b =>
@@ -1654,6 +1789,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("PlanCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<DateTimeOffset?>("QualifiedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -1668,6 +1807,9 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Tier")
                         .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("TrialEndsAt")
+                        .HasColumnType("datetimeoffset");
 
                     b.HasKey("Id");
 
@@ -2185,6 +2327,40 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.ToTable("HubSpotOAuthStates", (string)null);
                 });
 
+            modelBuilder.Entity("Wasnie.Domain.Settings.Favorite", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "UserId", "EntityType", "EntityId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Favorites_TenantId_UserId_EntityType_EntityId");
+
+                    b.ToTable("Favorites", (string)null);
+                });
+
             modelBuilder.Entity("Wasnie.Domain.Settings.FieldRequirementSetting", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2213,6 +2389,42 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("FieldRequirementSettings", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Settings.UserUiPreference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "UserId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("UX_UserUiPreferences_TenantId_UserId_Key");
+
+                    b.ToTable("UserUiPreferences", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Subscription.ProcessedStripeEvent", b =>
@@ -2262,6 +2474,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("NextBillingDate")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PlanCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");

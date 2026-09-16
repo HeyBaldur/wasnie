@@ -13,7 +13,7 @@
   inset: 0;
   background: var(--color-bg-overlay);
   backdrop-filter: blur(2px);
-  animation: ws-modal-fade-in var(--transition-base) ease;
+  animation: ws-modal-fade-in 260ms ease-out backwards;
 }
 
 .ws-modal__dialog {
@@ -32,7 +32,11 @@
   max-height: calc(100vh - 64px);
   max-height: calc(100dvh - 64px);
   width: 100%;
-  animation: ws-modal-scale-in var(--transition-slow) ease;
+  // ★★ `backwards`, NEVER `both`. With `both` the last keyframe's `transform: scale(1)` stays on the dialog
+  // forever, and ANY transform makes the dialog the containing block of its `position: fixed` children:
+  // the ws-select panel (positioned from viewport coordinates) landed off-place and clipped by
+  // `overflow: hidden`, so a payee could not be picked and the click fell through to the backdrop.
+  animation: ws-modal-zoom-in 420ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
   overflow: hidden;
 }
 
@@ -176,7 +180,38 @@
   to   { opacity: 1; }
 }
 
-@keyframes ws-modal-scale-in {
-  from { opacity: 0; transform: scale(0.96) translateY(-8px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
+// ── Entrada y salida ────────────────────────────────────────────────────────────────
+// Entra con zoom desde 70% y un rebote corto al final; sale más rápido de lo que entra (220ms), con un zoom
+// out a 80%: cerrar tiene que sentirse inmediato. (La primera versión iba de 90% y no se percibía.) La opacidad llega antes que la escala para que el rebote
+// no se vea como un parpadeo.
+@keyframes ws-modal-zoom-in {
+  0%   { opacity: 0; transform: scale(0.7) translateY(12px); }
+  40%  { opacity: 1; }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes ws-modal-zoom-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.8); }
+}
+
+@keyframes ws-modal-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+// La salida la hace una COPIA inerte del modal (WsModalComponent.playExit), puesta en <body> tras cerrar.
+// `both` aquí sí: la copia debe quedarse invisible en su último fotograma hasta que el temporizador la quite.
+.ws-modal--leaving {
+  pointer-events: none;
+
+  .ws-modal__overlay { animation: ws-modal-fade-out 220ms ease-in both; }
+  .ws-modal__dialog { animation: ws-modal-zoom-out 220ms cubic-bezier(0.4, 0, 1, 1) both; }
+}
+
+// Sin zoom para quien pidió menos movimiento: solo un fundido corto al entrar y al salir.
+@media (prefers-reduced-motion: reduce) {
+  .ws-modal__dialog { animation: ws-modal-fade-in 150ms ease-out backwards; }
+  .ws-modal--leaving .ws-modal__overlay { animation-duration: 120ms; }
+  .ws-modal--leaving .ws-modal__dialog { animation: ws-modal-fade-out 120ms ease-in both; }
 }

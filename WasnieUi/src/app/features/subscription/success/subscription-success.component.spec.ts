@@ -11,7 +11,7 @@ import { WsButtonComponent } from '../../../shared/ui';
 class StubComponent {}
 
 const ACTIVE_SUB = {
-  tier: 'Starter', status: 'Active', billingEmail: 'test@test.com',
+  planCode: 'pro', status: 'Active', billingEmail: 'test@test.com',
   stripeSubscriptionId: 'sub_x', stripeCustomerId: 'cus_x',
   stripePriceId: 'price_x', stripeProductId: 'prod_x',
   currentPeriodStart: null, currentPeriodEnd: null,
@@ -20,7 +20,8 @@ const ACTIVE_SUB = {
   createdAt: new Date().toISOString(),
 };
 
-const FREE_SUB = { ...ACTIVE_SUB, tier: 'Free', status: 'Active' };
+// The old free plan's row: Active, but no Stripe subscription behind it. Not a confirmed payment (KAN-77).
+const FREE_SUB = { ...ACTIVE_SUB, planCode: null, stripeSubscriptionId: null, status: 'Active' };
 
 describe('SubscriptionSuccessComponent', () => {
   let fixture: ComponentFixture<SubscriptionSuccessComponent>;
@@ -37,7 +38,7 @@ describe('SubscriptionSuccessComponent', () => {
         { provide: SubscriptionService, useValue: subscriptionMock },
         provideRouter([
           { path: 'dashboard', component: StubComponent },
-          { path: 'onboarding/plan', component: StubComponent },
+          { path: 'pricing', component: StubComponent },
         ]),
         provideTranslateService({ defaultLanguage: 'en' }),
       ],
@@ -61,7 +62,7 @@ describe('SubscriptionSuccessComponent', () => {
     expect(component.timedOut()).toBeFalse();
   }));
 
-  it('sets confirmed=true when subscription is Active with a paid tier', fakeAsync(() => {
+  it('sets confirmed=true when subscription is Active with a Stripe subscription', fakeAsync(() => {
     subscriptionMock.getCurrent.and.returnValue(of(ACTIVE_SUB));
     fixture.detectChanges();
     tick(0);
@@ -71,7 +72,7 @@ describe('SubscriptionSuccessComponent', () => {
     flush();
   }));
 
-  it('does NOT set confirmed when tier is Free even if status is Active', fakeAsync(() => {
+  it('does NOT set confirmed for an Active row with no Stripe subscription', fakeAsync(() => {
     subscriptionMock.getCurrent.and.returnValue(of(FREE_SUB));
     fixture.detectChanges();
     tick(0);

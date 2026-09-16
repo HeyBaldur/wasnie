@@ -31,193 +31,649 @@
 
 /* ── The connection tutorial ───────────────────────────────────────────
  *
- * ★ IT IS A REAL `ws-card`, NOT THE MANUAL'S HAND-BUILT COPY. The manual paints the card recipe by
- * hand (surface + border + radius + shadow) because its chapters arrive through `[innerHTML]`, where
- * Angular renders no components. Here the markup is the component's own, so the primitive itself can be
- * used — same surface language as /manual, without duplicating a recipe that would then have to be
- * kept in step with `ws-card` by hand.
+ * ★ IT IS A REAL `ws-card`, NOT THE MANUAL'S HAND-BUILT COPY. The markup is the component's own, so the
+ * primitive itself is used. The layout lives on `.int-tutorial__body`: ws-card wraps its content in an inner
+ * element, so flex/gap declared on the host would never reach the children.
  *
- * ★ THE MEASURE CAPS THE PROSE, NOT THE CARD — and getting that backwards is what left a gap down the
- * right of this page. `max-width` on `.int-tutorial` caps the CARD, so the surface itself stopped at
- * ~72 characters and the column it was given ran on empty beside it: the same hole the tile grid used
- * to leave, moved a few hundred pixels right. The card fills its column; the paragraphs inside are what
- * get the reading measure, exactly as the manual does it (there the chapter cards fill the column and
- * `p, ul, ol, h1…` carry the cap).
+ * ★ THE MEASURE CAPS NOTHING. `ws-page-layout` (standard) already bounds the page to 1200px, so the card fills
+ * its column and the prose inside tops out around 105 characters. A cap here would re-open the empty gap down
+ * the right of the page. If the page is ever moved to `maxWidth="wide"`, put a measure back on the paragraphs.
  *
- * ★ AND HERE THE PROSE NEEDS NO CAP OF ITS OWN EITHER. The manual caps because its column grows with
- * the monitor — on a 2560px screen a paragraph would run ~160 characters and the eye loses the return
- * sweep. This column cannot: `ws-page-layout` (standard) holds the whole page to 1200px, so after the
- * connection card and the gap the tutorial tops out around 105 characters however wide the browser is.
- * A second cap inside a column that is already bounded just re-opens the gap this fix closed, one card
- * further in. If the page is ever moved to `maxWidth="wide"`, put a measure back on the paragraphs. */
+ * ★ INTERACTIVE WITHOUT CONTROLS. The flow animates, the timeline highlights its steps in turn (and pauses under
+ * the pointer), and "After connecting" opens on demand — but there is still no button or link in here: the one
+ * way to connect is the Connect button in the card beside it. Everything stands still with reduced motion. */
 .int-tutorial {
   color: var(--color-text-secondary);
   font-size: var(--font-size-14);
   line-height: 1.65;
 
-  p {
-    margin: 0 0 var(--space-3);
-  }
-
-  > :last-child {
-    margin-bottom: 0;
+  :where(p) {
+    margin: 0;
   }
 }
 
-.int-tutorial__title {
-  margin: 0 0 var(--space-2);
-  font-size: var(--font-size-18);
+.int-tutorial__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* ── Header ── */
+.int-tutorial__head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.int-tutorial__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-accent-violet) 30%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent-violet) 10%, var(--color-bg-surface));
+  font-size: var(--font-size-12);
   font-weight: 600;
+  color: var(--color-accent-violet);
+}
+
+.int-tutorial__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-24);
+  font-weight: 600;
+  letter-spacing: -0.02em;
   color: var(--color-text-primary);
 }
 
 .int-tutorial__subtitle {
-  margin: var(--space-5) 0 var(--space-2);
-  font-size: var(--font-size-14);
-  font-weight: 600;
-  color: var(--color-text-primary);
+  margin: 0 0 calc(var(--space-3) * -1);
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
 }
 
-.int-tutorial__intro {
-  margin-bottom: var(--space-4);
-}
+/* ── The handshake ── */
+.int-flow {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-8);
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(60% 120% at 0% 50%, color-mix(in srgb, var(--color-accent-violet) 12%, transparent), transparent 70%),
+    radial-gradient(60% 120% at 100% 50%, color-mix(in srgb, var(--color-warning) 12%, transparent), transparent 70%),
+    var(--color-bg-surface-sunken);
 
-/* The prerequisite. Warning-toned because it is the thing that makes the flow fail, and it fails on
-   HubSpot's screen after the user has already left Incentra. */
-.int-tutorial__prereq {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-5);
-  border: 1px solid var(--color-warning-border);
-  border-radius: var(--radius-md);
-  background: var(--color-warning-bg);
-
-  app-icon {
-    color: var(--color-warning);
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  p:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.int-tutorial__prereq-title {
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: var(--space-2);
-}
-
-/* Three separate conditions, so three bullets rather than one paragraph: a reader checking whether
-   they qualify scans a list and cannot scan a sentence. */
-.int-tutorial__prereq-list {
-  margin: 0;
-  padding-left: var(--space-4);
-  list-style: disc;
-
-  li + li {
-    margin-top: var(--space-2);
-  }
-}
-
-/* The authorisation link's 10-minute life. Toned like the prerequisite it belongs to, because it is
-   the same class of fact: something that fails on HubSpot's side, after the user has left. */
-.int-tutorial__step-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  font-size: var(--font-size-13);
-  color: var(--color-warning);
-
-  app-icon {
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-}
-
-/* The four permissions. Listed as read operations, with the eye repeated on every row: the fact that
-   matters to whoever approves this is that not one of them writes. */
-.int-tutorial__scopes {
-  margin: var(--space-3) 0;
-  padding: 0;
-  list-style: none;
-
-  li {
-    display: flex;
-    align-items: center;
+  @media (max-width: 560px) {
+    padding: var(--space-5) var(--space-4);
     gap: var(--space-2);
-    padding: var(--space-1) 0;
-    font-size: var(--font-size-13);
-    color: var(--color-text-primary);
-  }
-
-  app-icon {
-    color: var(--color-text-tertiary);
-    flex-shrink: 0;
   }
 }
 
-.int-tutorial__readonly {
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-/* The sub-headings under "After connecting". A paragraph rather than a heading element: they label a
-   sentence each, and three more levels of heading in a card this size is structure for its own sake. */
-.int-tutorial__after-title {
-  margin-top: var(--space-4);
-  margin-bottom: var(--space-1);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-/* The numbers are painted, so the list carries no marker of its own. */
-.int-tutorial__steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.int-tutorial__step {
+.int-flow__node {
+  position: relative;
   display: flex;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.int-tutorial__step-num {
+.int-flow__logo {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-full);
-  background: var(--color-bg-surface-sunken);
+  width: 56px;
+  height: 56px;
+  padding: var(--space-2);
   border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-lg);
+  animation: int-float 5s ease-in-out infinite;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  &--hubspot {
+    animation-delay: 1.2s;
+  }
+}
+
+.int-flow__name {
   font-size: var(--font-size-12);
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
-.int-tutorial__step-title {
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: var(--space-1);
+.int-flow__check {
+  position: absolute;
+  top: calc(var(--space-2) * -1);
+  right: calc(var(--space-2) * -1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--color-bg-surface);
+  border-radius: var(--radius-full);
+  background: var(--color-success);
+  color: var(--color-text-inverse);
+  animation: int-check 4s ease-in-out infinite;
 }
 
-.int-tutorial__step-text p:last-child {
-  margin-bottom: 0;
+.int-flow__link {
+  position: relative;
+  height: 64px;
+}
+
+.int-flow__track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-image: linear-gradient(90deg, var(--color-border-strong) 50%, transparent 50%);
+  background-size: var(--space-3) 2px;
+  animation: int-dash 1.2s linear infinite;
+}
+
+.int-flow__packet {
+  position: absolute;
+  top: calc(50% - 5px);
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 20%, transparent);
+
+  &--out {
+    left: 0;
+    color: var(--color-accent-violet);
+    background: var(--color-accent-violet);
+    animation: int-travel-out 4s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+  }
+
+  &--back {
+    right: 0;
+    color: var(--color-warning);
+    background: var(--color-warning);
+    animation: int-travel-back 4s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+  }
+}
+
+.int-flow__lock {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--color-success);
+  transform: translate(-50%, -50%);
+  animation: int-pulse 2.4s ease-in-out infinite;
+}
+
+.int-flow__caption {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--space-2) * -1);
+  transform: translateX(-50%);
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--color-text-tertiary);
+}
+
+/* ── Before you start ── */
+.int-prereq {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.int-prereq__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  color: var(--color-text-primary);
+
+  app-icon {
+    color: var(--color-warning);
+  }
+}
+
+/* Three separate conditions, so three tiles rather than one paragraph: a reader checking whether they
+   qualify scans tiles and cannot scan a sentence. */
+.int-prereq__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (max-width: 760px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.int-prereq__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--color-warning-bg), var(--color-bg-surface) 80%);
+  font-size: var(--font-size-13);
+  line-height: 1.55;
+  animation: int-rise 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 80ms);
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+.int-prereq__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-warning);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── The steps: a timeline whose highlight walks through the steps ── */
+.int-tutorial__steps {
+  --cycle: calc(var(--steps, 4) * 3.5s);
+
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  &:hover .int-tutorial__step,
+  &:hover .int-tutorial__step-num,
+  &:focus-within .int-tutorial__step,
+  &:focus-within .int-tutorial__step-num {
+    animation-play-state: paused;
+  }
+}
+
+.int-tutorial__step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  outline: none;
+
+  &:last-child {
+    padding-bottom: 0;
+  }
+
+  // The rail between numbers.
+  &:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    top: 36px;
+    bottom: 0;
+    left: 17px;
+    width: 2px;
+    background: linear-gradient(180deg, var(--color-accent-violet), var(--color-border-subtle));
+    opacity: 0.45;
+  }
+}
+
+.int-tutorial__step-rail {
+  display: flex;
+  justify-content: center;
+}
+
+.int-tutorial__step-num {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--color-border-default);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  font-size: var(--font-size-14);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  animation: int-step-num var(--cycle) ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 3.5s);
+
+  .int-tutorial__step:last-child & {
+    border-color: var(--color-success-border);
+    background: var(--color-success-bg);
+    color: var(--color-success);
+  }
+}
+
+.int-tutorial__step-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+  animation: int-step-card var(--cycle) ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 3.5s);
+
+  .int-tutorial__step:hover &,
+  .int-tutorial__step:focus-visible & {
+    transform: translateX(4px);
+    border-color: color-mix(in srgb, var(--color-accent-violet) 45%, var(--color-border-subtle));
+    box-shadow: var(--shadow-md);
+  }
+}
+
+.int-tutorial__step-label {
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent-violet);
+}
+
+.int-tutorial__step-title {
+  font-size: var(--font-size-15, var(--font-size-14));
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* The authorisation link's 10-minute life, with a ring that drains: it fails on HubSpot's side, after
+   the user has left, so it is the fact on this page most worth making visible. */
+.int-tutorial__step-warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg);
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+}
+
+.int-timer {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--color-warning);
+
+  svg {
+    position: absolute;
+    inset: 0;
+    transform: rotate(-90deg);
+  }
+}
+
+.int-timer__track,
+.int-timer__value {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.int-timer__track {
+  stroke: color-mix(in srgb, var(--color-warning) 25%, transparent);
+}
+
+.int-timer__value {
+  stroke: var(--color-warning);
+  stroke-linecap: round;
+  stroke-dasharray: 50.3;
+  animation: int-drain 10s linear infinite;
+}
+
+/* The four permissions, as chips, each with the eye: not one of them writes. */
+.int-tutorial__scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 var(--space-1);
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-full);
+    background: var(--color-bg-surface-sunken);
+    font-size: var(--font-size-12);
+    font-weight: 500;
+    color: var(--color-text-primary);
+    animation: int-rise 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation-delay: calc(200ms + var(--i, 0) * 90ms);
+  }
+
+  app-icon {
+    color: var(--color-accent-blue);
+  }
+}
+
+.int-tutorial__readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-success);
+}
+
+/* ── After connecting ── */
+.int-after {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.int-after__item {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+
+  &[open] {
+    border-color: color-mix(in srgb, var(--color-accent-violet) 35%, var(--color-border-subtle));
+    box-shadow: var(--shadow-sm);
+  }
+
+  &:hover {
+    border-color: var(--color-border-default);
+  }
+}
+
+.int-after__summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+}
+
+.int-after__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-accent-violet) 16%, var(--color-bg-surface)),
+    color-mix(in srgb, var(--color-accent-blue) 14%, var(--color-bg-surface))
+  );
+  color: var(--color-accent-violet);
+}
+
+.int-after__title {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.int-after__chevron {
+  display: flex;
+  color: var(--color-text-tertiary);
+  transition: transform var(--transition-base);
+
+  .int-after__item[open] & {
+    transform: rotate(180deg);
+  }
+}
+
+.int-after__body {
+  padding: 0 var(--space-4) var(--space-4) calc(var(--space-4) + 32px + var(--space-3));
+  animation: int-rise 300ms ease-out both;
 }
 
 .int-tutorial__note {
-  margin-top: var(--space-5);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border-subtle);
   font-size: var(--font-size-13);
   color: var(--color-text-tertiary);
+
+  app-icon {
+    flex: none;
+    margin-top: 3px;
+  }
+}
+
+/* ── Motion ── */
+@keyframes int-float {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -5px; }
+}
+
+@keyframes int-dash {
+  to { background-position: var(--space-3) 0; }
+}
+
+@keyframes int-travel-out {
+  0%   { left: 0; opacity: 0; }
+  10%  { opacity: 1; }
+  45%  { left: calc(100% - 10px); opacity: 1; }
+  50%  { left: calc(100% - 10px); opacity: 0; }
+  100% { left: calc(100% - 10px); opacity: 0; }
+}
+
+@keyframes int-travel-back {
+  0%, 50% { right: 0; opacity: 0; }
+  60%     { opacity: 1; }
+  95%     { right: calc(100% - 10px); opacity: 1; }
+  100%    { right: calc(100% - 10px); opacity: 0; }
+}
+
+@keyframes int-pulse {
+  0%, 100% { box-shadow: var(--shadow-md), 0 0 0 0 color-mix(in srgb, var(--color-success) 35%, transparent); }
+  50%      { box-shadow: var(--shadow-md), 0 0 0 8px color-mix(in srgb, var(--color-success) 0%, transparent); }
+}
+
+@keyframes int-check {
+  0%, 40%  { transform: scale(0); }
+  50%      { transform: scale(1.2); }
+  60%, 90% { transform: scale(1); }
+  100%     { transform: scale(0); }
+}
+
+@keyframes int-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes int-drain {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: 50.3; }
+}
+
+/* One step in the spotlight at a time: each step owns the first quarter of the cycle, offset by its index. */
+@keyframes int-step-num {
+  0%, 22%   { border-color: var(--color-accent-violet); box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-accent-violet) 18%, transparent); }
+  28%, 100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes int-step-card {
+  0%, 22%   { border-color: color-mix(in srgb, var(--color-accent-violet) 40%, var(--color-border-subtle)); background: color-mix(in srgb, var(--color-accent-violet) 5%, var(--color-bg-surface)); }
+  28%, 100% { border-color: var(--color-border-subtle); background: var(--color-bg-surface); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .int-flow__logo,
+  .int-flow__check,
+  .int-flow__track,
+  .int-flow__packet,
+  .int-flow__lock,
+  .int-prereq__item,
+  .int-tutorial__step-num,
+  .int-tutorial__step-card,
+  .int-timer__value,
+  .int-tutorial__scopes li,
+  .int-after__body {
+    animation: none;
+  }
+
+  .int-flow__packet {
+    display: none;
+  }
+
+  .int-flow__check {
+    transform: none;
+  }
 }
 
 /* Reference layout adapted to Wasnie dark tokens:

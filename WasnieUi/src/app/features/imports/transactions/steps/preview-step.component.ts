@@ -3,7 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
-import { WsButtonComponent, WsStatCardComponent, WsBadgeComponent, BadgeVariant } from '../../../../shared/ui';
+import { WsButtonComponent, WsBadgeComponent, BadgeVariant, WsTableComponent } from '../../../../shared/ui';
 import { TransactionImportService } from '../services/transaction-import.service';
 import {
   TransactionImportColumnMapping,
@@ -12,13 +12,15 @@ import {
   ValidationIssue,
 } from '../models/transaction-import.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
+import { ImportStepHeroComponent } from '../../shared/import-step-hero.component';
+import { CurrencyFormatPipe } from '../../../../shared/pipes/currency-format.pipe';
 
 type RowFilter = 'all' | 'errors' | 'warnings';
 
 @Component({
   selector: 'app-tx-preview-step',
   standalone: true,
-  imports: [TranslateModule, FormsModule, IconComponent, WsButtonComponent, WsStatCardComponent, WsBadgeComponent],
+  imports: [ImportStepHeroComponent, TranslateModule, FormsModule, IconComponent, WsButtonComponent, WsBadgeComponent, WsTableComponent, CurrencyFormatPipe],
   templateUrl: './preview-step.component.html',
   styleUrl: './preview-step.component.scss',
 })

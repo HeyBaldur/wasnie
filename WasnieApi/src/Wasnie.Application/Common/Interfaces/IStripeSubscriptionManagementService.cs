@@ -1,15 +1,13 @@
-using Wasnie.Domain.Authorization;
-
 namespace Wasnie.Application.Common.Interfaces;
 
 public interface IStripeSubscriptionManagementService
 {
     /// <summary>
-    /// Resolves the current tier of a Stripe subscription from its active price.
-    /// Returns null if the subscription has no items or the price cannot be mapped to a known tier.
+    /// Resolves the plan code of a Stripe subscription from its product, through the plan catalog (KAN-77).
+    /// Returns null if the subscription has no items or the product is not a plan we sell.
     /// Throws StripeException on network/API failures — callers must handle this as an abort signal.
     /// </summary>
-    Task<Tier?> GetCurrentTierFromStripeAsync(string subscriptionId, CancellationToken cancellationToken = default);
+    Task<string?> GetCurrentPlanCodeFromStripeAsync(string subscriptionId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Upgrade: charges the full new-plan price immediately and resets the billing cycle to now.

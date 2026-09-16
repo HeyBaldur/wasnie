@@ -4,7 +4,7 @@ import { TranslateModule } from '@ngx-translate/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
-import { WsButtonComponent, WsSelectComponent, SelectOption } from '../../../../shared/ui';
+import { WsButtonComponent, WsSelectComponent, SelectOption , WsTableComponent } from '../../../../shared/ui';
 import { TransactionImportService } from '../services/transaction-import.service';
 import {
   TransactionImportColumnMapping,
@@ -14,11 +14,12 @@ import {
 import { extractApiError } from '../../../../shared/utils/api-error';
 import { detectField, TRANSACTION_FIELD_PATTERNS } from '../helpers/column-auto-detect';
 import { SettingsApiService, FieldRequirement } from '../../../admin/services/settings.api.service';
+import { ImportStepHeroComponent } from '../../shared/import-step-hero.component';
 
 @Component({
   selector: 'app-tx-mapping-step',
   standalone: true,
-  imports: [TranslateModule, ReactiveFormsModule, FormsModule, IconComponent, WsButtonComponent, WsSelectComponent],
+  imports: [ImportStepHeroComponent, TranslateModule, ReactiveFormsModule, FormsModule, IconComponent, WsButtonComponent, WsSelectComponent, WsTableComponent],
   templateUrl: './mapping-step.component.html',
   styleUrl: './mapping-step.component.scss',
 })

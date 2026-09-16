@@ -1,5 +1,6 @@
 @if (isOpen()) {
-  <div class="ws-modal" role="dialog" aria-modal="true">
+  <!-- #root: al cerrarse, el componente anima una copia inerte de este nodo (ver playExit). -->
+  <div #root class="ws-modal" role="dialog" aria-modal="true">
     <div class="ws-modal__overlay" (click)="onBackdropClick()"></div>
 
     <div #dialog [class]="dialogClass()">

@@ -1,5 +1,7 @@
+import { signal, WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, of, Subject, throwError } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
 import { HubSpotStatusStore } from './hubspot-status.store';
 import { HubSpotApiService } from './hubspot.api.service';
 import { HubSpotConnectionStatus, HubSpotStatus } from '../models/hubspot.model';
@@ -20,11 +22,15 @@ function statusOf(status: HubSpotStatus): HubSpotConnectionStatus {
 
 describe('HubSpotStatusStore', () => {
   let calls: number;
+  let tenantId: WritableSignal<string | null>;
 
   function configure(getStatus: () => Observable<HubSpotConnectionStatus>): HubSpotStatusStore {
     calls = 0;
+    tenantId = signal<string | null>('tenant-a');
     TestBed.configureTestingModule({
-      providers: [{
+      providers: [
+        { provide: AuthService, useValue: { tenantId } },
+        {
         provide: HubSpotApiService,
         useValue: {
           getStatus: () => {
@@ -82,6 +88,36 @@ describe('HubSpotStatusStore', () => {
     store.ensureLoaded();
 
     expect(calls).toBe(0);
+    expect(store.connected()).toBe(false);
+  });
+  /**
+   * ★★ KAN-77 runtime: signed in as another account in the same tab, the previous tenant's "Connected"
+   * banner stayed — for a tenant that had never connected HubSpot.
+   */
+  it('★ switching tenant never shows the previous tenant\'s status, and reads the new tenant\'s own', () => {
+    const responses: HubSpotConnectionStatus[] = [statusOf('Connected'), statusOf('Disconnected')];
+    const store = configure(() => of(responses.shift()!));
+
+    store.ensureLoaded();
+    expect(store.connected()).toBe(true);
+
+    tenantId.set('tenant-b');
+    expect(store.connected()).toBe(false, 'tenant A\'s cached status must not be shown to tenant B');
+
+    store.ensureLoaded();
+    expect(calls).toBe(2, 'the new tenant gets its own read');
+    expect(store.connected()).toBe(false);
+  });
+
+  it('★ a response that lands after the tenant changed is dropped', () => {
+    const pending = new Subject<HubSpotConnectionStatus>();
+    const store = configure(() => pending.asObservable());
+
+    store.ensureLoaded();
+    tenantId.set('tenant-b');
+    pending.next(statusOf('Connected'));
+
+    expect(store.status()).toBeNull();
     expect(store.connected()).toBe(false);
   });
 });

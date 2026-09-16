@@ -96,7 +96,16 @@ public static class DependencyInjection
         // services because it is answered the same way — and kept separate from them because it is an
         // entitlement (per user, headed for per-seat billing), not a role permission.
         services.AddScoped<IAssistantEntitlement, AssistantEntitlement>();
+        // KAN-80: one per request; persists the token usage of every model call when the request ends.
+        services.AddScoped<Wasnie.Application.Assistant.Abstractions.IModelUsageRecorder, Wasnie.Infrastructure.Assistant.ModelUsageRecorder>();
         services.AddScoped<IPaidPlanGate, PaidPlanGate>();
+        services.AddScoped<IAccountAccessReader, AccountAccessReader>();
+        // KAN-83: the ONE place the tenant's token balance (included + boost) is assembled — read by the gate that
+        // stops a turn and by the screens that show the meter, so the two can never disagree.
+        services.AddScoped<IAssistantTokenBalanceReader, Wasnie.Application.Assistant.Common.AssistantTokenBalanceReader>();
+        // KAN-83: records a period's overage at rollover, and sells the boost packs.
+        services.AddScoped<IAssistantPeriodCloser, Wasnie.Application.Assistant.Common.AssistantPeriodCloser>();
+        services.AddScoped<IStripeBoostService, Wasnie.Infrastructure.Services.StripeBoostService>();
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
@@ -113,6 +122,25 @@ public static class DependencyInjection
                 o => o.PayeeMaxRows is > 0 and <= 100_000,
                 "Imports:PayeeMaxRows must be between 1 and 100,000.")
             .ValidateOnStart();
+
+        // KAN-77: trial length and the assistant's trial allowance. Fails at start-up on a nonsense value —
+        // a 0-day trial would lock every new account the moment it registers.
+        services.AddOptions<BillingOptions>()
+            .Bind(configuration.GetSection(BillingOptions.SectionName))
+            .Validate(o => o.TrialDays is > 0 and <= 365, "Billing:TrialDays must be between 1 and 365.")
+            .Validate(o => o.TrialAssistantTokenLimit > 0, "Billing:TrialAssistantTokenLimit must be greater than 0.")
+            // KAN-83: a zero monthly allowance would stop the assistant for every paying tenant on the first turn, and
+            // a zero expiry would kill every boost the instant it was bought. Both are worth refusing to start over.
+            .Validate(o => o.IncludedAssistantTokensPerMonth > 0,
+                "Billing:IncludedAssistantTokensPerMonth must be greater than 0.")
+            .Validate(o => o.Boosts.ExpiryDays > 0, "Billing:Boosts:ExpiryDays must be greater than 0.")
+            .Validate(
+                o => !Wasnie.Application.Features.Subscription.SubscriptionPlanCatalog.Validate(o).Any(),
+                "Billing:Plans is invalid (at least one plan, unique codes, DefaultPlanCode must be one of them, positive limits).")
+            .ValidateOnStart();
+        services.AddSingleton<
+            Wasnie.Application.Features.Subscription.ISubscriptionPlanCatalog,
+            Wasnie.Application.Features.Subscription.SubscriptionPlanCatalog>();
 
         services.AddOptions<StripeOptions>()
             .Bind(configuration.GetSection(StripeOptions.SectionName))
@@ -134,6 +162,8 @@ public static class DependencyInjection
         services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
         services.AddScoped<IStripeWebhookService, StripeWebhookService>();
         services.AddScoped<IStripeSubscriptionManagementService, StripeSubscriptionManagementService>();
+        services.AddScoped<IStripeBillingDetailsReader, StripeBillingDetailsReader>();
+        services.AddScoped<IStripeSubscriptionReconciler, StripeSubscriptionReconciler>();
 
         // HubSpot OAuth integration (Phase 1). Options are bound WITHOUT ValidateOnStart so the app still
         // starts before the owner configures HubSpot; the endpoints fail gracefully until configured.

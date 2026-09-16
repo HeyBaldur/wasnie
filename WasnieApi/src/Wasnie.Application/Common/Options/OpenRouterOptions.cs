@@ -68,6 +68,27 @@ public sealed class OpenRouterOptions
     public int MaxHistoryMessages { get; init; } = 20;
 
     public int TimeoutSeconds { get; init; } = 60;
+
+    /// <summary>
+    /// The upstream vendors allowed to serve Zeke's calls (OpenRouter slugs, e.g. <c>cerebras</c>). EMPTY = OpenRouter's
+    /// default routing, which picks the cheapest host — slow, and an undeclared sub-processor chain (KAN-74, Legal.md §5).
+    ///
+    /// ★ NOT DEFAULTED IN CODE. Which third party processes the data is an environment decision, written in that
+    /// environment's appsettings where it can be reviewed — never a value that appears because nobody set it.
+    /// </summary>
+    public string[] ProviderOnly { get; init; } = [];
+
+    /// <summary>Preference order among <see cref="ProviderOnly"/>.</summary>
+    public string[] ProviderOrder { get; init; } = [];
+
+    /// <summary>Try the next allowed vendor when one fails. Never leaves <see cref="ProviderOnly"/>.</summary>
+    public bool ProviderAllowFallbacks { get; init; } = true;
+
+    /// <summary>Require Zero Data Retention endpoints on every request (OpenRouter <c>provider.zdr</c>).</summary>
+    public bool RequireZeroDataRetention { get; init; }
+
+    /// <summary>Skip vendors that would ignore a parameter we send (JSON mode, tools) rather than serve it wrongly.</summary>
+    public bool RequireParameters { get; init; }
 }
 
 /// <summary>

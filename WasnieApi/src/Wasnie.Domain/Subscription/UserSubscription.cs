@@ -6,7 +6,11 @@ namespace Wasnie.Domain.Subscription;
 public sealed class UserSubscription : AggregateRoot
 {
     public Guid TenantId { get; private set; }
+    /// <summary>LEGACY (pre-KAN-77). Kept in the database untouched; no decision reads it. See <see cref="PlanCode"/>.</summary>
     public Tier Tier { get; private set; }
+
+    /// <summary>The plan this Stripe subscription is for (a code from Billing:Plans). Null before checkout completes.</summary>
+    public string? PlanCode { get; private set; }
     public SubscriptionStatus Status { get; private set; }
     public string BillingEmail { get; private set; } = string.Empty;
 
@@ -31,13 +35,20 @@ public sealed class UserSubscription : AggregateRoot
 
     private UserSubscription() { }
 
-    public static UserSubscription CreateFree(Guid id, Guid tenantId, string billingEmail, DateTimeOffset now) =>
+    /// <summary>
+    /// A subscription row before Stripe has confirmed anything — the webhook completes it with
+    /// <see cref="UpdateFromStripe"/> in the same unit of work.
+    ///
+    /// ★ KAN-77: this used to be <c>CreateFree</c> and wrote Status = Active with no Stripe id, which made a free
+    /// row indistinguishable from a paying one to anything that only looked at Status. The free plan is gone; a
+    /// row that nothing has confirmed is Incomplete, which is what it is.
+    /// </summary>
+    public static UserSubscription CreatePending(Guid id, Guid tenantId, string billingEmail, DateTimeOffset now) =>
         new()
         {
             Id = id,
             TenantId = tenantId,
-            Tier = Tier.Free,
-            Status = SubscriptionStatus.Active,
+            Status = SubscriptionStatus.Incomplete,
             BillingEmail = billingEmail,
             CreatedAt = now,
             UpdatedAt = now,
@@ -48,7 +59,7 @@ public sealed class UserSubscription : AggregateRoot
     // cancellation and is not in a canceled state. Callers that need to re-apply a
     // cancellation schedule (subscription.updated) do so explicitly after this call.
     public void UpdateFromStripe(
-        Tier tier,
+        string planCode,
         SubscriptionStatus status,
         string stripeSubscriptionId,
         string stripeCustomerId,
@@ -59,7 +70,7 @@ public sealed class UserSubscription : AggregateRoot
         DateTimeOffset? nextBillingDate,
         DateTimeOffset now)
     {
-        Tier = tier;
+        PlanCode = planCode;
         Status = status;
         StripeSubscriptionId = stripeSubscriptionId;
         StripeCustomerId = stripeCustomerId;
@@ -74,10 +85,12 @@ public sealed class UserSubscription : AggregateRoot
         UpdatedAt = now;
     }
 
-    public void Cancel(DateTimeOffset now)
+    /// <param name="canceledAt">When the subscription actually ended, if known. A sync that notices a missed
+    /// cancellation days later must record the day it ended, not the day it was noticed (§B6).</param>
+    public void Cancel(DateTimeOffset now, DateTimeOffset? canceledAt = null)
     {
         Status = SubscriptionStatus.Canceled;
-        CanceledAt = now;
+        CanceledAt = canceledAt ?? now;
         CancelAtPeriodEnd = false;
         CancelAt = null;
         UpdatedAt = now;
@@ -110,12 +123,12 @@ public sealed class UserSubscription : AggregateRoot
         UpdatedAt = now;
     }
 
-    // Corrects a stale DB tier to match Stripe's authoritative value.
+    // Corrects a stale DB plan to match Stripe's authoritative value.
     // Called by ChangePlanCommandHandler before deciding upgrade vs downgrade,
     // to close the window between a Stripe webhook arriving and the DB being updated.
-    public void SyncTier(Tier tier, DateTimeOffset now)
+    public void SyncPlan(string planCode, DateTimeOffset now)
     {
-        Tier = tier;
+        PlanCode = planCode;
         UpdatedAt = now;
     }
 }

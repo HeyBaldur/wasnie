@@ -19,9 +19,8 @@ export const qualificationGuard: CanActivateFn = () => {
   }
 
   if (user?.isQualified) {
-    return user.hasSelectedPlan
-      ? router.createUrlTree(['/dashboard'])
-      : router.createUrlTree(['/onboarding/plan']);
+    // KAN-77: straight into the product — the trial needs no plan selection.
+    return router.createUrlTree(['/dashboard']);
   }
 
   return true;

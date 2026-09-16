@@ -32,12 +32,25 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-xl);
-  transition: border-color var(--transition-base), background var(--transition-base);
+  transition: border-color var(--transition-base), background var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
 
-  &:hover,
+  &:hover {
+    border-color: color-mix(in srgb, var(--color-accent-violet) 50%, var(--color-border-default));
+    background:
+      radial-gradient(80% 120% at 50% 0%, color-mix(in srgb, var(--color-accent-violet) 10%, transparent), transparent 70%),
+      var(--color-bg-surface);
+    box-shadow: 0 12px 32px -20px color-mix(in srgb, var(--color-accent-violet) 60%, transparent);
+  }
+
+  // Dragging a file over: a dashed outline that marches, so the drop target is unmistakable.
   &--dragging {
-    border-color: var(--color-brand);
-    background: var(--color-brand-subtle);
+    border-color: transparent;
+    background:
+      linear-gradient(var(--color-bg-surface), var(--color-bg-surface)) padding-box,
+      repeating-linear-gradient(90deg, var(--color-accent-violet) 0 10px, transparent 10px 18px) border-box;
+    background-size: auto, 36px 100%;
+    animation: dz-march 0.8s linear infinite;
+    transform: scale(1.01);
   }
 
   // ★ FOCUS COMES FROM THE INPUT, WHICH IS THE ONLY FOCUSABLE THING HERE. The input is invisible
@@ -58,19 +71,84 @@
   cursor: pointer;
 }
 
-// The framed tile around the icon. Sits on the surface with its own border and a small shadow, so
-// it reads as an object on the zone rather than as a large glyph printed on it.
-.dz__featured-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--space-10);
-  height: var(--space-10);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
-  color: var(--color-text-secondary);
+// ── The zone's illustration ──
+.dz__art {
+  display: block;
+  width: 120px;
+  height: 80px;
+
+  svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+}
+
+.dz__sheet-paper { fill: var(--color-bg-surface); stroke: var(--color-border-default); stroke-width: 1.5; }
+.dz__sheet-line { fill: var(--color-border-default); }
+.dz__sheet-band--green { fill: var(--color-success); opacity: 0.85; }
+.dz__sheet-band--blue { fill: var(--color-accent-blue); opacity: 0.85; }
+
+.dz__sheet {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dz-float 4.5s ease-in-out infinite;
+
+  &--left { rotate: -10deg; }
+  &--right { rotate: 9deg; animation-delay: 1.2s; }
+}
+
+.dz__cloud-body {
+  fill: color-mix(in srgb, var(--color-accent-violet) 12%, var(--color-bg-surface));
+  stroke: var(--color-accent-violet);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.dz__arrow-stem {
+  stroke: var(--color-accent-violet);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dz__arrow {
+  animation: dz-rise 1.8s ease-in-out infinite;
+}
+
+.dz__spark {
+  fill: var(--color-accent-violet);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dz-twinkle 2.4s ease-in-out infinite;
+
+  &--late { fill: var(--color-accent-blue); animation-delay: 1s; }
+}
+
+// Hover / drag: the cloud lifts and the pages lean in.
+.dz__cloud {
+  transition: transform var(--transition-base);
+}
+
+.dz__zone:hover .dz__cloud,
+.dz__zone--dragging .dz__cloud {
+  transform: translateY(-4px);
+}
+
+@keyframes dz-float {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -4px; }
+}
+
+@keyframes dz-rise {
+  0%   { transform: translateY(4px); opacity: 0.4; }
+  50%  { transform: translateY(-2px); opacity: 1; }
+  100% { transform: translateY(4px); opacity: 0.4; }
+}
+
+@keyframes dz-twinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50%      { opacity: 1; transform: scale(1.2); }
 }
 
 .dz__prompt {
@@ -111,6 +189,7 @@
 }
 
 .dz__file {
+  animation: dz-file-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   display: flex;
   gap: var(--space-3);
   padding: var(--space-4);
@@ -237,8 +316,18 @@
   width: 40%;
   height: 100%;
   border-radius: var(--radius-full);
-  background: var(--color-brand);
+  background: linear-gradient(90deg, var(--color-accent-blue), var(--color-accent-violet));
   animation: dz-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes dz-march {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 0, 36px 0; }
+}
+
+@keyframes dz-file-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes dz-indeterminate {
@@ -248,6 +337,14 @@
 
 // Respect a reader who asked for less motion: the bar stays, it simply stops travelling.
 @media (prefers-reduced-motion: reduce) {
+  .dz__sheet,
+  .dz__arrow,
+  .dz__spark,
+  .dz__file,
+  .dz__zone--dragging {
+    animation: none;
+  }
+
   .dz__progress-fill {
     width: 100%;
     animation: none;

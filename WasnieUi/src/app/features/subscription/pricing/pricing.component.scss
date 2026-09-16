@@ -1,0 +1,496 @@
+@reference "../../../../styles.scss";
+
+// Same box as ws-page-layout (standard width, same gutters), without its header.
+.pricing-page {
+  display: block;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+}
+
+.pricing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-bottom: var(--space-10);
+}
+
+// ── Hero ────────────────────────────────────────────────────────────────────────────
+.pricing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-8);
+  animation: pricing-rise 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @media (max-width: 900px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pricing-hero__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.pricing-hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-accent-violet) 30%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent-violet) 10%, var(--color-bg-surface));
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-accent-violet);
+}
+
+.pricing-hero__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: calc(var(--font-size-32) * 1.5);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  color: var(--color-text-primary);
+
+  @media (max-width: 600px) {
+    font-size: var(--font-size-32);
+  }
+}
+
+.pricing-hero__subtitle {
+  margin: 0;
+  max-width: 520px;
+  font-size: var(--font-size-16);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.pricing-hero__status {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius-md);
+  background: var(--color-info-bg);
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+
+  &--paying {
+    border-color: var(--color-success-border);
+    background: var(--color-success-bg);
+  }
+}
+
+.pricing-hero__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-info);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-info) 20%, transparent);
+
+  .pricing-hero__status--paying & {
+    background: var(--color-success);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success) 20%, transparent);
+  }
+}
+
+.pricing-hero__link {
+  font-weight: 600;
+  color: var(--color-brand);
+}
+
+// ── Hero illustration ───────────────────────────────────────────────────────────────
+.pricing-hero__art {
+  display: flex;
+  justify-content: center;
+}
+
+.pricing-hero__svg {
+  width: 100%;
+  max-width: 460px;
+  height: auto;
+  overflow: visible;
+}
+
+.art-stop-violet { stop-color: var(--color-accent-violet); }
+.art-stop-blue { stop-color: var(--color-accent-blue); }
+
+.art-halo {
+  fill: color-mix(in srgb, var(--color-accent-violet) 10%, transparent);
+  stroke: color-mix(in srgb, var(--color-accent-blue) 18%, transparent);
+  stroke-dasharray: 3 7;
+}
+
+.art-surface {
+  fill: var(--color-bg-surface);
+  stroke: var(--color-border-default);
+  stroke-width: 1;
+  filter: drop-shadow(0 16px 28px color-mix(in srgb, var(--color-accent-violet) 18%, transparent));
+}
+
+.art-line { fill: var(--color-border-default); }
+.art-line--strong { fill: var(--color-text-tertiary); opacity: 0.55; }
+.art-pill { fill: var(--color-success-bg); }
+
+.art-trend-arrow,
+.art-trend {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.art-trend-arrow { stroke: var(--color-success); stroke-width: 2.5; }
+.art-trend { stroke: var(--color-accent-violet); stroke-width: 3; }
+.art-trend-end { fill: var(--color-bg-surface); stroke: var(--color-accent-violet); stroke-width: 3; }
+
+.art-coin-ring { stroke: color-mix(in srgb, var(--color-bg-surface) 55%, transparent); stroke-width: 2; }
+.art-coin-euro { stroke: var(--color-bg-surface); stroke-width: 3; stroke-linecap: round; }
+.art-coin-badge { fill: var(--color-success); stroke: var(--color-bg-surface); stroke-width: 3; }
+.art-coin-check { stroke: var(--color-bg-surface); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+.art-avatar { stroke: var(--color-bg-surface); stroke-width: 3; }
+.art-avatar--1 { fill: var(--color-accent-blue); }
+.art-avatar--2 { fill: var(--color-accent-violet); }
+.art-avatar--3 { fill: var(--color-success); }
+.art-avatar-plus { fill: var(--color-bg-surface-sunken); stroke: var(--color-bg-surface); stroke-width: 3; }
+.art-avatar-plus-sign { stroke: var(--color-text-secondary); stroke-width: 2.5; stroke-linecap: round; }
+
+.art-sparkle { fill: var(--color-accent-violet); opacity: 0.6; }
+.art-dot--1 { fill: var(--color-accent-blue); opacity: 0.5; }
+.art-dot--2 { fill: var(--color-accent-violet); opacity: 0.45; }
+
+// Motion: the card floats, the bars grow in sequence, the trend line draws itself, the coin drops in with its
+// check, the team slides up and the extra seat keeps "breathing" — unlimited.
+.art-float {
+  animation: pricing-float 6s ease-in-out 900ms infinite;
+}
+
+.art-bar {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  animation: pricing-grow 700ms cubic-bezier(0.34, 1.3, 0.64, 1) forwards;
+}
+
+.art-bar--1 { animation-delay: 250ms; }
+.art-bar--2 { animation-delay: 350ms; }
+.art-bar--3 { animation-delay: 450ms; }
+.art-bar--4 { animation-delay: 550ms; }
+.art-bar--5 { animation-delay: 650ms; }
+
+.art-trend {
+  stroke-dasharray: 190;
+  stroke-dashoffset: 190;
+  animation: pricing-draw 900ms ease-out 1s forwards;
+}
+
+.art-trend-end {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0);
+  animation: pricing-pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1) 1.8s forwards, pricing-pulse 2.4s ease-in-out 2.4s infinite;
+}
+
+.art-trend-arrow {
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: pricing-draw 500ms ease-out 1.4s forwards;
+}
+
+.art-coin {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: pricing-coin 700ms cubic-bezier(0.34, 1.56, 0.64, 1) 1.5s forwards, pricing-bob 4.5s ease-in-out 2.4s infinite;
+}
+
+.art-coin-check {
+  stroke-dasharray: 14;
+  stroke-dashoffset: 14;
+  animation: pricing-draw 350ms ease-out 2.2s forwards;
+}
+
+.art-team {
+  opacity: 0;
+  animation: pricing-slide-up 700ms cubic-bezier(0.2, 0.8, 0.2, 1) 900ms forwards;
+}
+
+.art-avatar-plus {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pricing-pulse 2.6s ease-in-out 2s infinite;
+}
+
+.art-sparkle,
+.art-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pricing-twinkle 2.6s ease-in-out infinite;
+}
+
+.art-sparkle--2 { animation-delay: 0.8s; }
+.art-dot--1 { animation-delay: 1.2s; }
+.art-dot--2 { animation-delay: 1.7s; }
+
+@keyframes pricing-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pricing-float {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -6px; }
+}
+
+@keyframes pricing-grow {
+  to { transform: scaleY(1); }
+}
+
+@keyframes pricing-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes pricing-pop {
+  to { transform: scale(1); }
+}
+
+@keyframes pricing-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+@keyframes pricing-coin {
+  from { opacity: 0; transform: translateY(-24px) scale(0.7) rotate(-20deg); }
+  to   { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+}
+
+@keyframes pricing-bob {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -5px; }
+}
+
+@keyframes pricing-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pricing-twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.85); }
+  50%      { opacity: 0.9; transform: scale(1.1); }
+}
+
+// ── The plan ────────────────────────────────────────────────────────────────────────
+.pricing__offers {
+  display: grid;
+  gap: var(--space-5);
+  animation: pricing-rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
+}
+
+.pricing__skeleton {
+  height: 380px;
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface-sunken);
+  animation: pricing-shimmer 1.4s ease infinite;
+}
+
+@keyframes pricing-shimmer {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+.pricing__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+}
+
+.pricing__muted {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.pricing__admin-note {
+  margin: calc(var(--space-6) * -1) 0 0;
+  text-align: center;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+// ── Guarantees ──────────────────────────────────────────────────────────────────────
+.pricing-trust {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3) var(--space-8);
+  margin: calc(var(--space-4) * -1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pricing-trust__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.pricing-trust__icon {
+  display: flex;
+  color: var(--color-success);
+}
+
+// ── Sections (benefits, FAQ) ────────────────────────────────────────────────────────
+.pricing-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.pricing-section__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.pricing-section__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-28);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+}
+
+.pricing-section__subtitle {
+  margin: 0;
+  max-width: 600px;
+  font-size: var(--font-size-15, var(--font-size-14));
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.pricing-benefits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+
+  @media (max-width: 900px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 560px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pricing-benefit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  animation: pricing-rise 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(200ms + var(--i, 0) * 70ms);
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+.pricing-benefit__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--space-1);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-accent-violet) 16%, var(--color-bg-surface)),
+    color-mix(in srgb, var(--color-accent-blue) 14%, var(--color-bg-surface))
+  );
+  color: var(--color-accent-violet);
+}
+
+.pricing-benefit__title {
+  margin: 0;
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.pricing-benefit__desc {
+  margin: 0;
+  font-size: var(--font-size-14);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.pricing-faq {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+
+  @media (max-width: 760px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pricing-faq__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pricing-faq__q {
+  margin: 0;
+  font-size: var(--font-size-15, var(--font-size-14));
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.pricing-faq__a {
+  margin: 0;
+  font-size: var(--font-size-14);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pricing-hero,
+  .pricing__offers,
+  .pricing-benefit,
+  .pricing__skeleton,
+  .art-float,
+  .art-bar,
+  .art-trend,
+  .art-trend-end,
+  .art-trend-arrow,
+  .art-coin,
+  .art-coin-check,
+  .art-team,
+  .art-avatar-plus,
+  .art-sparkle,
+  .art-dot {
+    animation: none;
+    transform: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}

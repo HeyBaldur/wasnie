@@ -26,6 +26,7 @@ public sealed class RegisterTenantCommandHandler(
     IEmailService emailService,
     IAuditService auditService,
     IOptions<ResendOptions> resendOptions,
+    IOptions<BillingOptions> billingOptions,
     IClock clock,
     IGuidGenerator guid,
     ILogger<RegisterTenantCommandHandler> logger)
@@ -39,7 +40,12 @@ public sealed class RegisterTenantCommandHandler(
         if (slugTaken)
             return Result<AuthResultDto>.Failure("Tenant slug is already taken.");
 
-        var tenant = Tenant.Create(request.TenantName, request.TenantSlug, guid.NewGuid(), clock.UtcNowOffset);
+        var registeredAt = clock.UtcNowOffset;
+        var tenant = Tenant.Create(request.TenantName, request.TenantSlug, guid.NewGuid(), registeredAt);
+
+        // KAN-77: every new account starts in the free trial — full access, no card. The length is
+        // configuration (Billing:TrialDays), counted from registration.
+        tenant.StartTrial(registeredAt.AddDays(billingOptions.Value.TrialDays));
         dbContext.Tenants.Add(tenant);
 
         // Seed all 7 field requirement settings (Optional) for every new tenant.

@@ -30,6 +30,7 @@ public sealed class HubSpotTenantSyncJob(
     ICrmDealReconciler reconciler,
     IDealLostReconciler dealLostReconciler,
     IClock clock,
+    IAccountAccessReader accessReader,
     ILogger<HubSpotTenantSyncJob> logger)
 {
     // Non-interactive actor stamped on transactions/audit created by the automatic sync.
@@ -41,20 +42,16 @@ public sealed class HubSpotTenantSyncJob(
         tenantCtx.SetTenant(tenantId);
 
         // Second line of defence behind the orchestrator's filter, and not redundant: jobs are SCHEDULED
-        // with a stagger of up to hours, so a tenant that was paid at fan-out time can be on Free by the
-        // time its job actually runs. Checked before the connection is even read — nothing outbound
-        // happens for a tenant whose plan no longer includes this.
-        var tier = await db.Tenants
-            .IgnoreQueryFilters()
-            .Where(t => t.Id == tenantId)
-            .Select(t => (Tier?)t.Tier)
-            .FirstOrDefaultAsync(cancellationToken);
+        // with a stagger of up to hours, so a tenant that had access at fan-out time can be locked by the
+        // time its job actually runs (trial ended, subscription canceled). Checked before the connection is
+        // even read — nothing outbound happens for a locked account. KAN-77: the question is access, not tier.
+        var access = await accessReader.GetAsync(tenantId, cancellationToken);
 
-        if (tier is null || !TierFeatures.IncludesPaidFeatures(tier.Value))
+        if (access is not { HasAccess: true })
         {
             logger.LogInformation(
-                "HubSpot auto-sync skipped tenant {TenantId}: tier {Tier} does not include the integration.",
-                tenantId, tier);
+                "HubSpot auto-sync skipped tenant {TenantId}: account is {State} ({Reason}).",
+                tenantId, access?.State.ToString() ?? "missing", access?.LockReason);
             return;
         }
 

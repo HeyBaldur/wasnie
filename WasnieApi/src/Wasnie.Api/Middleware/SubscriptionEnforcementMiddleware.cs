@@ -1,13 +1,18 @@
-using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Domain.Subscription;
 
 namespace Wasnie.Api.Middleware;
 
 /// <summary>
-/// Blocks all functional endpoints for tenants with a Canceled subscription.
-/// Exempt: auth, health, and the subscription endpoints needed to display the
-/// reactivation screen and initiate a new checkout.
+/// The paywall (KAN-77). Blocks every functional endpoint for a tenant whose account is
+/// <see cref="AccountAccessState.Locked"/>: the trial ended without a subscription, or the subscription is no
+/// longer active. Data is untouched — the moment they pay, the next request goes through.
+///
+/// Exempt: auth, health, and what a locked user needs to see the paywall and pay (plans, checkout, account
+/// state, billing portal).
+///
+/// ★ The state comes from <see cref="IAccountAccessReader"/>, the same rule the metered-feature gate and the
+/// account endpoint use, so the paywall cannot disagree with the banner about who is in.
 /// </summary>
 public sealed class SubscriptionEnforcementMiddleware(RequestDelegate next)
 {
@@ -15,13 +20,21 @@ public sealed class SubscriptionEnforcementMiddleware(RequestDelegate next)
     [
         "/api/subscription/webhook",
         "/api/subscription/current",
+        "/api/subscription/access",
         "/api/subscription/checkout",
         "/api/subscription/config",
         "/api/subscription/plans",
         "/api/subscription/usage",
+        "/api/subscription/billing-portal",
         "/api/auth/",
         "/health",
     ];
+
+    /// <summary>
+    /// The 402 body's code. One code for every lock, with the reason beside it: the client shows ONE paywall,
+    /// and a code per reason would make every new reason a client change.
+    /// </summary>
+    public const string LockedCode = "account_locked";
 
     public async Task InvokeAsync(
         HttpContext context,
@@ -50,26 +63,21 @@ public sealed class SubscriptionEnforcementMiddleware(RequestDelegate next)
             return;
         }
 
-        var db = context.RequestServices.GetRequiredService<IApplicationDbContext>();
-        var status = await db.UserSubscriptions
-            .AsNoTracking()
-            .IgnoreQueryFilters()
-            .Where(s => s.TenantId == tenantContext.TenantId)
-            .Select(s => (SubscriptionStatus?)s.Status)
-            .FirstOrDefaultAsync(context.RequestAborted);
+        var reader = context.RequestServices.GetRequiredService<IAccountAccessReader>();
+        var access = await reader.GetAsync(tenantContext.TenantId, context.RequestAborted);
 
-        if (status == SubscriptionStatus.Canceled)
+        if (access is { HasAccess: false })
         {
             logger.LogWarning(
-                "Blocked {Method} {Path} — tenant {TenantId} has a Canceled subscription",
+                "Blocked {Method} {Path} — tenant {TenantId} is locked ({Reason})",
                 context.Request.Method,
                 path,
-                tenantContext.TenantId);
+                tenantContext.TenantId,
+                access.LockReason);
 
             context.Response.StatusCode = StatusCodes.Status402PaymentRequired;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(
-                """{"code":"subscription_canceled","message":"Subscription canceled. Reactivate your subscription to continue."}""",
+            await context.Response.WriteAsJsonAsync(
+                new { code = LockedCode, reason = access.LockReason?.ToString() },
                 context.RequestAborted);
             return;
         }

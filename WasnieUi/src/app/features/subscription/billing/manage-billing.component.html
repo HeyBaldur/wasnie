@@ -1,0 +1,408 @@
+<app-shell>
+  <ws-page-layout
+    icon="brand-stripe"
+    [title]="'BILLING.TITLE' | translate"
+    [subtitle]="'BILLING.SUBTITLE' | translate"
+  >
+    <div class="billing">
+      @if (loading()) {
+        <ws-card><div class="billing-card" aria-hidden="true">
+          <span class="billing-skeleton billing-skeleton--title"></span>
+          <span class="billing-skeleton billing-skeleton--row"></span>
+          <span class="billing-skeleton billing-skeleton--row"></span>
+        </div></ws-card>
+      } @else if (loadError()) {
+        <ws-card><div class="billing-card billing-card--center">
+          <p class="billing-muted">{{ 'BILLING.LOAD_ERROR' | translate }}</p>
+          <ws-button variant="secondary" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+        </div></ws-card>
+      } @else {
+
+        <!-- ── Subscription ─────────────────────────────────────────────────────── -->
+        <section class="billing-section" aria-labelledby="billing-sub-title">
+          <header class="billing-section__head">
+            <h2 id="billing-sub-title" class="billing-section__title">{{ 'BILLING.SECTION_SUBSCRIPTION' | translate }}</h2>
+            <a class="billing-section__action" routerLink="/pricing">{{ 'BILLING.SEE_PRICING' | translate }}</a>
+          </header>
+
+          <ws-card><div class="billing-plan">
+            @if (cardState() === 'trial') {
+              <!-- ── Trial: the countdown is the point ── -->
+              <div class="billing-plan__top">
+                <div class="billing-plan__identity">
+                  <span class="billing-plan__name">{{ 'BILLING.TRIAL_TITLE' | translate }}</span>
+                  <ws-badge variant="info" size="sm">{{ 'BILLING.TRIAL_BADGE' | translate }}</ws-badge>
+                </div>
+                @if (access()!.trialEndsAt) {
+                  <span class="billing-plan__date">
+                    {{ 'BILLING.TRIAL_ENDS_ON' | translate }}
+                    <strong>{{ access()!.trialEndsAt | date: 'mediumDate' }}</strong>
+                  </span>
+                }
+              </div>
+
+              <div class="billing-plan__main">
+                <div class="billing-plan__meter">
+                  @if (ringValue() !== null) {
+                    <svg class="billing-ring" viewBox="0 0 64 64" aria-hidden="true">
+                      <circle class="billing-ring__track" cx="32" cy="32" r="26" />
+                      <circle
+                        class="billing-ring__value"
+                        cx="32" cy="32" r="26"
+                        [attr.stroke-dasharray]="ringCircumference"
+                        [attr.stroke-dashoffset]="ringOffset()"
+                      />
+                    </svg>
+                  }
+                  <div class="billing-plan__meter-text">
+                    <span class="billing-plan__headline">
+                      {{ 'BILLING.TRIAL_DAYS_LEFT' | translate: { days: access()!.trialDaysRemaining } }}
+                    </span>
+                    <!-- KAN-80: the trial's assistant allowance, in tokens — the same meter Settings shows. -->
+                    <app-token-usage-meter [access]="access()" variant="compact" />
+                  </div>
+                </div>
+
+                @if (currentPlan(); as plan) {
+                  <div class="billing-plan__price">
+                    <span class="billing-plan__amount">{{ plan.price | currencyFormat: plan.currency }}</span>
+                    <span class="billing-plan__interval">
+                      {{ (plan.interval === 'year' ? 'PRICING.PER_YEAR' : 'PRICING.PER_MONTH') | translate }}
+                    </span>
+                    <span class="billing-plan__caption">{{ 'BILLING.PRICE_AFTER_TRIAL' | translate }}</span>
+                  </div>
+                }
+              </div>
+            } @else if (cardState() === 'paid' || cardState() === 'ended') {
+              <!-- ── Paying / ended: plan, status, price, renewal. No countdown. ── -->
+              <div class="billing-plan__top">
+                <div class="billing-plan__identity">
+                  <span class="billing-plan__name">{{ planName() }}</span>
+                  @if (!detailsLoading()) {
+                    <ws-badge [variant]="statusVariant()" size="sm">{{ statusKey() | translate }}</ws-badge>
+                  }
+                </div>
+              </div>
+
+              <div class="billing-plan__main">
+                @if (currentPlan(); as plan) {
+                  <div class="billing-plan__price billing-plan__price--start">
+                    <span class="billing-plan__amount">
+                      {{ plan.price | currencyFormat: plan.currency }}
+                      <span class="billing-plan__interval">
+                        {{ (plan.interval === 'year' ? 'PRICING.PER_YEAR' : 'PRICING.PER_MONTH') | translate }}
+                      </span>
+                    </span>
+                  </div>
+                }
+
+                <div class="billing-plan__renewal">
+                  @if (detailsLoading()) {
+                    <span class="billing-skeleton billing-skeleton--inline" aria-hidden="true"></span>
+                  } @else if (isEnded()) {
+                    @if (endDate()) {
+                      <span class="billing-plan__date billing-plan__date--danger">
+                        {{ 'BILLING.ENDED_ON' | translate }}
+                        <strong>{{ endDate() | date: 'mediumDate' }}</strong>
+                      </span>
+                    }
+                  } @else if (isCancelScheduled()) {
+                    <span class="billing-plan__date billing-plan__date--warning">
+                      {{ 'BILLING.ENDS_ON' | translate }}
+                      <strong>{{ endDate() | date: 'mediumDate' }}</strong>
+                    </span>
+                  } @else if (period(); as p) {
+                    @if (p.stale) {
+                      <span class="billing-plan__date billing-plan__date--unconfirmed">
+                        <app-icon name="alert-triangle" [size]="14" />
+                        {{ 'BILLING.RENEWAL_UNCONFIRMED' | translate }}
+                      </span>
+                    } @else {
+                      <span class="billing-plan__date">
+                        {{ 'BILLING.RENEWS_ON' | translate }}
+                        <strong>{{ p.end | date: 'mediumDate' }}</strong>
+                      </span>
+                      @if (p.start) {
+                        <span class="billing-plan__caption">
+                          {{ 'BILLING.PERIOD_RANGE' | translate: { start: (p.start | date: 'mediumDate'), end: (p.end | date: 'mediumDate') } }}
+                        </span>
+                      }
+                    }
+                  }
+                  <!-- KAN-80: a paying account's assistant tokens for THIS billing period. Nothing for an ended one. -->
+                  <app-token-usage-meter [access]="access()" variant="compact" />
+                </div>
+              </div>
+            } @else {
+              <p class="billing-muted">{{ 'BILLING.NO_SUBSCRIPTION' | translate }}</p>
+            }
+
+            <div class="billing-plan__foot">
+              @if (usage(); as u) {
+                <ul class="billing-plan__stats">
+                  <li class="billing-plan__stat">
+                    <app-icon name="users" [size]="14" />
+                    {{ 'BILLING.USAGE_PAYEES' | translate: { count: u.payeeCount } }}
+                  </li>
+                  <li class="billing-plan__stat">
+                    <app-icon name="plans" [size]="14" />
+                    {{ 'BILLING.USAGE_PLANS' | translate: { count: u.planCount } }}
+                  </li>
+                  @if (currentPlan()?.maxPayees === -1) {
+                    <li class="billing-plan__stat billing-plan__stat--accent">
+                      <app-icon name="check-circle" [size]="14" />
+                      {{ 'BILLING.USAGE_UNLIMITED' | translate }}
+                    </li>
+                  }
+                </ul>
+              }
+              <span class="billing-plan__faq">
+                {{ 'BILLING.QUESTIONS' | translate }}
+                <a routerLink="/pricing">{{ 'BILLING.QUESTIONS_LINK' | translate }}</a>
+              </span>
+            </div>
+          </div></ws-card>
+
+          <!--
+            KAN-83 UX — the add-on as a QUIET ROW, not a shop. This screen is administration: the subscription, the
+            card and the invoices are what an accountant opens it for, and the add-on used to outweigh all three. It is
+            an option that is available, so it reads like one: a titled row, a sentence, and a SECONDARY action that
+            opens the dialog. The usage meter stays on the subscription card above — that one IS administration.
+          -->
+          @if (canBuyTokens()) {
+            <ws-card><div class="token-addons" id="add-tokens">
+              <!--
+                ★ PRESENT WITHOUT SHOUTING. A tinted chip and an accent rule give it enough weight to be noticed on a
+                page of plain rows, while the ground stays the card surface every other section uses — so it is the
+                same page, not a banner dropped into it. The loud treatment lives in the dialog this opens.
+              -->
+              <span class="token-addons__chip" aria-hidden="true"><app-icon name="zap" [size]="18" /></span>
+
+              <div class="token-addons__body">
+                <span class="token-addons__title">{{ 'ASSISTANT_USAGE.ADDONS_TITLE' | translate }}</span>
+                <span class="token-addons__desc">{{ 'ASSISTANT_USAGE.ADDONS_DESC' | translate }}</span>
+              </div>
+
+              <ws-button variant="secondary" size="md" (click)="openAddTokens()" data-testid="billing-add-tokens">
+                {{ 'ASSISTANT_USAGE.ADDONS_ACTION' | translate }}
+                <app-icon name="arrow-right" [size]="14" />
+              </ws-button>
+            </div></ws-card>
+          }
+
+          <!-- One call to action at a time, the most urgent first. -->
+          @if (cardState() === 'ended') {
+            <ws-card><div class="billing-banner billing-banner--danger" role="alert">
+              <div class="billing-banner__body">
+                <span class="billing-banner__title">{{ 'BILLING.ENDED_TITLE' | translate }}</span>
+                <span class="billing-banner__desc">{{ 'BILLING.ENDED_DESC' | translate }}</span>
+              </div>
+              <ws-button variant="primary" size="sm" routerLink="/pricing">{{ 'BILLING.TRIAL_CTA_BTN' | translate }}</ws-button>
+            </div></ws-card>
+          } @else if (isPastDue()) {
+            <ws-card><div class="billing-banner billing-banner--danger" role="alert">
+              <div class="billing-banner__body">
+                <span class="billing-banner__title">{{ 'BILLING.PAST_DUE_TITLE' | translate }}</span>
+                <span class="billing-banner__desc">{{ 'BILLING.PAST_DUE_DESC' | translate }}</span>
+              </div>
+              <ws-button variant="primary" size="sm" [loading]="openingPortal()" (click)="openBillingPortal()">
+                {{ 'BILLING.UPDATE_PAYMENT' | translate }}
+              </ws-button>
+            </div></ws-card>
+          } @else if (isCancelScheduled()) {
+            <ws-card><div class="billing-banner billing-banner--warning" role="alert">
+              <div class="billing-banner__body">
+                <span class="billing-banner__title">
+                  {{ 'SUBSCRIPTION.CANCEL_SCHEDULED_TITLE' | translate: { date: (endDate() | date: 'mediumDate') } }}
+                </span>
+                <span class="billing-banner__desc">{{ 'SUBSCRIPTION.CANCEL_SCHEDULED_DESC' | translate }}</span>
+              </div>
+              <ws-button variant="primary" size="sm" [loading]="revertingCancellation()" (click)="revertCancellation()">
+                {{ 'SUBSCRIPTION.KEEP_SUBSCRIPTION_BTN' | translate }}
+              </ws-button>
+            </div></ws-card>
+          } @else if (cardState() === 'trial') {
+            <ws-card><div class="billing-banner">
+              <span class="billing-banner__icon" aria-hidden="true"><app-icon name="zap" [size]="18" /></span>
+              <div class="billing-banner__body">
+                <span class="billing-banner__title">{{ 'BILLING.TRIAL_CTA_TITLE' | translate }}</span>
+                <span class="billing-banner__desc">{{ 'BILLING.TRIAL_CTA_DESC' | translate }}</span>
+              </div>
+              <ws-button variant="primary" size="sm" routerLink="/pricing">{{ 'BILLING.TRIAL_CTA_BTN' | translate }}</ws-button>
+            </div></ws-card>
+          }
+        </section>
+
+        <!-- ── Payment information ──────────────────────────────────────────────── -->
+        <section class="billing-section" aria-labelledby="billing-pay-title">
+          <header class="billing-section__head">
+            <h2 id="billing-pay-title" class="billing-section__title">{{ 'BILLING.SECTION_PAYMENT' | translate }}</h2>
+            @if (hasStripeCustomer()) {
+              <button type="button" class="billing-section__action" [disabled]="openingPortal()" (click)="openBillingPortal()">
+                {{ 'BILLING.MANAGE_SUBSCRIPTION' | translate }}
+              </button>
+            }
+          </header>
+
+          <ws-card><div class="billing-info">
+            <dl class="billing-info__list">
+              <div class="billing-info__row">
+                <dt class="billing-info__label">{{ 'BILLING.PAYMENT_METHOD' | translate }}</dt>
+                <dd class="billing-info__value">
+                  @if (detailsLoading()) {
+                    <span class="billing-skeleton billing-skeleton--inline" aria-hidden="true"></span>
+                  } @else if (detailsError()) {
+                    <span class="billing-muted">{{ 'BILLING.DETAILS_ERROR' | translate }}</span>
+                    <button type="button" class="billing-link" (click)="loadDetails()">{{ 'COMMON.RETRY' | translate }}</button>
+                  } @else if (paymentMethod(); as pm) {
+                    <span class="billing-cardchip" aria-hidden="true">
+                      <span class="billing-cardchip__chip"></span>
+                    </span>
+                    <span class="billing-info__strong">
+                      @if (pm.type === 'card') {
+                        {{ cardBrand() ?? ('BILLING.CARD_GENERIC' | translate) }}
+                      } @else if (pm.type === 'sepa_debit') {
+                        {{ 'BILLING.METHOD_SEPA' | translate }}
+                      } @else {
+                        {{ 'BILLING.METHOD_OTHER' | translate }}
+                      }
+                    </span>
+                    @if (pm.last4) {
+                      <span class="billing-info__digits">•••• {{ pm.last4 }}</span>
+                    }
+                    @if (pm.expMonth && pm.expYear) {
+                      <span class="billing-muted">
+                        {{ 'BILLING.CARD_EXPIRES' | translate: { month: pm.expMonth < 10 ? '0' + pm.expMonth : pm.expMonth, year: pm.expYear } }}
+                      </span>
+                    }
+                  } @else {
+                    <span class="billing-muted">{{ 'BILLING.NO_PAYMENT_METHOD' | translate }}</span>
+                    @if (hasStripeCustomer()) {
+                      <ws-button variant="secondary" size="sm" [loading]="openingPortal()" (click)="openBillingPortal()">
+                        <app-icon name="plus" [size]="14" />
+                        {{ 'BILLING.ADD_PAYMENT_METHOD' | translate }}
+                      </ws-button>
+                    } @else {
+                      <ws-button variant="secondary" size="sm" routerLink="/pricing">
+                        <app-icon name="plus" [size]="14" />
+                        {{ 'BILLING.ADD_PAYMENT_METHOD' | translate }}
+                      </ws-button>
+                    }
+                  }
+                </dd>
+              </div>
+              <div class="billing-info__row">
+                <dt class="billing-info__label">{{ 'SUBSCRIPTION.BILLING_EMAIL' | translate }}</dt>
+                <dd class="billing-info__value">
+                  @if (subscription()?.billingEmail) {
+                    <app-icon name="mail" [size]="14" />
+                    <span class="billing-info__strong">{{ subscription()!.billingEmail }}</span>
+                  } @else {
+                    <span class="billing-muted">{{ 'BILLING.NO_BILLING_EMAIL' | translate }}</span>
+                  }
+                </dd>
+              </div>
+            </dl>
+          </div></ws-card>
+        </section>
+
+        <!-- ── Billing history ──────────────────────────────────────────────────── -->
+        <section class="billing-section" aria-labelledby="billing-history-title">
+          <header class="billing-section__head">
+            <h2 id="billing-history-title" class="billing-section__title">{{ 'BILLING.SECTION_HISTORY' | translate }}</h2>
+            @if (hasStripeSubscription()) {
+              <ws-button variant="ghost" size="sm" [loading]="openingPortal()" (click)="openBillingPortal()">
+                {{ 'SUBSCRIPTION.BILLING_PORTAL_BTN' | translate }}
+                <app-icon name="external-link" [size]="14" />
+              </ws-button>
+            }
+          </header>
+
+          @if (detailsLoading()) {
+            <ws-card><div class="billing-card" aria-hidden="true">
+              <span class="billing-skeleton billing-skeleton--row"></span>
+              <span class="billing-skeleton billing-skeleton--row"></span>
+            </div></ws-card>
+          } @else if (detailsError()) {
+            <ws-card><div class="billing-card billing-card--center">
+              <p class="billing-muted">{{ 'BILLING.DETAILS_ERROR' | translate }}</p>
+              <ws-button variant="secondary" size="sm" (click)="loadDetails()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+            </div></ws-card>
+          } @else if (invoices().length === 0) {
+            <ws-card><div>
+              <ws-empty-state icon="receipt" titleKey="BILLING.NO_INVOICES_TITLE" descKey="BILLING.NO_INVOICES_DESC" />
+            </div></ws-card>
+          } @else {
+            <ws-table class="billing-history">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">{{ 'BILLING.COL_INVOICE' | translate }}</th>
+                    <th scope="col">{{ 'BILLING.COL_DATE' | translate }}</th>
+                    <th scope="col" class="col-amount">{{ 'BILLING.COL_TOTAL' | translate }}</th>
+                    <th scope="col">{{ 'BILLING.COL_STATUS' | translate }}</th>
+                    <th scope="col" class="billing-history__actions-col">
+                      <span class="billing-sr-only">{{ 'BILLING.COL_ACTIONS' | translate }}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (inv of invoices(); track inv.id) {
+                    <tr>
+                      <td>
+                        <div class="billing-history__invoice">
+                          <span class="billing-history__doc" aria-hidden="true"><app-icon name="file-text" [size]="14" /></span>
+                          <div class="billing-history__invoice-text">
+                            <span class="billing-history__number">{{ inv.number ?? ('BILLING.INVOICE_NO_NUMBER' | translate) }}</span>
+                            @if (inv.description) {
+                              <span class="billing-history__desc">{{ inv.description }}</span>
+                            }
+                          </div>
+                        </div>
+                      </td>
+                      <td class="billing-history__date">{{ inv.createdAt | date: 'mediumDate' }}</td>
+                      <td class="col-amount billing-history__total">{{ inv.total | currencyFormat: inv.currency }}</td>
+                      <td>
+                        <ws-badge [variant]="invoiceStatusVariant(inv.status)" size="sm">
+                          {{ invoiceStatusKey(inv.status) | translate }}
+                        </ws-badge>
+                      </td>
+                      <td class="billing-history__actions">
+                        @if (inv.hostedInvoiceUrl) {
+                          <ws-button
+                            variant="ghost" size="sm" [iconOnly]="true"
+                            [attr.aria-label]="'BILLING.VIEW_INVOICE' | translate"
+                            [attr.title]="'BILLING.VIEW_INVOICE' | translate"
+                            (click)="openInvoice(inv.hostedInvoiceUrl)"
+                          >
+                            <app-icon name="eye" [size]="16" />
+                          </ws-button>
+                        }
+                        @if (inv.invoicePdfUrl) {
+                          <ws-button
+                            variant="ghost" size="sm" [iconOnly]="true"
+                            [attr.aria-label]="'BILLING.DOWNLOAD_INVOICE' | translate"
+                            [attr.title]="'BILLING.DOWNLOAD_INVOICE' | translate"
+                            (click)="openInvoice(inv.invoicePdfUrl)"
+                          >
+                            <app-icon name="download" [size]="16" />
+                          </ws-button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </ws-table>
+            @if (hasStripeSubscription()) {
+              <p class="billing-footnote">{{ 'BILLING.HISTORY_NOTE' | translate }}</p>
+            }
+          }
+        </section>
+      }
+    </div>
+  </ws-page-layout>
+</app-shell>
+
+<!-- KAN-83 — the same dialog the assistant opens; one purchase flow, two entry points. -->
+<app-add-tokens-dialog [(open)]="addTokensOpen" returnTo="Billing" />

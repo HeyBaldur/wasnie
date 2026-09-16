@@ -42,7 +42,8 @@ public sealed class PostMessageHandler(
     AssistantSectionRouter router,
     AssistantToolRunner toolRunner,
     IOptions<GroqOptions> options,
-    ILogger<PostMessageHandler> logger)
+    ILogger<PostMessageHandler> logger,
+    IModelUsageRecorder usageRecorder)
     : IRequestHandler<PostMessageCommand, Result<AssistantExchangeDto>>
 {
     public async Task<Result<AssistantExchangeDto>> Handle(
@@ -50,11 +51,19 @@ public sealed class PostMessageHandler(
     {
         await entitlement.RequireAsync(cancellationToken);
 
+        // KAN-77 / KAN-83: out of tokens → nothing stored, the model is not called. The key says which way out the
+        // tenant has — subscribe, or buy a boost.
+        if (await entitlement.TokenRefusalKeyAsync(cancellationToken) is { Length: > 0 } refusal)
+            return Result<AssistantExchangeDto>.Failure(refusal);
+
         var conversation = await OwnedConversations.FindMineAsync(
             db, currentUser, request.ConversationId, cancellationToken);
 
         if (conversation is null)
             return Result<AssistantExchangeDto>.Failure(OwnedConversations.NotFound);
+
+        // KAN-80: every model call below is charged to this account and attributed to this conversation.
+        usageRecorder.ForConversation(conversation.Id);
 
         var now = clock.UtcNowOffset;
 
@@ -234,10 +243,23 @@ public sealed class PostMessageHandler(
         // An empty completion is a failure in a success's clothes; storing it renders a blank bubble.
         return text.Length == 0
             ? Result<ComposedReply>.Failure(ChatCompletionException.Unavailable)
-            : Result<ComposedReply>.Success(new ComposedReply(
-                text.Length > AssistantMessage.MaxContentLength
-                    ? text[..AssistantMessage.MaxContentLength]
-                    : text,
-                turnPayload));
+            : Result<ComposedReply>.Success(new ComposedReply(Stored(text), turnPayload));
+    }
+
+    /// <summary>
+    /// The reply as stored. Same rule as the streaming path: replies have their own limit (equal to the degeneration
+    /// guard's ceiling), and a cut — if it ever happens — is logged rather than silent (§B1).
+    /// </summary>
+    private string Stored(string text)
+    {
+        if (text.Length <= AssistantMessage.MaxReplyLength)
+        {
+            return text;
+        }
+
+        logger.LogError(
+            "An assistant reply of {Length} characters exceeded the stored limit of {Limit} and was truncated.",
+            text.Length, AssistantMessage.MaxReplyLength);
+        return text[..AssistantMessage.MaxReplyLength];
     }
 }

@@ -1,5 +1,4 @@
 import { Routes } from '@angular/router';
-import { onboardingGuard } from '../../core/guards/onboarding.guard';
 import { qualificationGuard } from '../../core/guards/qualification.guard';
 import { authGuard } from '../../core/guards/auth.guard';
 
@@ -12,14 +11,9 @@ export const subscriptionRoutes: Routes = [
         (m) => m.QualificationComponent
       ),
   },
-  {
-    path: 'plan',
-    canActivate: [onboardingGuard],
-    loadComponent: () =>
-      import('./wizard/subscription-wizard.component').then(
-        (m) => m.SubscriptionWizardComponent
-      ),
-  },
+  // KAN-77: the plan wizard (with its free plan and comparison table) is gone. New accounts start in a trial;
+  // the address survives as a redirect for old links and e-mails.
+  { path: 'plan', redirectTo: '/pricing', pathMatch: 'full' },
   {
     // Stripe redirects here after payment — accessible before plan activation
     path: 'success',
@@ -31,20 +25,3 @@ export const subscriptionRoutes: Routes = [
   },
 ];
 
-export const manageSubscriptionRoutes: Routes = [
-  {
-    path: '',
-    loadComponent: () =>
-      import('./manage/manage-subscription.component').then(
-        (m) => m.ManageSubscriptionComponent
-      ),
-  },
-  {
-    // Accessible to Canceled users — no subscriptionGuard here.
-    path: 'reactivate',
-    loadComponent: () =>
-      import('./reactivation/subscription-reactivation.component').then(
-        (m) => m.SubscriptionReactivationComponent
-      ),
-  },
-];

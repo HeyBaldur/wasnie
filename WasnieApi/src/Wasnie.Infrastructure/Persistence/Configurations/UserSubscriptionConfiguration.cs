@@ -18,6 +18,8 @@ public sealed class UserSubscriptionConfiguration : IEntityTypeConfiguration<Use
         builder.Property(s => s.TenantId)
             .IsRequired();
 
+        builder.Property(s => s.PlanCode).HasMaxLength(50);
+
         builder.Property(s => s.Tier)
             .IsRequired();
 

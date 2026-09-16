@@ -1,0 +1,40 @@
+/* ═══════════════════════════════════════════════════════════════════
+   THE PRICING CARD'S SURFACE
+   ═══════════════════════════════════════════════════════════════════
+
+   The flagship plan offer on /pricing. It lives here rather than in the component so a second screen
+   that ever wears it gets the identical surface by adding itself to the selector above — a component
+   stylesheet is scoped by Angular's view encapsulation and the other screen would silently get nothing.
+
+   The token add-on wears it INSIDE ITS MODAL, and only there. On the billing page itself it broke the
+   hierarchy and read as a sales counter, so the page keeps a quiet row; but once the dialog is open the
+   purchase IS the subject and has nothing to compete with, so it gets the same treatment as the plan.
+
+   ★ AN INVERTED SURFACE, DELIBERATELY: `--color-text-primary` as the ground and `--color-text-inverse`
+   as the ink. On the light theme that is a deep, near-black card; on the dark theme it FLIPS to a light
+   card with dark text — the same "one flagship offer" emphasis in both, with no literal colour.
+
+   Making it stay dark in dark mode was tried and rejected: the flip is the intended look.
+
+   ★ `--offer-ground` EXISTS BECAUSE "the card's own background" IS A ROLE. Anything that has to sit
+   ON the ink — the inverted button's label, the tick inside a check circle — needs the ground colour
+   rather than a token that merely happens to equal it.
+
+   This file is processed as a global stylesheet, not as a component's Sass: double-slash comments break
+   the build, so every comment here is a block comment. And never write a block-comment terminator inside
+   one, not even inside backticks - it closes the block early and the next line is read as a selector.
+*/
+
+.plan-offer,
+.add-tokens__surface {
+  --offer-ground: var(--color-text-primary);
+  --offer-ink: var(--color-text-inverse);
+  --offer-ink-muted: color-mix(in srgb, var(--offer-ink) 68%, transparent);
+  --offer-line: color-mix(in srgb, var(--offer-ink) 14%, transparent);
+
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--color-accent-violet) 38%, transparent) 0%, transparent 55%),
+    radial-gradient(90% 120% at 0% 100%, color-mix(in srgb, var(--color-brand) 55%, transparent) 0%, transparent 60%),
+    var(--offer-ground);
+  color: var(--offer-ink);
+}

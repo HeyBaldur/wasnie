@@ -6,6 +6,7 @@ using Wasnie.Application.Compensation.Handlers.Plans;
 using Wasnie.Application.Compensation.Queries.Plans;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.ValueObjects;
@@ -114,5 +115,26 @@ public sealed class GetMultiPlanPayeesHandlerTests : IDisposable
         result.IsSuccess.Should().BeTrue();
         result.Value!.Count.Should().Be(0);
         result.Value.Items.Should().BeEmpty();
+    }
+    [Fact]
+    public async Task RenamedPayee_IsShownByTheCurrentName_NotTheNameAtAssignmentTime()
+    {
+        // CEO-001 was renamed after some of its assignments existed, so its rows carry two different
+        // snapshots. The list picked whichever row came first; it must show who the payee is NOW.
+        var planA = SeedPlan("Plan A", archived: false);
+        var planB = SeedPlan("Plan B", archived: false);
+        var payee = Payee.Create(TenantId, "Rudolph", "CEO-001", null, null, "system", Guid.NewGuid(), Now);
+        _db.Payees.Add(payee);
+        _db.SaveChanges();
+
+        SeedAssignment(payee.Id, "CEO-001", planA); // snapshot "Payee CEO-001"
+        payee.Update("Rudolph GeHard Chipellin 3ero", "CEO-001", null, null, null, null, "system", Now);
+        _db.SaveChanges();
+        SeedAssignment(payee.Id, "CEO-001", planB);
+
+        var result = await new GetMultiPlanPayeesHandler(_db, _auth)
+            .Handle(new GetMultiPlanPayeesQuery(planA), CancellationToken.None);
+
+        result.Value!.Items.Should().ContainSingle().Which.FullName.Should().Be("Rudolph GeHard Chipellin 3ero");
     }
 }

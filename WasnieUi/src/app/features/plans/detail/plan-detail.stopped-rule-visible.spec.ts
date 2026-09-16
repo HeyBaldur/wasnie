@@ -121,7 +121,11 @@ describe('PlanDetailComponent — the rules list shows stopped rules', () => {
             subscription: signal(null),
             loaded: signal(true),
             isPastDue: signal(false),
-            isCanceled: signal(false),
+            // KAN-77: the shell's trial banner reads these.
+            access: signal(null),
+            isTrial: signal(false),
+            isLocked: signal(false),
+            trialDaysRemaining: signal(null),
             load: () => {},
             refresh: () => {},
           },

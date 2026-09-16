@@ -147,19 +147,21 @@ describe('AssistantPageComponent — the URL is the conversation', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/assistant', 'c-9']);
   }));
 
-  it('moves the URL onto a newly started conversation', fakeAsync(async () => {
+  it('★ New conversation goes back to the bare URL and creates NOTHING on the server', fakeAsync(async () => {
     await mountWith(null);
     fixture.detectChanges();
     tick();
 
-    spyOn(store, 'startConversation').and.callFake(async () => {
-      store.conversation.set(conversation('fresh'));
-    });
+    store.conversation.set(conversation('old'));
+    const create = spyOn(store, 'startConversation');
 
     void fixture.componentInstance.startNew();
     tick();
 
-    expect(router.navigate).toHaveBeenCalledWith(['/assistant', 'fresh']);
+    // Creating here left one empty "New conversation" row per click; the thread is born on send.
+    expect(create).not.toHaveBeenCalled();
+    expect(store.conversation()).toBeNull();
+    expect(router.navigate).toHaveBeenCalledWith(['/assistant']);
   }));
 });
 

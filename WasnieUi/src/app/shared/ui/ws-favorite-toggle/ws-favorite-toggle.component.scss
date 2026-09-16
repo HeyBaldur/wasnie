@@ -1,0 +1,44 @@
+:host {
+  display: inline-flex;
+  line-height: 0;
+}
+
+// Same footprint and focus treatment as ws-copy-button: an icon-sized hit target that sits inside a table cell
+// without changing the row's height.
+.ws-favorite-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: color var(--transition-fast), transform var(--transition-fast);
+
+  &:hover {
+    color: var(--color-text-secondary);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  &[aria-busy='true'] {
+    cursor: progress;
+  }
+
+  // ON is the one state that earns a colour: the warm accent reads as "starred" in both themes.
+  &--active,
+  &--active:hover {
+    color: var(--color-warning);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ws-favorite-toggle:active {
+    transform: scale(0.88);
+  }
+}

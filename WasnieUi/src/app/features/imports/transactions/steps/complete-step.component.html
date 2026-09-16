@@ -1,6 +1,16 @@
 <div class="complete-step">
-  <div class="complete-icon">
-    <app-icon name="check-circle" [size]="56" />
+  <!-- The finish, celebrated quietly: rings spread, the tick draws itself, sparks around it. Decorative —
+       the title below says it in words. Identical in both import wizards. -->
+  <div class="complete-emblem" aria-hidden="true">
+    <span class="complete-emblem__ring"></span>
+    <span class="complete-emblem__ring complete-emblem__ring--late"></span>
+    <svg class="complete-emblem__badge" viewBox="0 0 64 64" fill="none">
+      <circle cx="32" cy="32" r="28" class="complete-emblem__disc" />
+      <path d="M20 33l8 8l16-17" class="complete-emblem__tick" />
+    </svg>
+    <span class="complete-emblem__spark complete-emblem__spark--1"></span>
+    <span class="complete-emblem__spark complete-emblem__spark--2"></span>
+    <span class="complete-emblem__spark complete-emblem__spark--3"></span>
   </div>
 
   <h2 class="complete-title">{{ 'IMPORTS.TRANSACTIONS.COMPLETE_TITLE' | translate }}</h2>

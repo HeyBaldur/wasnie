@@ -54,8 +54,8 @@ export class AssistantPanelComponent {
     return isUntitled(title);
   }
 
-  async startNew(): Promise<void> {
-    await this.store.startConversation();
+  startNew(): void {
+    this.store.startNewConversation();
   }
 
   async openConversation(id: string): Promise<void> {
