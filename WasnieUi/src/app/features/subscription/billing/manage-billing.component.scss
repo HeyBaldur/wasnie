@@ -522,3 +522,48 @@
 .billing-plan__date--unconfirmed {
   color: var(--color-warning);
 }
+
+// ── KAN-83: the token add-on ────────────────────────────────────────────────────────
+// ★ VISIBLE, BUT STILL PART OF THE PAGE. It has to be noticed — the tokens are worth selling — without going back to
+// being the loudest thing on a screen somebody opened to read invoices. So: the ordinary card surface, an accent rule
+// down the left and a tinted chip. No wash, no inverted ground; every value is a system token.
+.token-addons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--color-accent-violet);
+}
+
+.token-addons__chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-accent-violet) 16%, transparent);
+  color: var(--color-accent-violet);
+}
+
+.token-addons__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.token-addons__title {
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.token-addons__desc {
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}

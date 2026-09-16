@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Stripe;
@@ -36,6 +36,7 @@ public sealed class StripeSubscriptionReconciler(
     IAuditService auditService,
     IClock clock,
     ISubscriptionPlanCatalog catalog,
+    IAssistantPeriodCloser periodCloser,
     ILogger<StripeSubscriptionReconciler> logger)
     : IStripeSubscriptionReconciler
 {
@@ -124,8 +125,9 @@ public sealed class StripeSubscriptionReconciler(
             }
 
             var previousId = subscription.StripeSubscriptionId;
-            var specific = StripeSubscriptionApplier.ApplyUpdate(
-                subscription, tenant, full, full, item, product, plan, catalog, now, StripeChangeActor.Sync, logger);
+            var specific = await StripeSubscriptionApplier.ApplyUpdate(
+                subscription, tenant, full, full, item, product, plan, catalog, now, StripeChangeActor.Sync, logger,
+                periodCloser, cancellationToken);
 
             logger.LogWarning(
                 "Subscription sync: tenant {TenantId} now follows Stripe subscription {SubscriptionId} ({Status}); was {PreviousId} (webhook missed)",

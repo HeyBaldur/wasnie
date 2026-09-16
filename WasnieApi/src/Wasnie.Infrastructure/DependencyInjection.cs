@@ -100,6 +100,12 @@ public static class DependencyInjection
         services.AddScoped<Wasnie.Application.Assistant.Abstractions.IModelUsageRecorder, Wasnie.Infrastructure.Assistant.ModelUsageRecorder>();
         services.AddScoped<IPaidPlanGate, PaidPlanGate>();
         services.AddScoped<IAccountAccessReader, AccountAccessReader>();
+        // KAN-83: the ONE place the tenant's token balance (included + boost) is assembled — read by the gate that
+        // stops a turn and by the screens that show the meter, so the two can never disagree.
+        services.AddScoped<IAssistantTokenBalanceReader, Wasnie.Application.Assistant.Common.AssistantTokenBalanceReader>();
+        // KAN-83: records a period's overage at rollover, and sells the boost packs.
+        services.AddScoped<IAssistantPeriodCloser, Wasnie.Application.Assistant.Common.AssistantPeriodCloser>();
+        services.AddScoped<IStripeBoostService, Wasnie.Infrastructure.Services.StripeBoostService>();
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
@@ -123,6 +129,11 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(BillingOptions.SectionName))
             .Validate(o => o.TrialDays is > 0 and <= 365, "Billing:TrialDays must be between 1 and 365.")
             .Validate(o => o.TrialAssistantTokenLimit > 0, "Billing:TrialAssistantTokenLimit must be greater than 0.")
+            // KAN-83: a zero monthly allowance would stop the assistant for every paying tenant on the first turn, and
+            // a zero expiry would kill every boost the instant it was bought. Both are worth refusing to start over.
+            .Validate(o => o.IncludedAssistantTokensPerMonth > 0,
+                "Billing:IncludedAssistantTokensPerMonth must be greater than 0.")
+            .Validate(o => o.Boosts.ExpiryDays > 0, "Billing:Boosts:ExpiryDays must be greater than 0.")
             .Validate(
                 o => !Wasnie.Application.Features.Subscription.SubscriptionPlanCatalog.Validate(o).Any(),
                 "Billing:Plans is invalid (at least one plan, unique codes, DefaultPlanCode must be one of them, positive limits).")

@@ -97,6 +97,30 @@ export function clarifyOptionKey(fn: string | null | undefined): string | null {
   return fn ? own(OPTION_KEYS, fn) : null;
 }
 
+/**
+ * The icon that stands for each lookup.
+ *
+ * ★ THE SAME WHITELIST RULE AS THE LABELS (§C2), for the same reason: no icon name is derived from the
+ * tool name. A function this build has never heard of gets the neutral fallback rather than a missing
+ * glyph — and, like the labels, adding a tool means adding a line here on purpose.
+ *
+ * ★ THEY MUST BE DISTINGUISHABLE FROM EACH OTHER, not merely decorative. The whole panel exists so
+ * somebody can tell two lookups apart at a glance; five copies of one generic mark would put the work
+ * back on reading the labels.
+ */
+const OPTION_ICONS: Readonly<Record<string, string>> = {
+  get_transaction: 'arrows-exchange',
+  get_plan_rules: 'plans',
+  get_payee_balance: 'coin',
+  get_payee_plans: 'user-check',
+  simulate_plan_rules: 'target',
+};
+
+/** The icon for an option; a neutral mark when this build does not know the function. */
+export function clarifyOptionIcon(fn: string | null | undefined): string {
+  return (fn ? own(OPTION_ICONS, fn) : null) ?? 'search';
+}
+
 /** The key for the sentence pressing that option sends. */
 export function clarifyPromptKey(fn: string | null | undefined): string | null {
   return fn ? own(OPTION_PROMPT_KEYS, fn) : null;

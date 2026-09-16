@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -201,8 +201,14 @@ public sealed class SubscriptionReconciliationTests : IDisposable
 
     // ── Helpers ──────────────────────────────────────────────────────────────────────
 
-    private GetAccountAccessHandler AccessHandler(IAccountAccessReader reader) =>
-        new(_db, _tenant, reader, _reconciler, Options.Create(new BillingOptions()));
+    private GetAccountAccessHandler AccessHandler(IAccountAccessReader reader)
+    {
+        var options = Options.Create(new BillingOptions());
+        // The real balance reader, so the access response carries the same numbers the assistant's gate reads (KAN-83).
+        return new(_db, _tenant, reader,
+            new Wasnie.Application.Assistant.Common.AssistantTokenBalanceReader(_db, reader, options, new FakeClock()),
+            _reconciler, options);
+    }
 
     private CreateCheckoutSessionHandler CheckoutHandler(IStripeCheckoutService checkout)
     {

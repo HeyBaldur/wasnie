@@ -7,7 +7,11 @@
     measure and centred. One element cannot be both: capping the scroller would drag the scrollbar into
     the middle of the page. In the drawer this wrapper has no max-width and is simply a plain block.
   -->
-  <div class="assistant-conversation__stream">
+  <!--
+    #stream is watched by a ResizeObserver: anything that appears or grows in here — an alert, the
+    thinking card, the clarify panel — pulls the view down when the reader was already at the bottom.
+  -->
+  <div #stream class="assistant-conversation__stream">
   @if (store.messages().length === 0) {
     <!--
       The welcome, in three levels: the greeting, what to ask, and the promise about what this
@@ -421,6 +425,44 @@
         </div>
       }
 
+      <!--
+        ★ A PAYING TENANT IS OUT OF TOKENS (KAN-83). Deliberately NOT the trial card: this customer already pays, so
+        sending them to /pricing would be telling them to buy what they have. The way out is a boost, and the CTA is
+        hidden — never disabled — for a user who cannot buy one (§5.8).
+      -->
+      @case ('tokensExhausted') {
+        <div class="assistant-alert assistant-alert--limit" role="alert" data-testid="assistant-failed-alert">
+          <span class="assistant-alert__chip" aria-hidden="true"><app-icon name="zap" [size]="16" /></span>
+
+          <div class="assistant-alert__body">
+            <p class="assistant-alert__title">{{ 'ASSISTANT.TOKENS_EXHAUSTED_TITLE' | translate }}</p>
+            <p class="assistant-alert__text" data-testid="assistant-error">{{ 'ASSISTANT.ERROR_TOKENS_EXHAUSTED' | translate }}</p>
+
+            @if ('Subscription.Manage' | hasPermission) {
+              <div class="assistant-alert__actions">
+                <!--
+                  ★★ THE PURCHASE OPENS HERE, over the chat. Sending someone to Settings > Billing to fix a question
+                  that just stopped mid-sentence makes them navigate back to it afterwards; the dialog is the same one
+                  billing opens, so there is one flow and one confirmation, not two.
+                -->
+                <button
+                  type="button"
+                  class="assistant-alert__upgrade"
+                  (click)="addTokensOpen.set(true)"
+                  data-testid="assistant-add-tokens"
+                >
+                  <app-icon name="zap" [size]="14" />
+                  {{ 'ASSISTANT.TOKENS_EXHAUSTED_BUY' | translate }}
+                </button>
+                <a class="assistant-alert__link" routerLink="/billing" data-testid="assistant-usage-link">
+                  {{ 'ASSISTANT.TRIAL_LIMIT_USAGE' | translate }}
+                </a>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
       <!-- No model configured in this environment: nothing to retry, so no button. -->
       @case ('notConfigured') {
         <div class="assistant-alert assistant-alert--info" role="alert" data-testid="assistant-failed-alert">
@@ -543,7 +585,7 @@
     <ws-card variant="raised" padding="none" class="assistant-clarify" data-testid="assistant-clarify">
       <div class="assistant-clarify__head">
         <span class="assistant-clarify__title">
-          <app-icon name="help-circle" [size]="14" />
+          <span class="assistant-clarify__chip" aria-hidden="true"><app-icon name="help-circle" [size]="14" /></span>
           {{ 'ASSISTANT.CLARIFY.TITLE' | translate }}
         </span>
         <!--
@@ -576,6 +618,15 @@
             (click)="chooseClarify(option)"
             data-testid="assistant-clarify-option"
           >
+            <!--
+              ★ THE MARK OF THE LOOKUP, not decoration. Five options that all read "See a payee's …"
+              are told apart faster by their icon than by their sentence, which is what this panel is
+              for. Whitelisted by function, with a neutral fallback (§C2).
+            -->
+            <span class="assistant-clarify__icon" aria-hidden="true">
+              <app-icon [name]="clarifyIcon(option)" [size]="15" />
+            </span>
+
             @if (clarifyEntity(option); as entity) {
               <!--
                 ★★ A RECORD, NOT A FUNCTION. Every option on this form runs the SAME lookup, so
@@ -603,6 +654,8 @@
                 <span class="assistant-clarify__argument">{{ option.argument }}</span>
               }
             }
+            <!-- Decorative: the row is already a button, and its accessible name is the label above. -->
+            <app-icon class="assistant-clarify__go" name="chevron-right" [size]="14" />
           </ws-button>
         }
       </div>
@@ -722,8 +775,21 @@
       Always rendered — not collapsible, not first-run-only. It is a permanent guard rail: the
       assistant reads and explains, it does not compute pay or change data, and it can be wrong.
     -->
-    <p class="assistant-composer__disclaimer" data-testid="assistant-disclaimer">
-      {{ 'ASSISTANT.DISCLAIMER' | translate }}
-    </p>
+    <!--
+      KAN-83 UX — the warning sits ABOVE the standing promise, never below it. The disclaimer is the last thing the
+      panel says and it stays there; a transient alert pushing it down would move the one line that must not move.
+    -->
+    <app-assistant-token-status display="warning" (addTokens)="addTokensOpen.set(true)" />
+
+    <div class="assistant-composer__foot">
+      <p class="assistant-composer__disclaimer" data-testid="assistant-disclaimer">
+        {{ 'ASSISTANT.DISCLAIMER' | translate }}
+        <!-- What the workspace has left, on the same line as the promise rather than as a row of its own. -->
+        <app-assistant-token-status display="inline" />
+      </p>
+    </div>
   </div>
 </footer>
+
+<!-- KAN-83 — the same purchase dialog the billing screen opens. -->
+<app-add-tokens-dialog [(open)]="addTokensOpen" returnTo="Assistant" />

@@ -97,11 +97,11 @@ public sealed class StreamAssistantReplyHandler(
     {
         await entitlement.RequireAsync(cancellationToken);
 
-        // KAN-77: a trial account that used up its assistant allowance gets no NEW turn — nothing is stored,
-        // the model is not called. A retry re-answers a question already counted, so it is not refused here.
-        if (!request.IsRetry && await entitlement.IsTrialAllowanceExhaustedAsync(cancellationToken))
+        // KAN-77 / KAN-83: an account out of tokens gets no NEW turn — nothing is stored, the model is not called.
+        // A retry re-answers a question already counted, so it is not refused here.
+        if (!request.IsRetry && await entitlement.TokenRefusalKeyAsync(cancellationToken) is { Length: > 0 } refusal)
         {
-            yield return AssistantStreamEvent.OfError(IAssistantEntitlement.TrialAllowanceExhaustedKey);
+            yield return AssistantStreamEvent.OfError(refusal);
             yield break;
         }
 

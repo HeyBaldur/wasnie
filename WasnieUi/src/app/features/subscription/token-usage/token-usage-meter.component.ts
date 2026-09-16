@@ -35,7 +35,8 @@ export class TokenUsageMeterComponent {
   /** Width of the filled part of the bar, in the SVG's 0..100 viewBox units. */
   readonly barWidth = computed(() => {
     const v = this.view();
-    return v.kind === 'trial' ? Math.round(v.fraction * 1000) / 10 : 0;
+    // Both shapes draw a bar now (KAN-83): the trial's allowance, and a paying tenant's included tokens.
+    return v.kind === 'trial' || v.kind === 'period' ? Math.round(v.fraction * 1000) / 10 : 0;
   });
 
   /** Token counts are large: grouped in the reader's own language (1,000,000 / 1.000.000 / 1 000 000). */

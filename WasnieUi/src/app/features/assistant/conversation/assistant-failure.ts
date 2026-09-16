@@ -12,18 +12,23 @@
 export type AssistantFailureKind =
   /** The trial's assistant tokens are used up: the way forward is to subscribe, not to retry. */
   | 'trialLimit'
+  /** A PAYING tenant spent its included tokens and its boost: the way forward is to buy a boost, not to retry. */
+  | 'tokensExhausted'
   /** No model is configured for this environment: nothing the user does here will change that. */
   | 'notConfigured'
   /** Everything else: the provider was busy or failed, and a retry can succeed. */
   | 'retryable';
 
 export const TRIAL_LIMIT_KEY = 'ASSISTANT.ERROR_TRIAL_LIMIT_REACHED';
+export const TOKENS_EXHAUSTED_KEY = 'ASSISTANT.ERROR_TOKENS_EXHAUSTED';
 export const NOT_CONFIGURED_KEY = 'ASSISTANT.ERROR_NOT_CONFIGURED';
 
 export function assistantFailureKind(errorKey: string | null | undefined): AssistantFailureKind {
   switch (errorKey) {
     case TRIAL_LIMIT_KEY:
       return 'trialLimit';
+    case TOKENS_EXHAUSTED_KEY:
+      return 'tokensExhausted';
     case NOT_CONFIGURED_KEY:
       return 'notConfigured';
     default:

@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Stripe;
@@ -17,6 +17,8 @@ namespace Wasnie.Infrastructure.Services;
 public sealed class StripeWebhookService(
     IApplicationDbContext db,
     IOptions<StripeOptions> options,
+    IOptions<BillingOptions> billingOptions,
+    IAssistantPeriodCloser periodCloser,
     IAuditService auditService,
     IClock clock,
     ISubscriptionPlanCatalog catalog,
@@ -71,6 +73,23 @@ public sealed class StripeWebhookService(
                     logger.LogError("Stripe webhook {EventId}: could not cast data object to Session", stripeEvent.Id);
                     return Result<bool>.Failure("Unexpected event payload.");
                 }
+                // KAN-83: a boost is bought with a ONE-OFF checkout, and Stripe announces it with this very same event.
+                // Routing on the session's own mode/metadata BEFORE anything else is what keeps the two apart.
+                if (IsBoostPurchase(session))
+                {
+                    var credited = await HandleBoostPurchaseAsync(stripeEvent.Id, session, cancellationToken);
+                    if (!credited.IsSuccess)
+                    {
+                        // ★★ A PAID BOOST THAT COULD NOT BE CREDITED IS NOT ACKNOWLEDGED (§B1). Returning success here
+                        // would mark the event processed and the customer's money would buy nothing, silently. Failing
+                        // makes Stripe redeliver, and leaves the event visible as failed in its dashboard.
+                        return Result<bool>.Failure(credited.Error!);
+                    }
+
+                    auditEntry = credited.Value;
+                    break;
+                }
+
                 auditEntry = await HandleCheckoutSessionCompletedAsync(session, cancellationToken);
                 break;
 
@@ -143,6 +162,113 @@ public sealed class StripeWebhookService(
             await auditService.LogAsync(auditEntry, cancellationToken);
 
         return Result<bool>.Success(true);
+    }
+
+    /// <summary>
+    /// Whether this completed checkout bought TOKENS rather than a subscription (KAN-83).
+    ///
+    /// ★★ THE OLD HANDLER ASSUMED EVERY CHECKOUT WAS A SUBSCRIPTION and asked Stripe for
+    /// <c>session.SubscriptionId</c>, which a one-off payment does not have. Without this fork a paid boost threw,
+    /// was logged as an error, and the event was still marked processed — the customer paid and got nothing.
+    ///
+    /// ★ MODE FIRST, METADATA SECOND. The mode is Stripe's own fact about the session; the metadata is ours. Either
+    /// one alone would be enough, and requiring both would mean a session created before this tag existed is treated
+    /// as a subscription.
+    /// </summary>
+    private static bool IsBoostPurchase(Session session) =>
+        string.Equals(session.Mode, "payment", StringComparison.OrdinalIgnoreCase)
+        || (session.Metadata is not null
+            && session.Metadata.TryGetValue(StripeBoostService.BoostMetadataKey, out var kind)
+            && string.Equals(kind, StripeBoostService.BoostMetadataValue, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Credits a bought boost to the tenant's balance (KAN-83).
+    ///
+    /// ★ THE AMOUNT COMES FROM THE PRODUCT, not from our configuration and not from the price id. Resizing a pack in
+    /// Stripe then needs no deploy, and the row keeps what was actually granted.
+    ///
+    /// ★ THE STRIPE EVENT ID IS THE IDEMPOTENCY KEY, enforced by a unique index. The dedup check at the top of
+    /// ProcessAsync already stops an ordinary redelivery; the index is what stops two deliveries racing past it.
+    /// </summary>
+    private async Task<Result<AuditEntry?>> HandleBoostPurchaseAsync(
+        string eventId, Session session, CancellationToken cancellationToken)
+    {
+        if (session.Metadata is null
+            || !session.Metadata.TryGetValue("tenantId", out var tenantIdRaw)
+            || !Guid.TryParse(tenantIdRaw, out var tenantId))
+        {
+            logger.LogError(
+                "Boost checkout {SessionId} carries no usable tenantId metadata; nothing credited", session.Id);
+            return Result<AuditEntry?>.Failure("Boost checkout has no tenant.");
+        }
+
+        var client = new StripeClient(options.Value.SecretKey);
+
+        // The webhook payload does not carry line items; the product (and its token metadata) has to be fetched.
+        Session full;
+        try
+        {
+            full = await new SessionService(client).GetAsync(
+                session.Id,
+                new SessionGetOptions { Expand = ["line_items.data.price.product"] },
+                cancellationToken: cancellationToken);
+        }
+        catch (StripeException ex)
+        {
+            logger.LogError(ex, "Could not read boost checkout {SessionId} back from Stripe", session.Id);
+            return Result<AuditEntry?>.Failure("Boost checkout could not be read.");
+        }
+
+        var line = full.LineItems?.Data?.FirstOrDefault();
+        if (line?.Price?.Product is not Product product)
+        {
+            logger.LogError("Boost checkout {SessionId} has no product on its first line item", session.Id);
+            return Result<AuditEntry?>.Failure("Boost checkout has no product.");
+        }
+
+        if (!StripeBoostService.TryReadTokens(product, out var tokens))
+        {
+            logger.LogError(
+                "Boost product {ProductId} has no usable '{Key}' metadata; refusing to credit an invented amount for {SessionId}",
+                product.Id, AssistantBoostOptions.TokensMetadataKey, session.Id);
+            return Result<AuditEntry?>.Failure("Boost product does not say how many tokens it grants.");
+        }
+
+        var tenant = await db.Tenants
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken);
+
+        if (tenant is null)
+        {
+            logger.LogError("Tenant {TenantId} not found for boost checkout {SessionId}", tenantId, session.Id);
+            return Result<AuditEntry?>.Failure("Tenant not found.");
+        }
+
+        var now = clock.UtcNowOffset;
+
+        db.AssistantTokenBoosts.Add(Wasnie.Domain.Assistant.AssistantTokenBoost.Create(
+            id: Guid.NewGuid(),
+            tenantId: tenantId,
+            stripeEventId: eventId,
+            stripeProductId: product.Id,
+            stripeSessionId: session.Id,
+            tokens: tokens,
+            purchasedAt: now,
+            // Frozen per lot: changing the setting later must never shorten a boost already sold.
+            expiresAt: now.AddDays(billingOptions.Value.Boosts.ExpiryDays)));
+
+        logger.LogInformation(
+            "Tenant {TenantId} credited a boost of {Tokens} tokens from product {ProductId} (session {SessionId})",
+            tenantId, tokens, product.Id, session.Id);
+
+        return Result<AuditEntry?>.Success(new AuditEntry(
+            TenantId: tenantId,
+            Action: AuditActions.AssistantBoostPurchased,
+            ResourceType: ResourceTypes.Subscription,
+            ResourceId: session.Id,
+            ActorUserId: "stripe-webhook",
+            ActorEmail: "webhook@stripe.com",
+            DisplayName: $"Assistant boost purchased: {tokens} tokens ({product.Id})"));
     }
 
     // Returns an AuditEntry to be persisted after the main save, or null if no audit is needed.
@@ -324,9 +450,9 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        return StripeSubscriptionApplier.ApplyUpdate(
+        return await StripeSubscriptionApplier.ApplyUpdate(
             subscription, tenant, fullSubscription, stripeSubscription, item, product, newPlan, catalog,
-            clock.UtcNowOffset, StripeChangeActor.Webhook, logger);
+            clock.UtcNowOffset, StripeChangeActor.Webhook, logger, periodCloser, cancellationToken);
     }
 
     private async Task<AuditEntry?> HandleSubscriptionDeletedAsync(

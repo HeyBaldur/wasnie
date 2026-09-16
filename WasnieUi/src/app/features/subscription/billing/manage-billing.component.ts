@@ -1,6 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -12,13 +12,17 @@ import type { BadgeVariant } from '../../../shared/ui/ws-badge/ws-badge.componen
 import { WsToastService } from '../../../shared/ui/ws-toast/ws-toast.service';
 import { SubscriptionStateService } from '../services/subscription-state.service';
 import {
-  AccountAccess, BillingDetails, CurrentSubscription, SubscriptionPlan, SubscriptionService, SubscriptionUsage,
+  AccountAccess, BillingDetails, BoostOffer, CurrentSubscription, SubscriptionPlan, SubscriptionService,
+  SubscriptionUsage,
 } from '../services/subscription.service';
 import {
   cardBrandLabel, invoiceStatusKey, invoiceStatusVariant, isLiveSubscriptionEnded, liveSubscriptionStatusKey,
   liveSubscriptionStatusVariant, resolveBillingPeriod, trialRemaining,
 } from './billing-display';
 import { TokenUsageMeterComponent } from '../token-usage/token-usage-meter.component';
+import { checkoutNavigator } from '../plan-offer/start-checkout';
+import { AddTokensDialogComponent } from '../add-tokens/add-tokens-dialog.component';
+import { refreshAfterTokenPurchase } from '../add-tokens/token-purchase-return';
 
 /**
  * Explicit translation keys per subscription status — never `'STATUS_' + status` (§C2): an unknown status from
@@ -56,7 +60,7 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * 26;
   imports: [
     DatePipe, RouterLink, TranslatePipe, CurrencyFormatPipe, AppShellComponent, IconComponent, WsPageLayoutComponent,
     WsCardComponent, WsButtonComponent, WsBadgeComponent, WsTableComponent, WsEmptyStateComponent,
-    TokenUsageMeterComponent,
+    TokenUsageMeterComponent, AddTokensDialogComponent,
   ],
   templateUrl: './manage-billing.component.html',
   styleUrl: './manage-billing.component.scss',
@@ -66,6 +70,7 @@ export class ManageBillingComponent implements OnInit {
   private readonly toast = inject(WsToastService);
   private readonly subscriptionState = inject(SubscriptionStateService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly access = signal<AccountAccess | null>(null);
   readonly subscription = signal<CurrentSubscription | null>(null);
@@ -79,7 +84,17 @@ export class ManageBillingComponent implements OnInit {
   readonly openingPortal = signal(false);
   readonly revertingCancellation = signal(false);
 
+  // KAN-83 — whether token add-ons can be bought at all, and the purchase dialog's open state.
+  readonly boostOffers = signal<BoostOffer[]>([]);
+  readonly addTokensOpen = signal(false);
+
   readonly ringCircumference = RING_CIRCUMFERENCE;
+
+  /**
+   * KAN-83 — add-ons are offered only to an account that actually pays, and only once there is something to offer.
+   * A trial's way forward is to subscribe, not to top up an account that is about to lock (§C3).
+   */
+  readonly canBuyTokens = computed(() => this.cardState() === 'paid' && this.boostOffers().length > 0);
 
   /** A real Stripe subscription — the only thing the billing portal and the period apply to. */
   readonly hasStripeSubscription = computed(() => !!this.subscription()?.stripeSubscriptionId);
@@ -168,6 +183,8 @@ export class ManageBillingComponent implements OnInit {
 
   ngOnInit(): void {
     this.load();
+    // KAN-83 UX: back from Stripe after buying tokens — the credit arrives by webhook, a beat after the redirect.
+    refreshAfterTokenPurchase(this.route.snapshot.queryParams, this.subscriptionState);
   }
 
   load(): void {
@@ -175,6 +192,12 @@ export class ManageBillingComponent implements OnInit {
     this.loadError.set(false);
 
     this.subscriptionService.getPlans().subscribe({ next: p => this.plans.set(p), error: () => this.plans.set([]) });
+    // KAN-83: boosts may not be configured, and Stripe may be down. Either way the section simply does not appear —
+    // the rest of the page is unaffected.
+    this.subscriptionService.getBoostOffers().subscribe({
+      next: o => this.boostOffers.set(o),
+      error: () => this.boostOffers.set([]),
+    });
     this.subscriptionService.getUsage().subscribe({ next: u => this.usage.set(u), error: () => this.usage.set(null) });
     // A trial has no subscription: 404 here is the normal state of a new account, not an error.
     this.subscriptionService.getCurrent().subscribe({ next: s => this.subscription.set(s), error: () => this.subscription.set(null) });
@@ -189,6 +212,11 @@ export class ManageBillingComponent implements OnInit {
       },
     });
     this.loadDetails();
+  }
+
+  /** KAN-83 — opens the shared purchase dialog. The money question is asked inside it, never here. */
+  openAddTokens(): void {
+    this.addTokensOpen.set(true);
   }
 
   /** Stripe can be slow or down; that only empties the two Stripe sections, never the whole page. */

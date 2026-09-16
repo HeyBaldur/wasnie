@@ -497,9 +497,15 @@
   border-radius: var(--radius-full);
 }
 
-.assistant-composer__disclaimer {
+// KAN-83 UX: the footer is the disclaimer alone again — the warning strip now sits above it, so nothing shares or
+// shifts this row. The remaining-tokens figure rides inside the sentence itself.
+.assistant-composer__foot {
   padding: var(--space-2) var(--space-3);
   border-top: 1px solid var(--color-border-subtle);
+}
+
+.assistant-composer__disclaimer {
+  margin: 0;
   font-size: var(--font-size-12);
   // Semibold for the same reason the welcome's read-only note is: this is the standing promise about
   // what the assistant will not do, and at 12px in tertiary grey it was the easiest thing on the panel
@@ -693,9 +699,27 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
-  background: var(--color-bg-surface-sunken);
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
+  // A breath of the brand across the caption: enough to mark the panel as Zeke asking something, not
+  // enough to make a question look like a warning.
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-accent-violet) 10%, transparent) 0%, transparent 62%),
+    var(--color-bg-surface-sunken);
   border-bottom: 1px solid var(--color-border-subtle);
+}
+
+// The icon gets a chip, the way the token warning and the add-on row do — one vocabulary for "this is
+// a labelled panel" across the product.
+.assistant-clarify__chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent-violet) 18%, transparent);
+  color: var(--color-accent-violet);
 }
 
 // The heading of a panel, one step below the body text and in the secondary ink: it names the panel
@@ -708,7 +732,8 @@
   font-size: var(--font-size-13);
   font-weight: 600;
   line-height: 1.4;
-  color: var(--color-text-secondary);
+  // Primary ink: this is the question Zeke is asking, not a caption for something else on screen.
+  color: var(--color-text-primary);
 }
 
 // ★ WsModal's close button, to the pixel: 28×28, radius-sm, tertiary ink, sunken on hover. The hit
@@ -753,7 +778,6 @@
 .assistant-clarify__options {
   display: flex;
   flex-direction: column;
-  counter-reset: clarify-option;
 }
 
 // The host has to be a block for the button inside it to take the full width, and it is also where
@@ -765,7 +789,6 @@
 //   own border instead of doubling it into a two-pixel rule.
 .assistant-clarify__options ws-button {
   display: block;
-  counter-increment: clarify-option;
 
   & + ws-button {
     border-top: 1px solid var(--color-border-subtle);
@@ -797,9 +820,12 @@
   text-align: left;
 }
 
-// The whole row lights up, which is what makes it feel like a target rather than a line of text.
+// ★ THE WHOLE ROW LIGHTS UP, with a rule of accent down its leading edge. `box-shadow` draws that rule
+//   rather than a border, because a border would change the row's width and shift every label 2px on
+//   hover — the kind of movement that makes a list feel loose.
 .assistant-clarify__options ::ng-deep .ws-btn:hover:not(:disabled) {
   background: var(--color-bg-surface-sunken);
+  box-shadow: inset 2px 0 0 0 var(--color-accent-violet);
 }
 
 .assistant-clarify__options ::ng-deep .ws-btn__content {
@@ -807,35 +833,93 @@
   width: 100%;
   min-width: 0;
   flex-wrap: wrap;
-  align-items: baseline;
+  // Centred, not baseline: the ordinal and the chevron are boxes now, and a baseline would hang them
+  // off the text's own line rather than centring them against it.
+  align-items: center;
   gap: var(--space-1) var(--space-2);
 }
 
 // ★ THE INDEX, GENERATED. Tertiary ink and a fixed width so the labels of every row start on the
 //   same vertical line however many options there are — a number that pushed its own label sideways
 //   would undo the shared left edge the stacking exists to create.
-.assistant-clarify__options ::ng-deep .ws-btn__content::before {
-  content: counter(clarify-option);
+// ★ THE ICON REPLACES THE GENERATED ORDINAL. A number told you there were three options; the icon
+//   tells you WHICH lookup each one is, which is the question the panel is actually asking. Fixed box,
+//   so every label still starts on the same vertical line.
+.assistant-clarify__icon {
   flex: 0 0 auto;
-  width: 16px;
-  font-size: var(--font-size-12);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.5;
-  color: var(--color-text-tertiary);
-  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-secondary);
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base),
+    color var(--transition-base);
+}
+
+// Under the cursor the mark picks up the accent, so the row reads as one target rather than as a line
+// of text that happens to have an icon.
+.assistant-clarify__options ::ng-deep .ws-btn:hover:not(:disabled) .assistant-clarify__icon {
+  border-color: color-mix(in srgb, var(--color-accent-violet) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent-violet) 16%, transparent);
+  color: var(--color-accent-violet);
 }
 
 .assistant-clarify__label {
   min-width: 0;
   flex: 1 1 auto;
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 
 // The value the user already gave: subordinate to the action, so the row reads as "do this" with
 // the subject attached rather than as two competing pieces of text.
+// ★ A CHIP, NOT LOOSE TEXT. A row can carry the name, the code and the status, and as three plain
+//   strings they run together into one grey sentence. Boxed, each is legible as its own fact — and it
+//   stays visibly SUBORDINATE to the action, which is what the row is actually offering to do.
 .assistant-clarify__argument {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
   font-size: var(--font-size-12);
-  font-weight: 400;
+  font-weight: 500;
+  line-height: 1.5;
   color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+// ★ THE CHEVRON SAYS "THIS GOES SOMEWHERE". Pushed to the end and dimmed until the row is hovered, so
+//   at rest the list stays quiet and under the cursor it reads unmistakably as a target.
+.assistant-clarify__go {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+  opacity: 0.6;
+  transition: transform var(--transition-base), opacity var(--transition-base), color var(--transition-base);
+}
+
+.assistant-clarify__options ::ng-deep .ws-btn:hover:not(:disabled) .assistant-clarify__go {
+  color: var(--color-accent-violet);
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-clarify__go {
+    transition: none;
+  }
+
+  .assistant-clarify__options ::ng-deep .ws-btn:hover:not(:disabled) .assistant-clarify__go {
+    transform: none;
+  }
 }
 
 // ★ THE CLOSING STRIP, MIRRORING THE HEADER — same sunken ground, same hairline, same inset. That

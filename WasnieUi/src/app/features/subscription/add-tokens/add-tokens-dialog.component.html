@@ -1,0 +1,176 @@
+<!--
+  ★ variant="hero" ON PURPOSE: it drops the modal's own header and zeroes the body padding, so the surface below
+  reaches every edge. With the default variant the card would sit in a frame of plain background and the whole effect
+  would read as a poster pasted inside a dialog.
+-->
+<ws-modal [(isOpen)]="open" size="lg" variant="hero">
+  <section class="add-tokens__surface">
+    <!-- Decorative wash and grid: the card's own depth, no meaning. -->
+    <span class="add-tokens__glow" aria-hidden="true"></span>
+
+    @if (selected(); as pack) {
+      <!--
+        ★★ THE CONFIRMATION STEP. The figure and the price are the subject, so they are what the eye lands on; the
+        card and the Stripe note sit under them. Nothing has been charged at this point and the copy says so.
+      -->
+      <header class="add-tokens__head">
+        <span class="add-tokens__eyebrow">
+          <app-icon name="shield-check" [size]="12" />
+          {{ 'ASSISTANT_USAGE.CONFIRM_TITLE' | translate }}
+        </span>
+      </header>
+
+      <div class="add-tokens__confirm" data-testid="add-tokens-confirm">
+        <p class="add-tokens__summary">
+          <span class="add-tokens__summary-tokens">{{ pack.tokens }}</span>
+          <span class="add-tokens__summary-unit">{{ 'ASSISTANT_USAGE.ADDON_TOKENS_UNIT' | translate }}</span>
+          <span class="add-tokens__summary-sep" aria-hidden="true"></span>
+          <span class="add-tokens__summary-price">{{ pack.amount | currencyFormat: pack.currency }}</span>
+        </p>
+
+        <p class="add-tokens__confirm-line">
+          {{ 'ASSISTANT_USAGE.CONFIRM_LINE' | translate: { tokens: pack.tokens, price: (pack.amount | currencyFormat: pack.currency) } }}
+        </p>
+
+        <div class="add-tokens__method">
+          <span class="add-tokens__method-chip" aria-hidden="true"><app-icon name="brand-stripe" [size]="14" /></span>
+          <span>
+            @if (paymentBrand() && paymentLast4()) {
+              {{ 'ASSISTANT_USAGE.CONFIRM_CARD' | translate: { brand: paymentBrand(), last4: paymentLast4() } }}
+            } @else {
+              {{ 'ASSISTANT_USAGE.CONFIRM_NO_CARD' | translate }}
+            }
+          </span>
+        </div>
+
+        <p class="add-tokens__note">
+          <app-icon name="lock" [size]="12" />
+          {{ 'ASSISTANT_USAGE.CONFIRM_NOTE' | translate }}
+        </p>
+
+        @if (failed()) {
+          <p class="add-tokens__error" role="alert" data-testid="add-tokens-error">
+            {{ 'ASSISTANT_USAGE.ADDONS_FAILED' | translate }}
+          </p>
+        }
+      </div>
+
+      <div class="add-tokens__actions">
+        <button
+          type="button"
+          class="add-tokens__back"
+          [disabled]="submitting()"
+          (click)="back()"
+          data-testid="add-tokens-back"
+        >
+          <app-icon name="arrow-left" [size]="14" />
+          {{ 'ASSISTANT_USAGE.CONFIRM_BACK' | translate }}
+        </button>
+        <ws-button variant="primary" size="lg" [loading]="submitting()" (click)="confirm()" data-testid="add-tokens-confirm-action">
+          {{ 'ASSISTANT_USAGE.CONFIRM_ACTION' | translate }}
+          <app-icon name="arrow-right" [size]="16" />
+        </ws-button>
+      </div>
+    } @else {
+      <header class="add-tokens__head">
+        <span class="add-tokens__eyebrow">
+          <app-icon name="zap" [size]="12" />
+          {{ 'ASSISTANT_USAGE.ADDONS_EYEBROW' | translate }}
+        </span>
+        <h2 class="add-tokens__title">{{ 'ASSISTANT_USAGE.ADDONS_DIALOG_TITLE' | translate }}</h2>
+        <p class="add-tokens__tagline">{{ 'ASSISTANT_USAGE.ADDONS_DIALOG_DESC' | translate }}</p>
+      </header>
+
+      @if (loading()) {
+        <!--
+          ★★ A SKELETON SHAPED LIKE THE ANSWER, not a "Loading" line. The packs come from a live Stripe read, so this
+          state is always seen; a one-line label made the dialog open small and then jump to full height under the
+          cursor — which is how somebody clicks a pack they did not mean to. Same three cards, same divider, same four
+          note rows, so the modal is the size it will be before it knows what it is showing.
+        -->
+        <!--
+          ★ THE SAME DOM SHAPE AS THE REAL LIST, down to the <li>. As a bare div the placeholder WAS the grid item, so
+          its `height: 100%` resolved against a row sized by its own content and collapsed — 87px against the real
+          card's 125, min-height and all. Wrapped the same way, the two measure the same by construction.
+        -->
+        <ul class="add-tokens__packs" aria-hidden="true">
+          @for (ghost of ghosts; track ghost) {
+            <li>
+              <div class="add-tokens__pack add-tokens__pack--ghost">
+                <span class="skeleton add-tokens__skeleton add-tokens__skeleton--figure"></span>
+                <span class="skeleton add-tokens__skeleton add-tokens__skeleton--unit"></span>
+                <span class="skeleton add-tokens__skeleton add-tokens__skeleton--price"></span>
+                <span class="skeleton add-tokens__skeleton add-tokens__skeleton--rate"></span>
+              </div>
+            </li>
+          }
+        </ul>
+
+        <div class="add-tokens__divider" aria-hidden="true"></div>
+
+        <ul class="add-tokens__notes" aria-hidden="true">
+          @for (ghost of ghosts4; track ghost) {
+            <li class="add-tokens__note-item">
+              <span class="add-tokens__check add-tokens__check--ghost"></span>
+              <span class="skeleton add-tokens__skeleton add-tokens__skeleton--note"></span>
+            </li>
+          }
+        </ul>
+
+        <span class="add-tokens__sr-only" role="status">{{ 'COMMON.LOADING' | translate }}</span>
+      } @else if (unavailable()) {
+        <p class="add-tokens__note" data-testid="add-tokens-unavailable">
+          {{ 'ASSISTANT_USAGE.ADDONS_UNAVAILABLE' | translate }}
+        </p>
+      } @else {
+        <ul class="add-tokens__packs">
+          @for (pack of packs(); track pack.priceId) {
+            <li>
+              <button
+                type="button"
+                class="add-tokens__pack"
+                [class.add-tokens__pack--best]="pack.bestValue"
+                [attr.aria-label]="'ASSISTANT_USAGE.ADDON_SELECT_LABEL' | translate: { tokens: pack.tokens, price: (pack.amount | currencyFormat: pack.currency) }"
+                (click)="choose(pack)"
+                [attr.data-price-id]="pack.priceId"
+              >
+                <!-- Always rendered, even empty, so the three figures line up. -->
+                <span class="add-tokens__flag">
+                  @if (pack.bestValue) {
+                    <span class="add-tokens__best">{{ 'ASSISTANT_USAGE.ADDON_BEST_VALUE' | translate }}</span>
+                  }
+                </span>
+
+                <span class="add-tokens__figure">
+                  <span class="add-tokens__tokens">{{ pack.tokens }}</span>
+                  <span class="add-tokens__unit">{{ 'ASSISTANT_USAGE.ADDON_TOKENS_UNIT' | translate }}</span>
+                </span>
+
+                <span class="add-tokens__price">
+                  <span class="add-tokens__amount">{{ pack.amount | currencyFormat: pack.currency }}</span>
+                  <span class="add-tokens__once">{{ 'ASSISTANT_USAGE.ADDON_ONE_OFF' | translate }}</span>
+                </span>
+
+                <span class="add-tokens__rate">
+                  {{ 'ASSISTANT_USAGE.ADDON_PER_MILLION' | translate: { price: (pack.perMillion | currencyFormat: pack.currency) } }}
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+
+        <div class="add-tokens__divider" aria-hidden="true"></div>
+
+        <!-- Every line is a property of how add-ons actually work, not a sales claim. -->
+        <ul class="add-tokens__notes">
+          @for (note of notes; track note) {
+            <li class="add-tokens__note-item">
+              <span class="add-tokens__check" aria-hidden="true"><app-icon name="check" [size]="12" /></span>
+              {{ note | translate }}
+            </li>
+          }
+        </ul>
+      }
+    }
+  </section>
+</ws-modal>

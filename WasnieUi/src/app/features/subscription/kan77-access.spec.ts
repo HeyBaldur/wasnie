@@ -27,6 +27,9 @@ const access = (state: AccountAccess['state'], extra: Partial<AccountAccess> = {
   assistantTokensUsed: null,
   assistantTokenLimit: null,
   assistantTokensSince: null,
+  assistantBoostRemaining: 0,
+  assistantBoostExpiresAt: null,
+  assistantBoostExpired: 0,
   ...extra,
 });
 

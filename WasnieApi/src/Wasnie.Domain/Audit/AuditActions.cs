@@ -111,6 +111,9 @@ public static class AuditActions
     /// <summary>KAN-77: the stored subscription was corrected from Stripe because a webhook never arrived.</summary>
     public const string SubscriptionSyncedFromStripe = "SUBSCRIPTION_SYNCED_FROM_STRIPE";
 
+    /// <summary>KAN-83: a tenant bought extra assistant tokens — a one-off payment, not a subscription change.</summary>
+    public const string AssistantBoostPurchased = "ASSISTANT_BOOST_PURCHASED";
+
     // Profile self-service
     public const string ProfileNameUpdated = "PROFILE_NAME_UPDATED";
     public const string ProfilePasswordChanged = "PROFILE_PASSWORD_CHANGED";

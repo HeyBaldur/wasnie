@@ -1,6 +1,7 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Stripe;
 using Wasnie.Application.Common.DTOs;
+using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
 using Wasnie.Application.Features.Subscription;
 using Wasnie.Domain.Audit;
@@ -27,7 +28,7 @@ internal static class StripeSubscriptionApplier
     /// Where the cancellation flags are read from. The webhook keeps reading them from the EVENT payload, as it always
     /// has; the sync reads them from the subscription it just fetched.
     /// </param>
-    public static AuditEntry? ApplyUpdate(
+    public static async Task<AuditEntry?> ApplyUpdate(
         UserSubscription subscription,
         Tenant tenant,
         Subscription fullSubscription,
@@ -38,12 +39,21 @@ internal static class StripeSubscriptionApplier
         ISubscriptionPlanCatalog catalog,
         DateTimeOffset now,
         StripeChangeActor actor,
-        ILogger logger)
+        ILogger logger,
+        IAssistantPeriodCloser periodCloser,
+        CancellationToken cancellationToken)
     {
         var periodStart = new DateTimeOffset(item.CurrentPeriodStart, TimeSpan.Zero);
         var periodEnd = new DateTimeOffset(item.CurrentPeriodEnd, TimeSpan.Zero);
         var previousPlanCode = subscription.PlanCode;
         var wasCancelScheduled = subscription.CancelAtPeriodEnd;
+
+        // ★★ KAN-83: BEFORE the period moves. The included allowance belongs to a period, and the moment the
+        // row below is updated the old window's boundaries are gone — with them, any way to know what that period spent
+        // past its allowance. Placed here rather than at the two call sites because this is the one road both take.
+        await periodCloser.CloseIfRolledOverAsync(
+            subscription.TenantId, subscription.CurrentPeriodStart, subscription.CurrentPeriodEnd,
+            periodStart, cancellationToken);
 
         var mappedStatus = StripeSubscriptionStatus.Map(fullSubscription.Status);
 

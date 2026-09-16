@@ -41,10 +41,18 @@
   @case ('period') {
     @if (view(); as v) {
       @if (v.kind === 'period') {
-        <div class="token-usage" [class.token-usage--compact]="variant() === 'compact'" data-testid="token-usage-period">
+        <div
+          class="token-usage"
+          [class.token-usage--compact]="variant() === 'compact'"
+          [class.token-usage--warning]="v.nearLimit && !v.exhausted"
+          [class.token-usage--exhausted]="v.exhausted"
+          data-testid="token-usage-period"
+        >
           <div class="token-usage__head">
             <!-- Compact sits inside another card with no heading of its own, so it has to say whose tokens these are. -->
-            <span class="token-usage__figure">{{ (variant() === 'compact' ? 'ASSISTANT_USAGE.COMPACT_PERIOD' : 'ASSISTANT_USAGE.PERIOD_USED') | translate: { used: format(v.used) } }}</span>
+            <span class="token-usage__figure">
+              {{ (variant() === 'compact' ? 'ASSISTANT_USAGE.COMPACT_INCLUDED' : 'ASSISTANT_USAGE.PERIOD_OF') | translate: { used: format(v.used), limit: format(v.limit) } }}
+            </span>
             <span class="token-usage__caption">
               @if (v.since) {
                 {{ 'ASSISTANT_USAGE.PERIOD_CAPTION' | translate: { date: (v.since | dateFormat) } }}
@@ -53,6 +61,43 @@
               }
             </span>
           </div>
+
+          <svg
+            class="token-usage__bar"
+            viewBox="0 0 100 6"
+            preserveAspectRatio="none"
+            role="progressbar"
+            [attr.aria-label]="'ASSISTANT_USAGE.BAR_LABEL' | translate"
+            aria-valuemin="0"
+            [attr.aria-valuemax]="v.limit"
+            [attr.aria-valuenow]="v.used"
+          >
+            <rect class="token-usage__track" x="0" y="0" width="100" height="6" rx="3" />
+            <rect class="token-usage__fill" x="0" y="0" [attr.width]="barWidth()" height="6" rx="3" />
+          </svg>
+
+          <!--
+            KAN-83: the boost is its own line, never folded into the bar. It does not reset with the period and it
+            expires, so a tenant has to be able to see how much of it is left and until when.
+          -->
+          @if (v.addonRemaining > 0) {
+            <span class="token-usage__note" data-testid="token-usage-addon">
+              {{ 'ASSISTANT_USAGE.ADDON_REMAINING' | translate: { tokens: format(v.addonRemaining) } }}
+              @if (v.addonExpiresAt) {
+                {{ 'ASSISTANT_USAGE.ADDON_EXPIRES' | translate: { date: (v.addonExpiresAt | dateFormat) } }}
+              }
+            </span>
+          }
+
+          @if (v.addonExpired > 0) {
+            <span class="token-usage__note" data-testid="token-usage-addon-expired">
+              {{ 'ASSISTANT_USAGE.ADDON_EXPIRED' | translate: { tokens: format(v.addonExpired) } }}
+            </span>
+          }
+
+          @if (v.exhausted) {
+            <span class="token-usage__note" data-testid="token-usage-exhausted">{{ 'ASSISTANT_USAGE.PERIOD_EXHAUSTED' | translate }}</span>
+          }
         </div>
       }
     }

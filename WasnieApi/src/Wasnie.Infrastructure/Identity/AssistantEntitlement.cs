@@ -1,9 +1,5 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using Wasnie.Application.Common.Exceptions;
+﻿using Wasnie.Application.Common.Exceptions;
 using Wasnie.Application.Common.Interfaces;
-using Wasnie.Application.Common.Options;
-using Wasnie.Domain.Assistant;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Subscription;
 
@@ -32,9 +28,8 @@ public sealed class AssistantEntitlement(
     IClaimsService claimsService,
     IPaidPlanGate paidPlanGate,
     IAccountAccessReader accessReader,
-    IApplicationDbContext db,
-    ITenantContext tenantContext,
-    IOptions<BillingOptions> billingOptions)
+    IAssistantTokenBalanceReader balanceReader,
+    ITenantContext tenantContext)
     : IAssistantEntitlement
 {
     private const string Feature = "Assistant.Use";
@@ -57,28 +52,34 @@ public sealed class AssistantEntitlement(
     }
 
     /// <summary>
-    /// ★ KAN-77 / KAN-80 — THE TRIAL'S SAFETY NET. A trial gets the assistant, but every turn runs a large model at
-    /// our expense, so a trial account may consume at most <see cref="BillingOptions.TrialAssistantTokenLimit"/>
-    /// tokens (input + output, tenant-wide, every user together). Paying accounts have no limit.
+    /// ★ KAN-77 / KAN-80 / KAN-83 — THE CEILING, for every kind of account. Every turn runs a large model at our
+    /// expense, and the price is flat with unlimited users, so a tenant spends against a balance: a trial its one-off
+    /// allowance, a paying tenant the month's included tokens plus whatever boost it bought. Tenant-wide in both cases —
+    /// all the users of an account draw on one pool.
     ///
-    /// ★ TOKENS SPENT, NOT QUESTIONS ASKED (KAN-80). It reads the same sum the usage meter shows
-    /// (<see cref="Wasnie.Application.Assistant.Common.AssistantTokenMeter"/>), so the screen and the refusal never
-    /// disagree. A turn that starts under the limit may end above it — the check is before the turn, and a turn's size is
-    /// only known afterwards. That overshoot is bounded by one turn and is the honest trade against cutting an answer in half.
+    /// ★ TOKENS SPENT, NOT QUESTIONS ASKED (KAN-80). A turn that starts inside the balance may end outside it — the
+    /// check is before the turn, and a turn's size is only known afterwards. That overshoot is bounded by one turn and is
+    /// the honest trade against cutting an answer in half.
     /// </summary>
-    public async Task<bool> IsTrialAllowanceExhaustedAsync(CancellationToken cancellationToken = default)
+    public async Task<string?> TokenRefusalKeyAsync(CancellationToken cancellationToken = default)
     {
         if (!tenantContext.IsResolved)
-            return false; // RequireAsync already refuses a request with no tenant.
+            return null; // RequireAsync already refuses a request with no tenant.
 
         var access = await accessReader.GetAsync(tenantContext.TenantId, cancellationToken);
-        if (access?.State != AccountAccessState.Trial)
-            return false;
+        if (access is null)
+            return null;
 
-        var used = await Wasnie.Application.Assistant.Common.AssistantTokenMeter.UsedAsync(
-            db, tenantContext.TenantId, since: null, cancellationToken);
+        // ★ THE BALANCE IS READ, NOT RECOMPUTED. The same reader feeds the meter on the settings screen, so a tenant
+        // never sees "1.2M of 3M used" beside an assistant that refuses to answer.
+        var balance = await balanceReader.GetAsync(tenantContext.TenantId, cancellationToken, known: access);
+        if (balance is null || !balance.Exhausted)
+            return null;
 
-        return used >= billingOptions.Value.TrialAssistantTokenLimit;
+        // ★ WHICH REFUSAL depends on what the tenant can DO about it. A trial subscribes; a paying tenant buys a boost.
+        return access.State == AccountAccessState.Trial
+            ? IAssistantEntitlement.TrialAllowanceExhaustedKey
+            : IAssistantEntitlement.TokensExhaustedKey;
     }
 
     // Today: the tenant admin, and only the tenant admin. Tomorrow: this line reads the seat.

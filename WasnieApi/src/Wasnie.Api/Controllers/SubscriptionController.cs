@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -71,6 +71,24 @@ public sealed class SubscriptionController(
         if (dto.Blocked)
             return Conflict(dto);
         return Ok(new CheckoutSessionDto(dto.CheckoutUrl!));
+    }
+
+    /// <summary>The boost packs on sale (KAN-83). An empty list means none are configured — not an error.</summary>
+    [HttpGet("boosts")]
+    public async Task<IActionResult> GetBoosts(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetBoostOffersQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    /// <summary>Starts a ONE-OFF checkout for extra assistant tokens (KAN-83) — not a second subscription.</summary>
+    [HttpPost("boosts/checkout")]
+    public async Task<IActionResult> CreateBoostCheckout(
+        [FromBody] CreateBoostCheckoutCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
     [HttpPost("change-plan")]

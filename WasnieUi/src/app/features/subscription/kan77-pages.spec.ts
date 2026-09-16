@@ -8,7 +8,7 @@ import { CurrentUserService } from '../../core/auth/current-user.service';
 import { AuthService } from '../../core/services/auth.service';
 import { WsToastService } from '../../shared/ui/ws-toast/ws-toast.service';
 import { SubscriptionStateService } from './services/subscription-state.service';
-import { AccountAccess, CurrentSubscription, SubscriptionPlan, SubscriptionService, BillingDetails } from './services/subscription.service';
+import { AccountAccess, BoostOffer, CurrentSubscription, SubscriptionPlan, SubscriptionService, BillingDetails } from './services/subscription.service';
 import { PlanOfferComponent } from './plan-offer/plan-offer.component';
 import { checkoutNavigator } from './plan-offer/start-checkout';
 import { PaywallComponent } from './paywall/paywall.component';
@@ -30,8 +30,13 @@ const PRO: SubscriptionPlan = {
 
 const access = (state: AccountAccess['state'], lockReason: AccountAccess['lockReason'] = null): AccountAccess => ({
   state, lockReason, trialEndsAt: '2026-09-21T10:59:45Z', trialDaysRemaining: state === 'Trial' ? 7 : null, trialLengthDays: state === 'Trial' ? 7 : null,
-  assistantTokensUsed: state === 'Locked' ? null : 12_000, assistantTokenLimit: state === 'Trial' ? 1_000_000 : null,
+  assistantTokensUsed: state === 'Locked' ? null : 12_000,
+  // KAN-83: a paying account has an allowance of its own now — it is only null when locked.
+  assistantTokenLimit: state === 'Locked' ? null : (state === 'Trial' ? 1_000_000 : 3_000_000),
   assistantTokensSince: state === 'Active' ? '2026-09-01T00:00:00Z' : null,
+  assistantBoostRemaining: 0,
+  assistantBoostExpiresAt: null,
+  assistantBoostExpired: 0,
 });
 
 const toast = () => jasmine.createSpyObj<WsToastService>('WsToastService', ['show']);
@@ -171,7 +176,10 @@ describe('KAN-77 · ManageBillingComponent', () => {
 
   const render = (acc: AccountAccess, sub: CurrentSubscription | null, details: BillingDetails = { subscription: null, paymentMethod: null, invoices: [], synced: false }) => {
     const service = jasmine.createSpyObj<SubscriptionService>('SubscriptionService',
-      ['getAccess', 'getPlans', 'getCurrent', 'getUsage', 'getBillingDetails', 'getBillingPortalUrl', 'revertCancellation']);
+      ['getAccess', 'getPlans', 'getCurrent', 'getUsage', 'getBillingDetails', 'getBillingPortalUrl',
+        'revertCancellation', 'getBoostOffers', 'createBoostCheckout']);
+    // KAN-83: no packs on sale by default — the boost card is absent unless a test puts something in the shop.
+    service.getBoostOffers.and.returnValue(of([]));
     service.getUsage.and.returnValue(of({ payeeCount: 3, planCount: 2 }));
     service.getBillingDetails.and.returnValue(of(details));
     service.getAccess.and.returnValue(of(acc));
@@ -317,6 +325,82 @@ describe('KAN-77 · ManageBillingComponent', () => {
     expect(fixture.componentInstance.loadError()).toBeFalse();
     expect(el.textContent).toContain('BILLING.DETAILS_ERROR');
     expect(el.textContent).toContain('Incentra Pro');
+  });
+
+  // ── KAN-83 UX: the add-on is a quiet row, and the purchase lives in a dialog ───
+
+  const withOffers = (acc: AccountAccess, sub: CurrentSubscription | null, offers: BoostOffer[]) => {
+    TestBed.resetTestingModule();
+    const fixture = render(acc, sub);
+    const service = TestBed.inject(SubscriptionService) as jasmine.SpyObj<SubscriptionService>;
+    service.getBoostOffers.and.returnValue(of(offers));
+    fixture.componentInstance.load();
+    fixture.detectChanges();
+    return { fixture, service };
+  };
+
+  const PACKS: BoostOffer[] = [
+    { priceId: 'price_3m', tokens: 3_000_000, amountCents: 2000, currency: 'eur' },
+    { priceId: 'price_12m', tokens: 12_000_000, amountCents: 4000, currency: 'eur' },
+  ];
+
+  it('KAN-83 · a paying account gets a discreet add-on row with a secondary action', () => {
+    const { fixture } = withOffers(access('Active'), SUB, PACKS);
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelector('#add-tokens')).not.toBeNull();
+    expect(el.textContent).toContain('ASSISTANT_USAGE.ADDONS_TITLE');
+    expect(el.querySelector('[data-testid="billing-add-tokens"]')).not.toBeNull();
+  });
+
+  it('KAN-83 · ★ the packs and prices are NOT on the billing screen — they live in the dialog', () => {
+    // The whole point of the redesign: this page reads as administration, not as a sales counter.
+    const { fixture } = withOffers(access('Active'), SUB, PACKS);
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.textContent).not.toContain('3,000,000');
+    expect(el.textContent).not.toContain('12,000,000');
+    expect(fixture.componentInstance.addTokensOpen()).toBeFalse();
+  });
+
+  it('KAN-83 · the row opens the purchase dialog', () => {
+    const { fixture } = withOffers(access('Active'), SUB, PACKS);
+
+    fixture.componentInstance.openAddTokens();
+
+    expect(fixture.componentInstance.addTokensOpen()).toBeTrue();
+  });
+
+  it('KAN-83 · ★ a TRIAL is never offered add-ons — its way forward is to subscribe', () => {
+    const { fixture } = withOffers(access('Trial'), null, PACKS);
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('#add-tokens')).toBeNull();
+  });
+
+  it('KAN-83 · ★ no packs configured means no row at all, not an empty one', () => {
+    const { fixture } = withOffers(access('Active'), SUB, []);
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('#add-tokens')).toBeNull();
+  });
+
+  it('KAN-83 · ★ a Stripe failure listing packs hides the row and leaves the page intact', () => {
+    TestBed.resetTestingModule();
+    const fixture = render(access('Active'), SUB);
+    const service = TestBed.inject(SubscriptionService) as jasmine.SpyObj<SubscriptionService>;
+    service.getBoostOffers.and.returnValue(throwError(() => new HttpErrorResponse({ status: 500 })));
+    fixture.componentInstance.load();
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelector('#add-tokens')).toBeNull();
+    expect(fixture.componentInstance.loadError()).toBeFalse();
+    expect(el.textContent).toContain('Incentra Pro');
+  });
+
+  it('KAN-83 · ★ no visible copy on this screen says "boost"', () => {
+    const { fixture } = withOffers(access('Active'), SUB, PACKS);
+
+    expect((fixture.nativeElement as HTMLElement).textContent!.toLowerCase()).not.toContain('boost');
   });
 
   it('★ the status key is a whitelist — an unknown Stripe status never prints an identifier (§C2)', () => {

@@ -163,6 +163,33 @@
             </div>
           </div></ws-card>
 
+          <!--
+            KAN-83 UX — the add-on as a QUIET ROW, not a shop. This screen is administration: the subscription, the
+            card and the invoices are what an accountant opens it for, and the add-on used to outweigh all three. It is
+            an option that is available, so it reads like one: a titled row, a sentence, and a SECONDARY action that
+            opens the dialog. The usage meter stays on the subscription card above — that one IS administration.
+          -->
+          @if (canBuyTokens()) {
+            <ws-card><div class="token-addons" id="add-tokens">
+              <!--
+                ★ PRESENT WITHOUT SHOUTING. A tinted chip and an accent rule give it enough weight to be noticed on a
+                page of plain rows, while the ground stays the card surface every other section uses — so it is the
+                same page, not a banner dropped into it. The loud treatment lives in the dialog this opens.
+              -->
+              <span class="token-addons__chip" aria-hidden="true"><app-icon name="zap" [size]="18" /></span>
+
+              <div class="token-addons__body">
+                <span class="token-addons__title">{{ 'ASSISTANT_USAGE.ADDONS_TITLE' | translate }}</span>
+                <span class="token-addons__desc">{{ 'ASSISTANT_USAGE.ADDONS_DESC' | translate }}</span>
+              </div>
+
+              <ws-button variant="secondary" size="md" (click)="openAddTokens()" data-testid="billing-add-tokens">
+                {{ 'ASSISTANT_USAGE.ADDONS_ACTION' | translate }}
+                <app-icon name="arrow-right" [size]="14" />
+              </ws-button>
+            </div></ws-card>
+          }
+
           <!-- One call to action at a time, the most urgent first. -->
           @if (cardState() === 'ended') {
             <ws-card><div class="billing-banner billing-banner--danger" role="alert">
@@ -376,3 +403,6 @@
     </div>
   </ws-page-layout>
 </app-shell>
+
+<!-- KAN-83 — the same dialog the assistant opens; one purchase flow, two entry points. -->
+<app-add-tokens-dialog [(open)]="addTokensOpen" returnTo="Billing" />

@@ -227,8 +227,8 @@ public sealed class AssistantChatHandlerTests
     // The seat and the plan are the subject here; the trial allowance (KAN-77) is tested on its own, so the
     // account is simply a paying one.
     private static AssistantEntitlement NewEntitlement(IClaimsService claims, IPaidPlanGate gate) =>
-        new(claims, gate, new FakeAccountAccessReader(), Substitute.For<IApplicationDbContext>(),
-            Substitute.For<ITenantContext>(), Options.Create(new BillingOptions()));
+        new(claims, gate, new FakeAccountAccessReader(),
+            Substitute.For<IAssistantTokenBalanceReader>(), Substitute.For<ITenantContext>());
 
     [Fact]
     public async Task Only_an_entitled_user_reaches_the_chat_and_today_that_means_the_tenant_admin()

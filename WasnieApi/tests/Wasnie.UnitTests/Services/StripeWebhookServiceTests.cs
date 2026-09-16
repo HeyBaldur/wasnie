@@ -1,4 +1,4 @@
-using Wasnie.UnitTests.TestDoubles;
+﻿using Wasnie.UnitTests.TestDoubles;
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
@@ -256,7 +256,12 @@ public sealed class StripeWebhookServiceTests : IDisposable
 
     // ── Builders and helpers ───────────────────────────────────────────────
 
-    private StripeWebhookService Create() => new(_db, _options, _audit, _clock, TestPlanCatalog.Create(), _logger);
+    private StripeWebhookService Create() => new(
+        _db, _options, Options.Create(new Wasnie.Application.Common.Options.BillingOptions()),
+        new Wasnie.Application.Assistant.Common.AssistantPeriodCloser(
+            _db, Options.Create(new Wasnie.Application.Common.Options.BillingOptions()), _clock,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Wasnie.Application.Assistant.Common.AssistantPeriodCloser>.Instance),
+        _audit, _clock, TestPlanCatalog.Create(), _logger);
 
     private static string BuildUnknownEventJson(string eventId) => $$"""
         {

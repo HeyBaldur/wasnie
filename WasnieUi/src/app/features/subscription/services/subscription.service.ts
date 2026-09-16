@@ -56,10 +56,27 @@ export interface AccountAccess {
    * period. Null when locked.
    */
   assistantTokensUsed: number | null;
-  /** The trial's token allowance. Null for a paying account, which has none. */
+  /**
+   * KAN-83 — the allowance `assistantTokensUsed` counts against: the trial's one-off allowance, or a paying tenant's
+   * included tokens for this period. Null only when locked.
+   */
   assistantTokenLimit: number | null;
   /** Start of the current billing period for a paying account; null for a trial and when locked. */
   assistantTokensSince: string | null;
+  /** KAN-83 — purchased tokens still available, expiry and past periods already taken out. 0 when none were bought. */
+  assistantBoostRemaining: number;
+  /** When the soonest surviving boost lot dies. Null when no boost remains. */
+  assistantBoostExpiresAt: string | null;
+  /** Purchased tokens that died unused — surfaced so the loss is never silent. */
+  assistantBoostExpired: number;
+}
+
+/** KAN-83 — one boost pack on sale. Prices come from Stripe; the client only formats them. */
+export interface BoostOffer {
+  priceId: string;
+  tokens: number;
+  amountCents: number;
+  currency: string;
 }
 
 export interface SubscriptionUsage {
@@ -141,6 +158,21 @@ export class SubscriptionService {
 
   getAccess(): Observable<AccountAccess> {
     return this.http.get<AccountAccess>(`${this.base}/access`);
+  }
+
+  /** KAN-83 — the boost packs on sale. An empty list means boosts are not configured, not an error. */
+  getBoostOffers(): Observable<BoostOffer[]> {
+    return this.http.get<BoostOffer[]>(`${this.base}/boosts`);
+  }
+
+  /**
+   * KAN-83 — starts a one-off checkout for a token pack; returns the Stripe URL to send the user to.
+   *
+   * `returnTo` names the SCREEN the purchase started from, never a URL: the server decides what that spells, so a
+   * payment link can never be made to land somebody on a page of somebody else's choosing.
+   */
+  createBoostCheckout(priceId: string, returnTo: 'Billing' | 'Assistant' = 'Billing'): Observable<{ checkoutUrl: string }> {
+    return this.http.post<{ checkoutUrl: string }>(`${this.base}/boosts/checkout`, { priceId, returnTo });
   }
 
   getUsage(): Observable<SubscriptionUsage> {

@@ -5,14 +5,10 @@
 }
 
 // ── The featured card ───────────────────────────────────────────────────────────────
-// An INVERTED surface: `--color-text-primary` as the ground and `--color-text-inverse` as the ink. On the light
-// theme that is a deep, near-black card; on the dark theme it flips to a light card with dark text — the same
-// "one flagship offer" emphasis in both, with no literal colour. A brand/violet wash gives it depth.
+// ★ THE SURFACE ITSELF LIVES IN `src/styles/_offer-surface.scss`, shared with the boost shop: the ground, the ink
+// variables and the wash, including the dark theme's role swap that keeps this card DARK instead of flipping it to a
+// near-white slab. Only this card's own geometry is here.
 .plan-offer {
-  --offer-ink: var(--color-text-inverse);
-  --offer-ink-muted: color-mix(in srgb, var(--color-text-inverse) 68%, transparent);
-  --offer-line: color-mix(in srgb, var(--color-text-inverse) 14%, transparent);
-
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -21,11 +17,6 @@
   gap: var(--space-8);
   padding: var(--space-10);
   border-radius: var(--radius-xl, var(--radius-lg));
-  background:
-    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--color-accent-violet) 38%, transparent) 0%, transparent 55%),
-    radial-gradient(90% 120% at 0% 100%, color-mix(in srgb, var(--color-brand) 55%, transparent) 0%, transparent 60%),
-    var(--color-text-primary);
-  color: var(--offer-ink);
   box-shadow: var(--shadow-xl);
 
   &--current {
@@ -73,7 +64,7 @@
   padding: var(--space-1) var(--space-3);
   border: 1px solid var(--offer-line);
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--color-text-inverse) 8%, transparent);
+  background: color-mix(in srgb, var(--offer-ink) 8%, transparent);
   font-size: var(--font-size-12);
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -129,7 +120,7 @@
   ::ng-deep .ws-btn--primary {
     padding: 0 var(--space-6);
     background: var(--offer-ink);
-    color: var(--color-text-primary);
+    color: var(--offer-ground);
 
     &:hover:not(:disabled) {
       background: color-mix(in srgb, var(--offer-ink) 88%, var(--color-accent-violet));
@@ -200,6 +191,6 @@
   height: 18px;
   margin-top: 1px;
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--color-success) 80%, var(--color-text-inverse));
-  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-success) 80%, var(--offer-ink));
+  color: var(--offer-ground);
 }

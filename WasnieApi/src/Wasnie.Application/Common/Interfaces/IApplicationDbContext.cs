@@ -59,6 +59,11 @@ public interface IApplicationDbContext
     DbSet<Wasnie.Domain.Assistant.AssistantConversationState> AssistantConversationStates { get; }
     DbSet<Wasnie.Domain.Assistant.AssistantTokenUsage> AssistantTokenUsages { get; }
 
+    // KAN-83: the tenant's purchased token lots and the overage of each CLOSED billing period. Together with the usage
+    // rows above they are everything the balance is derived from — there is no stored total anywhere.
+    DbSet<Wasnie.Domain.Assistant.AssistantTokenBoost> AssistantTokenBoosts { get; }
+    DbSet<Wasnie.Domain.Assistant.AssistantBoostDebit> AssistantBoostDebits { get; }
+
     DbSet<HubSpotConnection> HubSpotConnections { get; }
     DbSet<HubSpotOAuthState> HubSpotOAuthStates { get; }
     DbSet<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping> CrmOwnerMappings { get; }

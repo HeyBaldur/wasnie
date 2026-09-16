@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Wasnie.Application.Common.Interfaces;
@@ -24,7 +24,15 @@ public sealed record GetAccountAccessQuery : IRequest<Result<AccountAccessDto>>;
 /// Assistant tokens consumed (input + output, KAN-80). Trial: since the account began. Active: in the CURRENT billing
 /// period only. Null when locked.
 /// </param>
-/// <param name="AssistantTokenLimit">The trial's token allowance. Null for a paying account, which has none.</param>
+/// <param name="AssistantTokenLimit">
+/// The allowance <paramref name="AssistantTokensUsed"/> counts against: the trial's one-off allowance, or a paying
+/// tenant's included tokens for this period (KAN-83). Null only when locked.
+/// </param>
+/// <param name="AssistantBoostRemaining">
+/// Purchased tokens still available after this period's overage and any expiry (KAN-83). Zero when none were bought.
+/// </param>
+/// <param name="AssistantBoostExpiresAt">When the soonest surviving boost lot dies. Null when no boost remains.</param>
+/// <param name="AssistantBoostExpired">Purchased tokens that died unused — shown so the loss is never silent.</param>
 /// <param name="AssistantTokensSince">
 /// Where <paramref name="AssistantTokensUsed"/> starts counting: the start of the current billing period for a paying
 /// account, null for a trial (everything counts) and when locked.
@@ -37,12 +45,16 @@ public sealed record AccountAccessDto(
     int? TrialLengthDays,
     long? AssistantTokensUsed,
     long? AssistantTokenLimit,
-    DateTimeOffset? AssistantTokensSince);
+    DateTimeOffset? AssistantTokensSince,
+    long AssistantBoostRemaining = 0,
+    DateTimeOffset? AssistantBoostExpiresAt = null,
+    long AssistantBoostExpired = 0);
 
 public sealed class GetAccountAccessHandler(
     IApplicationDbContext db,
     ITenantContext tenantContext,
     IAccountAccessReader accessReader,
+    IAssistantTokenBalanceReader balanceReader,
     IStripeSubscriptionReconciler reconciler,
     IOptions<BillingOptions> billingOptions)
     : IRequestHandler<GetAccountAccessQuery, Result<AccountAccessDto>>
@@ -62,22 +74,17 @@ public sealed class GetAccountAccessHandler(
         if (access.State == AccountAccessState.Locked && await reconciler.ReconcileAsync(cancellationToken))
             access = await accessReader.GetAsync(tenantContext.TenantId, cancellationToken) ?? access;
 
-        long? used = null;
-        long? limit = null;
+        int? trialLength = access.State == AccountAccessState.Trial ? billingOptions.Value.TrialDays : null;
+
+        // ★★ THE BALANCE COMES FROM THE ONE READER (KAN-83), never assembled here. This response is what the meter on
+        // screen draws; the assistant's refusal reads the same object. Recomputing it here is exactly how a screen ends
+        // up saying "1.2M of 3M used" next to an assistant that will not answer.
+        var balance = await balanceReader.GetAsync(tenantContext.TenantId, cancellationToken, known: access);
+
+        // Where the usage is counted FROM, so the screen can say "this period" honestly. A trial counts everything.
         DateTimeOffset? since = null;
-        int? trialLength = null;
-        if (access.State == AccountAccessState.Trial)
+        if (access.State == AccountAccessState.Active)
         {
-            limit = billingOptions.Value.TrialAssistantTokenLimit;
-            trialLength = billingOptions.Value.TrialDays;
-            used = await Wasnie.Application.Assistant.Common.AssistantTokenMeter.UsedAsync(
-                db, tenantContext.TenantId, since: null, cancellationToken);
-        }
-        else if (access.State == AccountAccessState.Active)
-        {
-            // ★ THE CURRENT BILLING PERIOD, AS DECIDED FOR KAN-80. A paying account sees what it consumed this period and
-            // nothing older. The period comes from the Stripe subscription; when Stripe has not told us its start yet,
-            // the subscription's own creation is the honest fallback — it is when this paid relationship began.
             var subscription = await db.UserSubscriptions
                 .Where(s => s.TenantId == tenantContext.TenantId && s.StripeSubscriptionId != null)
                 .OrderByDescending(s => s.CreatedAt)
@@ -85,8 +92,6 @@ public sealed class GetAccountAccessHandler(
                 .FirstOrDefaultAsync(cancellationToken);
 
             since = subscription?.CurrentPeriodStart ?? subscription?.CreatedAt;
-            used = await Wasnie.Application.Assistant.Common.AssistantTokenMeter.UsedAsync(
-                db, tenantContext.TenantId, since, cancellationToken);
         }
 
         return Result<AccountAccessDto>.Success(new AccountAccessDto(
@@ -95,8 +100,11 @@ public sealed class GetAccountAccessHandler(
             access.TrialEndsAt,
             access.TrialDaysRemaining,
             trialLength,
-            used,
-            limit,
-            since));
+            balance?.IncludedUsed,
+            balance?.IncludedLimit,
+            since,
+            balance?.BoostRemaining ?? 0,
+            balance?.BoostNextExpiry,
+            balance?.BoostExpired ?? 0));
     }
 }

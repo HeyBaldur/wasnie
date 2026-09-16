@@ -220,6 +220,42 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantBoostDebit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long>("IncludedLimit")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("PeriodEnd")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("PeriodStart")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("Tokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UsedInPeriod")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PeriodStart")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AssistantBoostDebits_TenantId_PeriodStart");
+
+                    b.ToTable("AssistantBoostDebits", (string)null);
+                });
+
             modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantConversation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -340,6 +376,50 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_AssistantMessages_ConversationId_Sequence");
 
                     b.ToTable("AssistantMessages", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantTokenBoost", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("PurchasedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("StripeEventId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("StripeProductId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("StripeSessionId")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("Tokens")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StripeEventId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AssistantTokenBoosts_StripeEventId");
+
+                    b.HasIndex("TenantId", "PurchasedAt")
+                        .HasDatabaseName("IX_AssistantTokenBoosts_TenantId_PurchasedAt");
+
+                    b.ToTable("AssistantTokenBoosts", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantTokenUsage", b =>

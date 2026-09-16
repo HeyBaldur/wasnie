@@ -1,0 +1,115 @@
+@reference "../../../../styles.scss";
+
+:host {
+  display: contents;
+}
+
+// ── The quiet state: part of the disclaimer sentence ────────────────────────────────
+// ★ IT INHERITS THE SENTENCE IT SITS IN. No size, no colour and no layout of its own — only the weight, which is what
+// separates the figure from the promise around it. Anything more and it would read as a second message on that line.
+.token-status__remaining {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  // ★ A SEPARATOR, BECAUSE THE SENTENCE IS LONG ENOUGH TO WRAP. At most widths the figure lands on the line below the
+  // disclaimer, where without a mark it reads as a second, unrelated message. The middle dot ties it back to the
+  // sentence whether it wraps or not — and it is CSS, so it never reaches a translator as a stray character to keep.
+  &::before {
+    content: '·';
+    margin: 0 var(--space-2);
+    font-weight: 400;
+    color: var(--color-text-tertiary, var(--color-text-secondary));
+  }
+}
+
+// The warning strip keeps its own breathing room above the footer's rule.
+.token-status {
+  margin: 0 var(--space-3) var(--space-2);
+  width: auto;
+}
+
+// ── The warning at 80% ──────────────────────────────────────────────────────────────
+// ★★ ONE ROW, ~36px. This sits on top of the conversation, so its height is chat the user cannot see. Everything is on
+// a single line: chip, sentence, what is left, action. The warning token carries the colour and the surface stays the
+// panel's own, so it reads as part of the composer rather than as a banner dropped over it.
+.token-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 28%, var(--color-border-default));
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-warning) 10%, transparent) 0%, transparent 58%),
+    var(--color-bg-surface-raised);
+  color: var(--color-text-primary);
+}
+
+.token-status__chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-warning) 22%, transparent);
+  color: var(--color-warning);
+}
+
+// Takes the room that is left and ellipsises rather than wrapping: a second line here costs the chat 20px.
+.token-status__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-status__figures {
+  flex: none;
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.token-status__action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px var(--space-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--duration-fast, 120ms) ease, background var(--duration-fast, 120ms) ease;
+
+  &:hover {
+    border-color: var(--color-brand);
+    background: var(--color-bg-surface-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+}
+
+// Narrow panel: the sentence and the action keep the row; the figure is the first thing to go.
+@media (max-width: 620px) {
+  .token-status__figures {
+    display: none;
+  }
+}
