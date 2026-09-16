@@ -242,10 +242,23 @@ public sealed class PostMessageHandler(
         // An empty completion is a failure in a success's clothes; storing it renders a blank bubble.
         return text.Length == 0
             ? Result<ComposedReply>.Failure(ChatCompletionException.Unavailable)
-            : Result<ComposedReply>.Success(new ComposedReply(
-                text.Length > AssistantMessage.MaxContentLength
-                    ? text[..AssistantMessage.MaxContentLength]
-                    : text,
-                turnPayload));
+            : Result<ComposedReply>.Success(new ComposedReply(Stored(text), turnPayload));
+    }
+
+    /// <summary>
+    /// The reply as stored. Same rule as the streaming path: replies have their own limit (equal to the degeneration
+    /// guard's ceiling), and a cut — if it ever happens — is logged rather than silent (§B1).
+    /// </summary>
+    private string Stored(string text)
+    {
+        if (text.Length <= AssistantMessage.MaxReplyLength)
+        {
+            return text;
+        }
+
+        logger.LogError(
+            "An assistant reply of {Length} characters exceeded the stored limit of {Limit} and was truncated.",
+            text.Length, AssistantMessage.MaxReplyLength);
+        return text[..AssistantMessage.MaxReplyLength];
     }
 }

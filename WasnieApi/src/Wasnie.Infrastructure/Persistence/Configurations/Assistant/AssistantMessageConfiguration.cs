@@ -15,7 +15,8 @@ public sealed class AssistantMessageConfiguration : IEntityTypeConfiguration<Ass
         builder.Property(m => m.ConversationId).IsRequired();
         builder.Property(m => m.TenantId).IsRequired();
         builder.Property(m => m.Role).HasConversion<string>().HasMaxLength(20).IsRequired();
-        builder.Property(m => m.Content).IsRequired().HasMaxLength(AssistantMessage.MaxContentLength);
+        // The column holds both sides, so it is sized for the larger one (a reply). nvarchar(max) either way.
+        builder.Property(m => m.Content).IsRequired().HasMaxLength(AssistantMessage.MaxReplyLength);
 
         // Stored as text, like Role and for the same reason: a row read straight from the database says
         // "Cancelled" rather than "1", and adding a third outcome later cannot silently renumber the

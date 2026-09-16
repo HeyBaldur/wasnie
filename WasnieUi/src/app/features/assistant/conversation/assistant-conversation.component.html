@@ -101,6 +101,18 @@
         [attr.data-role]="message.role"
       >
         <!--
+          ★ WHO IS SPEAKING, AT A GLANCE. Zeke's turns carry the same mark the thinking card shows while
+          it works, so the answer visibly comes from the thing that was just thinking. Decorative for a
+          screen reader — the role is already on the row.
+        -->
+        @if (message.role === 'Assistant') {
+          <span class="assistant-msg__avatar assistant-msg__avatar--zeke" aria-hidden="true">
+            <img class="assistant-msg__avatar-still" src="wasnie_logo.png" alt="" />
+          </span>
+          <span class="assistant-msg__author">Zeke</span>
+        }
+
+        <!--
           The assistant's stand-in reply is stored as a language-neutral sentinel, so it is
           TRANSLATED here rather than printed. Real answers (a later piece) print as they came.
         -->
@@ -130,6 +142,10 @@
             path — the shape every injection takes.
           -->
           <span class="assistant-msg__text">{{ message.content }}</span>
+          <!-- The user's turn gets its time too, under the bubble — a conversation reads by both sides' clocks. -->
+          <span class="assistant-msg__meta assistant-msg__meta--user">
+            <span class="assistant-msg__time">{{ messageTime(message.createdAt) }}</span>
+          </span>
         }
 
         <!--
@@ -259,6 +275,11 @@
       data-testid="assistant-streaming"
     >
       @if (store.streamingReply()!.length > 0) {
+        <!-- The same mark and name as a stored reply, so nothing shifts when the stored row replaces this one. -->
+        <span class="assistant-msg__avatar assistant-msg__avatar--zeke" aria-hidden="true">
+          <img class="assistant-msg__avatar-still" src="wasnie_logo.png" alt="" />
+        </span>
+        <span class="assistant-msg__author">Zeke</span>
         <!--
           Markdown is rendered WHILE it streams, from whatever has arrived. A half-written `**`
           simply has not become bold yet and shows as the characters themselves; the next fragment
@@ -371,30 +392,77 @@
     resolved: retry successfully, or ask something new.
   -->
   @if (store.retryable(); as failed) {
-    <div class="assistant-alert" role="alert" data-testid="assistant-failed-alert">
-      <app-icon name="alert-triangle" [size]="16" class="assistant-alert__icon" />
+    @switch (failureKind()) {
+      <!--
+        ★ THE TRIAL IS OUT OF ASSISTANT TOKENS. Not a failure to retry — the server refuses the turn before the
+        model runs, so "Try again" could never succeed. The card says what happened and offers the only way
+        forward: subscribing. The actions are hidden (never disabled) for someone who cannot subscribe (§5.8).
+      -->
+      @case ('trialLimit') {
+        <div class="assistant-alert assistant-alert--limit" role="alert" data-testid="assistant-failed-alert">
+          <span class="assistant-alert__chip" aria-hidden="true"><app-icon name="zap" [size]="16" /></span>
 
-      <div class="assistant-alert__body">
-        <p class="assistant-alert__title">{{ 'ASSISTANT.FAILED_TITLE' | translate }}</p>
-        <!--
-          The specific reason when this session watched it happen; the general one after a reload,
-          because the reason was never stored and claiming a specific one would be inventing it.
-        -->
-        <p class="assistant-alert__text" data-testid="assistant-error">
-          {{ (store.errorKey() ?? 'ASSISTANT.FAILED_DESC') | translate }}
-        </p>
+          <div class="assistant-alert__body">
+            <p class="assistant-alert__title">{{ 'ASSISTANT.TRIAL_LIMIT_TITLE' | translate }}</p>
+            <p class="assistant-alert__text" data-testid="assistant-error">{{ 'ASSISTANT.ERROR_TRIAL_LIMIT_REACHED' | translate }}</p>
 
-        <ws-button
-          variant="secondary"
-          size="sm"
-          [disabled]="store.sending()"
-          (click)="retry()"
-          data-testid="assistant-retry"
-        >
-          {{ 'ASSISTANT.RETRY' | translate }}
-        </ws-button>
-      </div>
-    </div>
+            @if ('Subscription.Manage' | hasPermission) {
+              <div class="assistant-alert__actions">
+                <a class="assistant-alert__upgrade" routerLink="/pricing" data-testid="assistant-upgrade">
+                  <app-icon name="zap" [size]="14" />
+                  {{ 'ASSISTANT.TRIAL_LIMIT_UPGRADE' | translate }}
+                </a>
+                <a class="assistant-alert__link" routerLink="/billing" data-testid="assistant-usage-link">
+                  {{ 'ASSISTANT.TRIAL_LIMIT_USAGE' | translate }}
+                </a>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- No model configured in this environment: nothing to retry, so no button. -->
+      @case ('notConfigured') {
+        <div class="assistant-alert assistant-alert--info" role="alert" data-testid="assistant-failed-alert">
+          <span class="assistant-alert__chip" aria-hidden="true"><app-icon name="info-circle" [size]="16" /></span>
+
+          <div class="assistant-alert__body">
+            <p class="assistant-alert__title">{{ 'ASSISTANT.FAILED_TITLE' | translate }}</p>
+            <p class="assistant-alert__text" data-testid="assistant-error">{{ 'ASSISTANT.ERROR_NOT_CONFIGURED' | translate }}</p>
+          </div>
+        </div>
+      }
+
+      @default {
+        <div class="assistant-alert" role="alert" data-testid="assistant-failed-alert">
+          <span class="assistant-alert__chip" aria-hidden="true"><app-icon name="alert-triangle" [size]="16" /></span>
+
+          <div class="assistant-alert__body">
+            <p class="assistant-alert__title">{{ 'ASSISTANT.FAILED_TITLE' | translate }}</p>
+            <!--
+              The specific reason when this session watched it happen; the general one after a reload,
+              because the reason was never stored and claiming a specific one would be inventing it.
+            -->
+            <p class="assistant-alert__text" data-testid="assistant-error">
+              {{ (store.errorKey() ?? 'ASSISTANT.FAILED_DESC') | translate }}
+            </p>
+
+            <div class="assistant-alert__actions">
+              <ws-button
+                variant="secondary"
+                size="sm"
+                [disabled]="store.sending()"
+                (click)="retry()"
+                data-testid="assistant-retry"
+              >
+                <app-icon name="refresh" [size]="14" />
+                {{ 'ASSISTANT.RETRY' | translate }}
+              </ws-button>
+            </div>
+          </div>
+        </div>
+      }
+    }
   }
 
   @if (store.error()) {

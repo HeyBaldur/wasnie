@@ -204,6 +204,31 @@ public sealed class AssistantChatCompletionTests
 
     // ── 1. The model is asked, and its answer is stored ───────────────────────
 
+    /// <summary>
+    /// ★ REPRODUCES 2026-09-15. A long, legitimate answer streamed in full and was then stored cut to the USER's
+    /// 8,000-character limit; the stored row replaced the streamed bubble and the answer stopped mid-sentence. A reply
+    /// longer than 8,000 characters (and under the degeneration guard's 20,000) must be stored whole.
+    /// </summary>
+    [Fact]
+    public async Task A_long_answer_is_stored_in_full_not_cut_to_the_users_message_limit()
+    {
+        const string paragraph = "Accelerators pay above quota and the rate climbs with attainment across the period. ";
+        var fragments = Enumerable.Repeat(paragraph, 150).ToArray();
+        var expected = string.Concat(fragments).Trim();
+        expected.Length.Should().BeGreaterThan(AssistantMessage.MaxContentLength, "the scenario needs an answer past the old cut");
+
+        var provider = new FakeProvider(fragments);
+        var h = Build(nameof(A_long_answer_is_stored_in_full_not_cut_to_the_users_message_limit), provider);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "Explain accelerators in depth");
+
+        frames.Should().Contain(f => f.Type == AssistantStreamEvent.Done);
+        var reply = await h.Db.AssistantMessages.IgnoreQueryFilters()
+            .SingleAsync(m => m.Role == AssistantMessageRole.Assistant);
+        reply.Content.Should().Be(expected, "what the user watched arrive is what the thread keeps");
+    }
+
     [Fact]
     public async Task The_handler_sends_the_history_plus_the_new_turn_and_persists_the_answer()
     {

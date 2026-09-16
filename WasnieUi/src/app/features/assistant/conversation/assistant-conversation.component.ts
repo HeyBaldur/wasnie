@@ -14,7 +14,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   ClarifyEntity,
@@ -44,6 +44,8 @@ import { STARTER_PROMPTS, StarterPrompt, placeholderRange } from './../panel/sta
 import { ComposerLayout, composerLayoutFor, composerMaxHeight } from './composer-layout';
 import { ComposerMirror } from './composer-mirror';
 import { formatMessageTime, plainTextOf } from './message-meta';
+import { assistantFailureKind } from './assistant-failure';
+import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
 
 /**
  * The conversation itself, with no opinion about where it is shown.
@@ -77,9 +79,11 @@ import { formatMessageTime, plainTextOf } from './message-meta';
     IconComponent,
     AssistantMarkdownPipe,
     AssistantMathDirective,
+    RouterLink,
+    HasPermissionPipe,
   ],
   templateUrl: './assistant-conversation.component.html',
-  styleUrls: ['./assistant-conversation.component.scss', './assistant-welcome.scss', './assistant-thinking.scss'],
+  styleUrls: ['./assistant-conversation.component.scss', './assistant-turns.scss', './assistant-alert.scss', './assistant-welcome.scss', './assistant-thinking.scss'],
   host: {
     '[class.assistant-conversation--wide]': 'wide()',
   },
@@ -735,6 +739,12 @@ ${this.translate.instant('ASSISTANT.CANCELLED_COPY_NOTICE')}`;
    * Cleared only when the box still holds EXACTLY what is being retried: if the user edited it, that
    * text is theirs and Retry is not entitled to it.
    */
+  /**
+   * What the failed turn allows: retry, subscribe, or nothing (see assistant-failure.ts). Derived from the error
+   * code the server sent, so the card and its actions can never disagree with the reason shown.
+   */
+  readonly failureKind = computed(() => assistantFailureKind(this.store.errorKey()));
+
   async retry(): Promise<void> {
     const retried = this.store.unsentText();
     await this.store.retry();

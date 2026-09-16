@@ -614,11 +614,18 @@ public sealed class StreamAssistantReplyHandler(
         AssistantMessageStatus status = AssistantMessageStatus.Complete,
         string? resolvedPayload = null)
     {
-        // Truncated rather than rejected: a model that overruns the column has still written something
-        // the user watched arrive, and refusing to store it would erase what they just read.
-        var stored = content.Length > AssistantMessage.MaxContentLength
-            ? content[..AssistantMessage.MaxContentLength]
-            : content;
+        // ★ NOT TRUNCATED IN SILENCE ANY MORE. Replies used to be cut to the USER's 8,000-character limit here, so a
+        // long answer the user had watched arrive in full was stored — and re-rendered — cut mid-sentence (§B1). The
+        // reply limit now equals the degeneration guard's ceiling, so a reply that got this far fits. If that ever
+        // stops being true, the cut is still made (refusing would erase what the user read) but it is LOGGED.
+        var stored = content;
+        if (content.Length > AssistantMessage.MaxReplyLength)
+        {
+            logger.LogError(
+                "An assistant reply of {Length} characters exceeded the stored limit of {Limit} and was truncated.",
+                content.Length, AssistantMessage.MaxReplyLength);
+            stored = content[..AssistantMessage.MaxReplyLength];
+        }
 
         var message = AssistantMessage.Create(
             guid.NewGuid(), conversationId, tenantContext.TenantId,

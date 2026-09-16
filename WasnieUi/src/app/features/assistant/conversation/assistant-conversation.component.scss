@@ -61,7 +61,11 @@
  * column and centres it, exactly as the chat products this is modelled on do — and the drawer, which
  * never had the problem, is left alone rather than given a cap that would do nothing.
  *
- * `ch` rather than px: the limit is how many CHARACTERS fit on a line, so it should follow the font.
+ * ★ `rem`, NOT `ch` ANY MORE (widened on request, 2026-09-15). It was 76ch — about 590px at 14px — and read as
+ * narrow with large empty margins on a desktop screen. The page's turns now also run at a larger size than the
+ * composer, and `ch` follows each element's OWN font: the stream and the composer would have resolved the same
+ * number to two different widths. `rem` is one length for all three, which is what "two widths that must agree
+ * should be one number" below requires. ~900px keeps lines at a comfortable reading length at 15px.
  *
  * ★★ THE CLARIFY PANEL IS IN THIS LIST BECAUSE IT IS THE COMPOSER'S SIBLING, NOT ITS CHILD. It sits
  *    directly inside the same footer, so `> .assistant-composer` never reached it and it stretched to
@@ -73,33 +77,13 @@
 :host(.assistant-conversation--wide) .assistant-conversation__stream,
 :host(.assistant-conversation--wide) .assistant-conversation__composer > .assistant-clarify,
 :host(.assistant-conversation--wide) .assistant-conversation__composer > .assistant-composer {
-  max-width: 76ch;
+  max-width: 56rem;
   margin-inline: auto;
   width: 100%;
 }
 
-.assistant-msg {
-  max-width: 85%;
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-14);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-
-  &--user {
-    align-self: flex-end;
-    background: var(--color-brand-subtle);
-    color: var(--color-text-primary);
-  }
-
-  &--assistant {
-    align-self: flex-start;
-    background: var(--color-bg-surface-sunken);
-    color: var(--color-text-primary);
-    border: 1px solid var(--color-border-default);
-  }
-}
+// The turns themselves (the user's bubble, Zeke's mark and card) live in assistant-turns.scss — split out like the
+// welcome and the thinking card, so each stylesheet stays inside its size budget.
 
 /**
  * Rendered Markdown from the assistant. Every value is a token, so it reads correctly in all three
@@ -333,59 +317,7 @@
 
 // ── The welcome ── lives in assistant-welcome.scss (same component; split to keep each stylesheet under the budget).
 
-// ── The failed-turn alert ───────────────────────────────────────────────────
-//
-// ★ LOCAL CSS, NOT A NEW SHARED PRIMITIVE. The design system has no `ws-alert`, and adding one is a
-// separate decision (DESIGN_SYSTEM §10.3) rather than something to improvise mid-feature. The
-// documented precedent is followed instead: build it here, in the one component that needs it, from
-// the SAME warning tokens the pay-run and payout screens already use for their banners. If a second
-// feature wants an alert, this is what gets promoted — the tokens are already the house ones, so
-// promotion is a move rather than a rewrite.
-//
-// WARNING, not danger: nothing is broken and nothing was lost — the question is safe and can be
-// answered again. Red would say otherwise.
-.assistant-alert {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-warning-border);
-  border-radius: var(--radius-md);
-  background: var(--color-warning-bg);
-}
-
-.assistant-alert__icon {
-  flex-shrink: 0;
-  color: var(--color-warning);
-  // Optically aligns the glyph with the first line of the title rather than the top of its box.
-  margin-top: 2px;
-}
-
-.assistant-alert__body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.assistant-alert__title {
-  margin: 0;
-  font-size: var(--font-size-13);
-  font-weight: 600;
-  color: var(--color-warning);
-}
-
-.assistant-alert__text {
-  margin: 0;
-  font-size: var(--font-size-13);
-  // Semi-bold: this paragraph is the one thing in the card the user has to read — it says the message
-  // survived. Regular weight let it sit as ordinary body text beside a bolder title that says less.
-  font-weight: 600;
-  // The body reads on the surface's own text colour: warning-on-warning for a whole paragraph is
-  // harder to read than it looks, and the title plus the icon already carry the severity.
-  color: var(--color-text-primary);
-}
+// The failed-turn alert lives in assistant-alert.scss.
 
 .assistant-conversation__error {
   font-size: var(--font-size-13);
@@ -670,9 +602,17 @@
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-1);
+  padding-left: var(--space-1);
+  white-space: normal;
 
   font-size: var(--font-size-11);
   color: var(--color-text-tertiary);
+
+  // Under the user's bubble, right-aligned with it.
+  &--user {
+    padding-left: 0;
+    padding-right: var(--space-1);
+  }
 }
 
 .assistant-msg__time {
@@ -722,50 +662,6 @@
 // is the answer.
 .assistant-msg__copy-failed {
   color: var(--color-danger);
-}
-
-/**
- * ★ THE RETRY BUTTON WEARS THE ALERT'S COLOUR, not the page's neutral grey.
- *
- * It was `secondary`, which reads as "an option someone might take" — and this is the only thing to do
- * with a turn that failed. A grey button inside an amber card also belongs to neither: it looks like a
- * control that happened to land there rather than the alert's own answer.
- *
- * ★ WARNING, STILL NOT DANGER. The card is deliberately warning — nothing is broken and nothing was
- * lost, the question is stored and can be answered again — so the button is filled in the same amber.
- * A red one would say the opposite of what the card says.
- *
- * ★ `--color-text-inverse` IS THE RIGHT PARTNER FOR `--color-warning`, and not by luck: the two flip
- * together across the themes. Light and soft give a dark amber fill with near-white text; dark gives a
- * bright amber fill with near-black text. A hard-coded white would be unreadable in exactly one theme.
- *
- * Scoped to `.assistant-alert`, so the twin button beside a CANCELLED reply keeps its quiet secondary
- * look — that turn is a decision the user made, not a failure, and shouting about it would be wrong.
- */
-.assistant-alert ::ng-deep .ws-btn {
-  background: var(--color-warning);
-  border-color: var(--color-warning);
-  color: var(--color-text-inverse);
-
-  /**
-   * ★ THE HOVER HAS TO RE-DECLARE THE FILL, NOT JUST DIM IT — and forgetting that turned the button
-   * BLACK ON BLACK. `ws-btn--secondary` carries its own `:hover` rule setting
-   * `background: var(--color-bg-surface-sunken)`, so the amber above only ever applied at rest: the
-   * moment the pointer arrived, the primitive's grey won the background while the inverse text colour
-   * stayed. In the dark theme those are `#0a0e15` and `#0e1218` — the label simply disappeared.
-   *
-   * A `filter` could not have saved it either: it dims whatever colour is actually painted, and the
-   * colour actually painted was the primitive's, not this one's.
-   *
-   * The dimming is done by lowering the fill's own opacity against the card behind it, so there is
-   * still no second amber invented here.
-   */
-  &:hover:not(:disabled),
-  &:active:not(:disabled) {
-    background: color-mix(in srgb, var(--color-warning) 88%, transparent);
-    border-color: var(--color-warning);
-    color: var(--color-text-inverse);
-  }
 }
 
 // ── Clarify panel (KAN-58) ───────────────────────────────────────────────────

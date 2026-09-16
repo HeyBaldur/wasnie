@@ -1,3 +1,4 @@
+import { CurrentUserService } from '../../core/auth/current-user.service';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ApplicationRef } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
@@ -1304,6 +1305,53 @@ describe('AssistantPanelComponent — the retry button', () => {
     expect(error.textContent).not.toContain('Groq');
 
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-retry"]')).toBeTruthy();
+  });
+
+  /** The failed turn as the store holds it after a refused SEND: the words kept locally, the server's code. */
+  function renderFailure(errorKey: string): HTMLElement {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    store.setStreamState(store.activeDraftKey(), { errorKey, unsent: 'explain accelerators' });
+    fixture.detectChanges();
+    return fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]');
+  }
+
+  it('★ an exhausted trial offers Upgrade, NOT a retry that could never succeed', () => {
+    spyOn(TestBed.inject(CurrentUserService), 'hasPermission').and.returnValue(true);
+
+    const alert = renderFailure('ASSISTANT.ERROR_TRIAL_LIMIT_REACHED');
+
+    expect(alert).toBeTruthy();
+    expect(alert.classList).toContain('assistant-alert--limit');
+    expect(alert.querySelector('[data-testid="assistant-retry"]'))
+      .withContext('the server refuses the turn before the model runs — retrying changes nothing').toBeNull();
+    expect(alert.querySelector('[data-testid="assistant-upgrade"]')?.getAttribute('href')).toBe('/pricing');
+    expect(alert.querySelector('[data-testid="assistant-usage-link"]')?.getAttribute('href')).toBe('/billing');
+    expect(alert.textContent).toContain('ASSISTANT.TRIAL_LIMIT_TITLE');
+  });
+
+  it('hides Upgrade — never disables it — for someone who cannot subscribe (§5.8)', () => {
+    spyOn(TestBed.inject(CurrentUserService), 'hasPermission').and.returnValue(false);
+
+    const alert = renderFailure('ASSISTANT.ERROR_TRIAL_LIMIT_REACHED');
+
+    expect(alert.querySelector('[data-testid="assistant-upgrade"]')).toBeNull();
+    expect(alert.querySelector('[data-testid="assistant-retry"]')).toBeNull();
+    expect(alert.querySelector('[data-testid="assistant-error"]')).toBeTruthy();
+  });
+
+  it('an unconfigured assistant shows why, with no retry', () => {
+    const alert = renderFailure('ASSISTANT.ERROR_NOT_CONFIGURED');
+
+    expect(alert.classList).toContain('assistant-alert--info');
+    expect(alert.querySelector('[data-testid="assistant-retry"]')).toBeNull();
+  });
+
+  it('a transient failure keeps its retry', () => {
+    const alert = renderFailure('ASSISTANT.ERROR_UNAVAILABLE');
+
+    expect(alert.querySelector('[data-testid="assistant-retry"]')).toBeTruthy();
+    expect(alert.querySelector('[data-testid="assistant-upgrade"]')).toBeNull();
   });
 
   it('hides the retry button when there is nothing to retry', () => {
