@@ -1,4 +1,4 @@
-namespace Wasnie.Application.Common.Interfaces;
+﻿namespace Wasnie.Application.Common.Interfaces;
 
 /// <summary>
 /// Read-only view of what Stripe holds for a customer: the card on file and the recent invoices. Nothing here writes
@@ -48,4 +48,15 @@ public sealed record StripeInvoiceSummary(
     string Currency,
     string? Status,
     string? HostedInvoiceUrl,
-    string? InvoicePdfUrl);
+    string? InvoicePdfUrl,
+    /// <summary>
+    /// When Stripe will try to charge this invoice again. Only an unpaid invoice has one.
+    ///
+    /// ★ THIS IS THE ONLY REAL DATE BEHIND "your payment is overdue". The banner used to promise that access
+    /// ends "once the grace period ends" — a period that exists NOWHERE in this system: PastDue keeps access
+    /// until Stripe gives up retrying and cancels the subscription, and no code here defines or measures a
+    /// window. Saying when the next attempt lands is a fact; the grace period was not (§C3).
+    /// </summary>
+    DateTime? NextPaymentAttempt,
+    /// <summary>How many times Stripe has tried to charge this invoice. 0 until the first attempt.</summary>
+    long AttemptCount);

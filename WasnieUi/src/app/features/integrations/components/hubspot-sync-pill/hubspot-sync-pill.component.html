@@ -1,0 +1,34 @@
+@if (connected()) {
+  <!--
+    ★ AN ANCHOR, NOT A DECORATIVE SPAN. The trial pill beside it is `cursor: default` because a trial has
+    nowhere to go; this one does, so it is a real link — middle-click, "open in new tab" and the keyboard
+    all work, and the browser shows the destination in the status bar on hover.
+
+    ★ THE TOOLTIP CARRIES THE WHOLE SENTENCE the card used to print. The pill states the fact ("synced X
+    ago"); the hover explains the rule behind it ("every hour"), which a reader needs once, not on every
+    screen forever.
+  -->
+  <a
+    class="hs-sync-pill"
+    routerLink="/integrations"
+    [wsTooltip]="
+      status()?.lastSyncedAt
+        ? ('TRANSACTIONS.HS_SYNC_BANNER' | translate: { time: (status()!.lastSyncedAt | relativeTime) })
+        : ('TRANSACTIONS.HS_SYNC_BANNER_NEVER' | translate)
+    "
+    tooltipPlacement="bottom"
+  >
+    <!-- Decorative: the label right beside it already says "HubSpot", so an alt here would make a screen
+         reader say the name twice. -->
+    <img class="hs-sync-pill__mark" src="/hubspot-mark.png" alt="" aria-hidden="true" width="14" height="14" />
+    <span class="hs-sync-pill__label">{{ 'TRANSACTIONS.HS_SYNC_PILL_LABEL' | translate }}</span>
+    <span class="hs-sync-pill__sep" aria-hidden="true"></span>
+    <span class="hs-sync-pill__msg">
+      @if (status()?.lastSyncedAt) {
+        {{ 'TRANSACTIONS.HS_SYNC_PILL' | translate: { time: (status()!.lastSyncedAt | relativeTime) } }}
+      } @else {
+        {{ 'TRANSACTIONS.HS_SYNC_PILL_NEVER' | translate }}
+      }
+    </span>
+  </a>
+}

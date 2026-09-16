@@ -1198,7 +1198,6 @@
     },
     "HS_SYNC_BANNER": "Tus deals de HubSpot se sincronizan automáticamente cada hora. Última sincronización {{time}}.",
     "HS_SYNC_BANNER_NEVER": "Tus deals de HubSpot se sincronizan automáticamente cada hora. Aún sin sincronizar.",
-    "HS_SYNC_BANNER_LINK": "Ir a la página de integración →",
     "ACTION_ASSIGN": "Asignar",
     "ACTION_REASSIGN": "Reasignar",
     "REASSIGN_PAID_TOOLTIP": "No se puede reasignar una transacción pagada. Corríjala con un ajuste de balance en el ledger del payee.",
@@ -1309,7 +1308,10 @@
     },
     "COL_INGESTED": "Creado",
     "COUNT_FILTERED": "Mostrando {{showing}} de {{filtered}} ({{total}} total)",
-    "COUNT_TOTAL": "{{total}} transacciones"
+    "COUNT_TOTAL": "{{total}} transacciones",
+    "HS_SYNC_PILL_LABEL": "HubSpot",
+    "HS_SYNC_PILL": "Sincronizado {{time}}",
+    "HS_SYNC_PILL_NEVER": "Aún sin sincronizar"
   },
   "CREDITS": {
     "TITLE": "Créditos",
@@ -2075,7 +2077,7 @@
     "BLOCKED_ACTION": "Puedes mantener tu plan actual o contactarnos mediante nuestro formulario de contacto si necesitas ayuda.",
     "BILLING_PORTAL_BTN": "Gestionar facturación y facturas",
     "BILLING_PORTAL_ERROR": "No se pudo abrir el portal de facturación. Inténtalo de nuevo.",
-    "PAST_DUE_BANNER_MSG": "Tu pago está vencido. El acceso se bloqueará cuando finalice el período de gracia.",
+    "PAST_DUE_BANNER_MSG": "Actualice su método de pago para que su espacio de trabajo siga funcionando.",
     "PAST_DUE_BANNER_CTA": "Actualizar método de pago",
     "REACTIVATION_TITLE": "Tu suscripción ha sido cancelada",
     "REACTIVATION_DESC": "Tu cuenta está inactiva. No tienes acceso a las funciones de Incentra.",
@@ -2110,7 +2112,9 @@
     "CONFIRM_DOWNGRADE_WARNING": "Perderás las funciones y límites de {{currentPlan}} de inmediato, aunque tu periodo actual esté pagado hasta {{periodEnd}}.",
     "CONFIRM_DOWNGRADE_NEXT": "Tu próxima factura del {{nextDate}} será al precio de {{plan}} — €{{price}}/mes.",
     "CONFIRM_DOWNGRADE_BTN": "Confirmar cambio a {{plan}}",
-    "STATUS_UNKNOWN": "Desconocido"
+    "STATUS_UNKNOWN": "Desconocido",
+    "PAST_DUE_BANNER_TITLE": "Su último pago no se pudo procesar",
+    "PAST_DUE_BANNER_RETRY": "Stripe volverá a intentar el cobro el {{date}}. Hasta entonces su espacio de trabajo sigue funcionando."
   },
   "PROFILE": {
     "TITLE": "Tu Perfil",
@@ -2982,17 +2986,20 @@
     "ENDED_TITLE": "Tu suscripción terminó",
     "ENDED_DESC": "Tus datos se conservan. Suscríbete de nuevo para seguir usando Incentra.",
     "ADD_PAYMENT_METHOD": "Agregar método de pago",
-    "MANAGE_SUBSCRIPTION": "Gestionar suscripción"
+    "MANAGE_SUBSCRIPTION": "Gestionar suscripción",
+    "INVOICE_RETRIED": "Pago rechazado — {{count}} intentos",
+    "INVOICE_RETRIED_NEXT": "Pago rechazado — {{count}} intentos, el próximo el {{date}}"
   },
   "PAYWALL": {
     "PAGE_TITLE": "Suscripción necesaria",
     "TITLE_TRIAL_ENDED": "Tu prueba gratuita terminó",
     "TITLE_SUBSCRIPTION_ENDED": "Tu suscripción terminó",
     "TITLE_NO_SUBSCRIPTION": "Necesitas una suscripción",
-    "DESC": "Para seguir usando Incentra, suscríbete al plan de abajo. El acceso vuelve en cuanto se confirma el pago.",
-    "DATA_KEPT": "Tus datos están a salvo: no se ha borrado nada.",
+    "DESC": "Para seguir usando Incentra, elija el plan de abajo.",
+    "DATA_KEPT": "Sus datos están intactos — no se ha borrado nada",
     "ASK_ADMIN": "Solo un administrador de tu empresa puede suscribirse. Contacta con él.",
-    "LOAD_ERROR": "No se pudieron cargar los datos de la suscripción."
+    "LOAD_ERROR": "No se pudieron cargar los datos de la suscripción.",
+    "ACCESS_RETURNS": "El acceso vuelve en cuanto se confirme el pago"
   },
   "TRIAL_BANNER": {
     "DAYS": "Quedan {{days}} días",

@@ -100,6 +100,16 @@ public sealed class StripeBoostService(
             },
             // ★ BACK WHERE THEY STARTED. Someone whose chat stopped mid-question bought tokens to finish that
             // question; landing them in billing settings makes them navigate back to it themselves.
+            // ★★ ASK STRIPE FOR AN INVOICE. A one-off checkout produces a PaymentIntent and a charge but NO
+            // invoice unless this is switched on — so the money left the customer's card and the billing
+            // history, which lists invoices, showed nothing at all. Confirmed against a real purchase:
+            // `invoice: null`, one charge of €20 with no document behind it.
+            //
+            // ★ AND IT IS AN INVOICE, NOT A ROW WE INVENT. Turning this on gives the customer the same
+            // artefact the subscription already produces — hosted page, PDF, sequential number — so the
+            // existing reader and the existing table show it with nothing new to build, and a finance team
+            // gets a document they can actually file.
+            InvoiceCreation = new SessionInvoiceCreationOptions { Enabled = true },
             SuccessUrl = $"{stripeOptions.Value.FrontendBaseUrl}{ReturnPath(returnTo)}?tokens=success",
             CancelUrl = $"{stripeOptions.Value.FrontendBaseUrl}{ReturnPath(returnTo)}",
         };

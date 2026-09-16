@@ -1,4 +1,4 @@
-namespace Wasnie.Application.Features.Subscription.DTOs;
+﻿namespace Wasnie.Application.Features.Subscription.DTOs;
 
 /// <summary>
 /// What "Manage billing" shows about the Stripe customer: the payment method and the invoice history.
@@ -38,4 +38,8 @@ public sealed record BillingInvoiceDto(
     string Currency,
     string? Status,
     string? HostedInvoiceUrl,
-    string? InvoicePdfUrl);
+    string? InvoicePdfUrl,
+    /// <summary>When Stripe retries an unpaid invoice. Null for anything already settled.</summary>
+    DateTimeOffset? NextPaymentAttempt,
+    /// <summary>Failed charge attempts so far. Surfaced so an unpaid invoice can say it has been retried.</summary>
+    long AttemptCount);

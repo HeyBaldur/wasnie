@@ -1,0 +1,75 @@
+// ── HubSpot's sync, as a topbar status ─────────────────────────────────────────────────────────────────────────────
+//
+// ★ IT DELIBERATELY WEARS THE TRIAL PILL'S GEOMETRY — 30px tall, fully rounded, sunken surface, hairline border, a
+// bold name and a secondary fact split by a 12px rule. The two sit side by side in the same row of controls, and two
+// statuses of the same kind that look different read as two unrelated things. If one of them changes shape, so does
+// the other (see `trial-banner.component.scss`).
+
+:host {
+  display: inline-flex;
+}
+
+.hs-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
+  font-size: var(--font-size-12);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+
+  // ★ THE HOVER IS NOT DECORATION — it is the only thing that says this pill goes somewhere. The trial pill is
+  // `cursor: default` because it leads nowhere; the difference between them has to be visible before the click.
+  &:hover {
+    border-color: var(--color-border-strong);
+    background: var(--color-bg-surface-raised);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--color-bg-surface-raised),
+      0 0 0 4px var(--color-focus-ring);
+  }
+}
+
+// The brand sprocket alone, already orange and already transparent: it reads on the dark topbar and on the light
+// one without a single colour declared here. The full wordmark is navy on a 16:9 canvas that is half empty — at
+// this size it would have been an unreadable smudge inside a box of padding.
+.hs-sync-pill__mark {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
+.hs-sync-pill__label {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.hs-sync-pill__sep {
+  width: 1px;
+  height: 12px;
+  background: var(--color-border-strong);
+}
+
+.hs-sync-pill__msg {
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+// A narrow topbar keeps the NAME and drops the time: which system this is stays essential, how long ago it ran is
+// the detail, and the detail is already in the tooltip. (The trial pill drops the opposite half for the same
+// reason — there, the clock icon carries the identity and the count is the point.)
+@media (max-width: 1100px) {
+  .hs-sync-pill__sep,
+  .hs-sync-pill__msg {
+    display: none;
+  }
+}

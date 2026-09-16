@@ -104,6 +104,10 @@ export interface BillingInvoice {
   status: string | null;
   hostedInvoiceUrl: string | null;
   invoicePdfUrl: string | null;
+  /** When Stripe will retry an unpaid invoice. Null for anything already settled. */
+  nextPaymentAttempt: string | null;
+  /** Failed charge attempts so far. 0 until Stripe has tried once. */
+  attemptCount: number;
 }
 
 /**

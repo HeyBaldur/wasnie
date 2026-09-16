@@ -15,6 +15,17 @@
     <!-- KAN-77: the trial's days left, as a status beside the assistant. Renders nothing outside a trial. -->
     <app-trial-banner />
 
+    <!--
+      HubSpot's hourly sync, in the same pill shape. It renders nothing unless HubSpot is actually Connected
+      for this tenant, so most topbars never show it.
+
+      ★ THE PERMISSION GATE CAME WITH IT FROM THE SIDEBAR (§5.8: hidden, not disabled). Somebody who cannot
+      manage integrations has no use for a link to the Integrations page and would only find a locked door.
+    -->
+    @if ('Integrations.Manage' | hasPermission) {
+      <app-hubspot-sync-pill />
+    }
+
     <!-- Hidden entirely when the user has no assistant entitlement (hide, don't disable). -->
     <app-assistant-trigger />
 
@@ -28,26 +39,34 @@
       stays quiet next to the plan badge and the assistant.
     -->
     <!--
-      ★ A TOPBAR BUTTON, NOT `ws-button`, AND THE REASON IS THE SHAPE. It has to be the round 32px control
-      the avatar beside it already is; `ws-button` carries the design system's own radius and padding, and
-      forcing a circle onto it would mean reaching into a shared primitive with ::ng-deep to override
-      exactly the rules that make it consistent everywhere else. The topbar already styles its own
-      controls this way — the avatar and the plan badges are plain buttons — so this follows the file's
-      own precedent instead of bending a component from outside.
+      ★ A TOPBAR BUTTON, NOT `ws-button`, AND THE REASON IS THE SHAPE. It has to be a round 32px control;
+      `ws-button` carries the design system's own radius and padding, and forcing a circle onto it would
+      mean reaching into a shared primitive with ::ng-deep to override exactly the rules that make it
+      consistent everywhere else. The topbar already styles its own controls this way — the avatar and the
+      plan badges are plain buttons — so this follows the file's own precedent instead of bending a
+      component from outside.
 
-      Keeps the secondary treatment asked for: bordered and neutral, not filled.
+      ★★ THE GLYPH IS A DOCUMENT, NOT AN ‘i’ IN A CIRCLE. `info-circle` put a circle inside the button's own
+      circle — two concentric rings 3px apart, which is the kind of thing that reads as sloppy without
+      anyone being able to say why. It also said the wrong thing: this opens the user MANUAL, a document,
+      not a tooltip's worth of information.
+
+      ★ THE TOOLTIP IS `wsTooltip`, NOT `title`. Every other control in this row explains itself through
+      the design system's tooltip; the native one arrives late, in the OS's own styling, and looked like a
+      different product. The sr-only span below stays — that is the accessible name, and it is a separate
+      job from the sighted hint.
     -->
     <button
       type="button"
       class="topbar__manual-btn"
       routerLink="/manual"
-      [title]="'NAV.MANUAL' | translate"
+      [wsTooltip]="'NAV.MANUAL' | translate"
+      tooltipPlacement="bottom"
     >
-      <app-icon name="info-circle" [size]="18" />
+      <app-icon name="document-text" [size]="17" />
       <!--
         The accessible name. An icon-only button has none otherwise, and `aria-label` would have to sit on
-        this element anyway — projected text is what a screen reader reads out, and `title` covers the
-        sighted tooltip.
+        this element anyway — projected text is what a screen reader reads out.
       -->
       <span class="topbar__sr-only">{{ 'NAV.MANUAL' | translate }}</span>
     </button>

@@ -70,8 +70,17 @@ public sealed class GetAccountAccessHandler(
 
         // ★★ A PAYMENT IN STRIPE MUST NEVER LEAVE THE CUSTOMER LOCKED (KAN-77). The paywall reads this; before telling a
         // locked account it is locked, ask Stripe whether a live subscription exists that the database missed (a lost
-        // webhook). Only for Locked — an open account costs no Stripe call.
-        if (access.State == AccountAccessState.Locked && await reconciler.ReconcileAsync(cancellationToken))
+        // webhook).
+        //
+        // ★★ AND THE MIRROR CASE: PastDue. Found in the wild — a tenant sat PastDue since July with FULL ACCESS on a
+        // subscription Stripe no longer had. The rule used to be "only for Locked, an open account costs no Stripe
+        // call", which is right for a healthy account and exactly wrong for this one: PastDue keeps access open, so it
+        // was never re-checked and could stay that way forever. It is a rare state, so the extra call is cheap, and it
+        // is the one open state where the stored row is already known to be in trouble.
+        var needsReconcile = access.State == AccountAccessState.Locked
+            || await IsPastDueAsync(cancellationToken);
+
+        if (needsReconcile && await reconciler.ReconcileAsync(cancellationToken))
             access = await accessReader.GetAsync(tenantContext.TenantId, cancellationToken) ?? access;
 
         int? trialLength = access.State == AccountAccessState.Trial ? billingOptions.Value.TrialDays : null;
@@ -107,4 +116,15 @@ public sealed class GetAccountAccessHandler(
             balance?.BoostNextExpiry,
             balance?.BoostExpired ?? 0));
     }
+
+    /// <summary>
+    /// Whether the stored subscription is behind on payment. Read separately because <see cref="AccountAccess"/>
+    /// deliberately folds PastDue into Active — for access it IS active; for reconciliation it is the state worth
+    /// re-checking.
+    /// </summary>
+    private async Task<bool> IsPastDueAsync(CancellationToken cancellationToken) =>
+        await db.UserSubscriptions
+            .AnyAsync(s => s.TenantId == tenantContext.TenantId
+                && s.StripeSubscriptionId != null
+                && s.Status == SubscriptionStatus.PastDue, cancellationToken);
 }

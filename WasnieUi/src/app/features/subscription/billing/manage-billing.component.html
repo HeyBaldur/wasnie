@@ -129,9 +129,19 @@
                       }
                     }
                   }
-                  <!-- KAN-80: a paying account's assistant tokens for THIS billing period. Nothing for an ended one. -->
-                  <app-token-usage-meter [access]="access()" variant="compact" />
                 </div>
+              </div>
+
+              <!--
+                ★ THE CONSUMPTION GETS ITS OWN BAND, not a line wedged under the renewal dates. Price, dates and usage
+                are three different questions, and stacked in one corner they read as one paragraph of small print.
+                Full variant here: the band is its own subject, so the figure does not need the "Zeke:" prefix the
+                inline version carries to say what it is about.
+              -->
+              <div class="billing-plan__usage">
+                <!-- The band needs to say WHAT it is counting: the figure alone reads as "tokens" of nothing. -->
+                <span class="billing-plan__usage-label">{{ 'ASSISTANT_USAGE.TITLE' | translate }}</span>
+                <app-token-usage-meter [access]="access()" variant="full" [caption]="false" />
               </div>
             } @else {
               <p class="billing-muted">{{ 'BILLING.NO_SUBSCRIPTION' | translate }}</p>
@@ -356,6 +366,17 @@
                             <span class="billing-history__number">{{ inv.number ?? ('BILLING.INVOICE_NO_NUMBER' | translate) }}</span>
                             @if (inv.description) {
                               <span class="billing-history__desc">{{ inv.description }}</span>
+                            }
+                            <!--
+                              ★ AN UNPAID INVOICE SAYS IT HAS BEEN RETRIED. Stripe can try a card nine times over two
+                              weeks and, until now, none of that reached the customer: the row just sat there marked
+                              "open" while the charge kept failing. The count is a fact off the invoice itself.
+                            -->
+                            @if (invoiceRetryNote(inv); as note) {
+                              <span class="billing-history__retry">
+                                <app-icon name="alert-circle" [size]="12" />
+                                {{ note.key | translate: note.params }}
+                              </span>
                             }
                           </div>
                         </div>

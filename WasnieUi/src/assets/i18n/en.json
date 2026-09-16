@@ -1387,7 +1387,6 @@
     },
     "HS_SYNC_BANNER": "Your HubSpot deals sync automatically every hour. Last synced {{time}}.",
     "HS_SYNC_BANNER_NEVER": "Your HubSpot deals sync automatically every hour. Not synced yet.",
-    "HS_SYNC_BANNER_LINK": "Go to integration page →",
     "ACTION_ASSIGN": "Assign",
     "ACTION_REASSIGN": "Reassign",
     "REASSIGN_PAID_TOOLTIP": "Paid transactions cannot be reassigned. Correct it with a balance adjustment on the payee's ledger instead.",
@@ -1498,7 +1497,10 @@
     },
     "COL_INGESTED": "Created",
     "COUNT_FILTERED": "Showing {{showing}} of {{filtered}} ({{total}} total)",
-    "COUNT_TOTAL": "{{total}} transactions"
+    "COUNT_TOTAL": "{{total}} transactions",
+    "HS_SYNC_PILL_LABEL": "HubSpot",
+    "HS_SYNC_PILL": "Synced {{time}}",
+    "HS_SYNC_PILL_NEVER": "Not synced yet"
   },
   "CREDITS": {
     "TITLE": "Credits",
@@ -2098,7 +2100,7 @@
     "BLOCKED_ACTION": "You can keep your current plan or contact us via our contact form if you need help.",
     "BILLING_PORTAL_BTN": "Manage billing & invoices",
     "BILLING_PORTAL_ERROR": "Could not open billing portal. Please try again.",
-    "PAST_DUE_BANNER_MSG": "Your payment is overdue. Access will be blocked once the grace period ends.",
+    "PAST_DUE_BANNER_MSG": "Update your payment method to keep your workspace running.",
     "PAST_DUE_BANNER_CTA": "Update payment method",
     "REACTIVATION_TITLE": "Your subscription has been canceled",
     "REACTIVATION_DESC": "Your account is inactive. You don't have access to Incentra features.",
@@ -2133,7 +2135,9 @@
     "CONFIRM_DOWNGRADE_WARNING": "You will lose {{currentPlan}} features and limits immediately, even though your current period is paid until {{periodEnd}}.",
     "CONFIRM_DOWNGRADE_NEXT": "Your next invoice on {{nextDate}} will be charged at the {{plan}} rate — €{{price}}/month.",
     "CONFIRM_DOWNGRADE_BTN": "Confirm switch to {{plan}}",
-    "STATUS_UNKNOWN": "Unknown"
+    "STATUS_UNKNOWN": "Unknown",
+    "PAST_DUE_BANNER_TITLE": "Your last payment did not go through",
+    "PAST_DUE_BANNER_RETRY": "Stripe will try your card again on {{date}}. Your workspace keeps working until then."
   },
   "PROFILE": {
     "TITLE": "Your Profile",
@@ -3005,17 +3009,20 @@
     "ENDED_TITLE": "Your subscription has ended",
     "ENDED_DESC": "Your data is kept. Subscribe again to keep using Incentra.",
     "ADD_PAYMENT_METHOD": "Add payment method",
-    "MANAGE_SUBSCRIPTION": "Manage subscription"
+    "MANAGE_SUBSCRIPTION": "Manage subscription",
+    "INVOICE_RETRIED": "Payment failed — {{count}} attempts",
+    "INVOICE_RETRIED_NEXT": "Payment failed — {{count}} attempts, next on {{date}}"
   },
   "PAYWALL": {
     "PAGE_TITLE": "Subscription required",
     "TITLE_TRIAL_ENDED": "Your free trial has ended",
     "TITLE_SUBSCRIPTION_ENDED": "Your subscription has ended",
     "TITLE_NO_SUBSCRIPTION": "A subscription is required",
-    "DESC": "To keep using Incentra, subscribe to the plan below. Access returns as soon as the payment is confirmed.",
-    "DATA_KEPT": "Your data is safe: nothing has been deleted.",
+    "DESC": "To keep using Incentra, choose the plan below.",
+    "DATA_KEPT": "Your data is safe — nothing has been deleted",
     "ASK_ADMIN": "Only an administrator of your company can subscribe. Please contact them.",
-    "LOAD_ERROR": "The subscription details could not be loaded."
+    "LOAD_ERROR": "The subscription details could not be loaded.",
+    "ACCESS_RETURNS": "Access returns as soon as your payment is confirmed"
   },
   "TRIAL_BANNER": {
     "DAYS": "{{days}} days left",

@@ -1198,7 +1198,6 @@
     },
     "HS_SYNC_BANNER": "Twoje transakcje HubSpot synchronizują się automatycznie co godzinę. Ostatnia synchronizacja {{time}}.",
     "HS_SYNC_BANNER_NEVER": "Twoje transakcje HubSpot synchronizują się automatycznie co godzinę. Jeszcze nie zsynchronizowano.",
-    "HS_SYNC_BANNER_LINK": "Przejdź do strony integracji →",
     "ACTION_ASSIGN": "Przypisz",
     "ACTION_REASSIGN": "Przepisz",
     "REASSIGN_PAID_TOOLTIP": "Nie można przepisać opłaconej transakcji. Popraw ją korektą salda w księdze odbiorcy.",
@@ -1309,7 +1308,10 @@
     },
     "COL_INGESTED": "Utworzono",
     "COUNT_FILTERED": "Pokazuje {{showing}} z {{filtered}} (łącznie {{total}})",
-    "COUNT_TOTAL": "{{total}} transakcji"
+    "COUNT_TOTAL": "{{total}} transakcji",
+    "HS_SYNC_PILL_LABEL": "HubSpot",
+    "HS_SYNC_PILL": "Zsynchronizowano {{time}}",
+    "HS_SYNC_PILL_NEVER": "Jeszcze nie zsynchronizowano"
   },
   "CREDITS": {
     "TITLE": "Kredyty",
@@ -2075,7 +2077,7 @@
     "BLOCKED_ACTION": "Możesz pozostać na obecnym planie lub skontaktować się z nami przez formularz kontaktowy, jeśli potrzebujesz pomocy.",
     "BILLING_PORTAL_BTN": "Zarządzaj rozliczeniami i fakturami",
     "BILLING_PORTAL_ERROR": "Nie można otworzyć portalu rozliczeniowego. Spróbuj ponownie.",
-    "PAST_DUE_BANNER_MSG": "Twoja płatność jest przeterminowana. Dostęp zostanie zablokowany po zakończeniu okresu karencji.",
+    "PAST_DUE_BANNER_MSG": "Zaktualizuj metodę płatności, aby przestrzeń robocza działała dalej.",
     "PAST_DUE_BANNER_CTA": "Zaktualizuj metodę płatności",
     "REACTIVATION_TITLE": "Twoja subskrypcja została anulowana",
     "REACTIVATION_DESC": "Twoje konto jest nieaktywne. Nie masz dostępu do funkcji Incentry.",
@@ -2110,7 +2112,9 @@
     "CONFIRM_DOWNGRADE_WARNING": "Stracisz funkcje i limity planu {{currentPlan}} natychmiast, nawet jeśli bieżący okres jest opłacony do {{periodEnd}}.",
     "CONFIRM_DOWNGRADE_NEXT": "Twoja następna faktura w dniu {{nextDate}} zostanie wystawiona po stawce planu {{plan}} — €{{price}}/miesiąc.",
     "CONFIRM_DOWNGRADE_BTN": "Potwierdź zmianę na {{plan}}",
-    "STATUS_UNKNOWN": "Nieznany"
+    "STATUS_UNKNOWN": "Nieznany",
+    "PAST_DUE_BANNER_TITLE": "Ostatnia płatność nie powiodła się",
+    "PAST_DUE_BANNER_RETRY": "Stripe ponowi próbę obciążenia karty {{date}}. Do tego czasu przestrzeń robocza działa normalnie."
   },
   "PROFILE": {
     "TITLE": "Twój Profil",
@@ -2982,17 +2986,20 @@
     "ENDED_TITLE": "Twoja subskrypcja się zakończyła",
     "ENDED_DESC": "Twoje dane są zachowane. Zasubskrybuj ponownie, aby dalej korzystać z Incentra.",
     "ADD_PAYMENT_METHOD": "Dodaj metodę płatności",
-    "MANAGE_SUBSCRIPTION": "Zarządzaj subskrypcją"
+    "MANAGE_SUBSCRIPTION": "Zarządzaj subskrypcją",
+    "INVOICE_RETRIED": "Płatność odrzucona — prób: {{count}}",
+    "INVOICE_RETRIED_NEXT": "Płatność odrzucona — prób: {{count}}, następna {{date}}"
   },
   "PAYWALL": {
     "PAGE_TITLE": "Wymagana subskrypcja",
     "TITLE_TRIAL_ENDED": "Twój bezpłatny okres próbny dobiegł końca",
     "TITLE_SUBSCRIPTION_ENDED": "Twoja subskrypcja wygasła",
     "TITLE_NO_SUBSCRIPTION": "Wymagana jest subskrypcja",
-    "DESC": "Aby dalej korzystać z Incentra, wykup poniższy plan. Dostęp wróci, gdy tylko płatność zostanie potwierdzona.",
-    "DATA_KEPT": "Twoje dane są bezpieczne: nic nie zostało usunięte.",
+    "DESC": "Aby dalej korzystać z Incentra, wybierz plan poniżej.",
+    "DATA_KEPT": "Twoje dane są bezpieczne — nic nie zostało usunięte",
     "ASK_ADMIN": "Subskrypcję może wykupić tylko administrator Twojej firmy. Skontaktuj się z nim.",
-    "LOAD_ERROR": "Nie udało się wczytać danych subskrypcji."
+    "LOAD_ERROR": "Nie udało się wczytać danych subskrypcji.",
+    "ACCESS_RETURNS": "Dostęp wraca, gdy tylko płatność zostanie potwierdzona"
   },
   "TRIAL_BANNER": {
     "DAYS": "Pozostało dni: {{days}}",

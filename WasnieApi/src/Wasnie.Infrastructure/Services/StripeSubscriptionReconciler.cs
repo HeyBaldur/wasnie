@@ -64,11 +64,41 @@ public sealed class StripeSubscriptionReconciler(
         }
         catch (StripeException ex) when (ex.StripeError?.Code == "resource_missing")
         {
-            // Not something to guess about: a row pointing at a subscription Stripe never had is reported, not cancelled.
+            // ★★ THE ROW POINTS AT A SUBSCRIPTION STRIPE DOES NOT HAVE. Found in the wild: a tenant sat in PastDue
+            // since July with full access, on a subscription that had ceased to exist — the webhook was missed and
+            // nothing ever asked Stripe again.
+            //
+            // ★ CANCELLED ONLY ON CERTAINTY, NEVER ON A 404 ALONE. `resource_missing` also fires when the key points
+            // at a different Stripe account or environment, and treating that as "no subscription" would lock out
+            // EVERY paying customer at once. So the row is only closed when Stripe answers a SECOND, independent
+            // question — does this customer hold any live subscription? — and says no. Anything else (no customer on
+            // file, Stripe unreachable, the call failing) leaves the row untouched and logs, exactly as before:
+            // a doubt must never cost a paying customer their access.
+            if (subscription is null || subscription.Status == SubscriptionStatus.Canceled
+                || !await ConfirmCustomerHasNoLiveSubscriptionAsync(service, subscription.StripeCustomerId, cancellationToken))
+            {
+                logger.LogWarning(
+                    "Subscription sync: Stripe has no subscription {SubscriptionId} for tenant {TenantId} and it could "
+                    + "not be confirmed that the customer holds none; row left untouched",
+                    targetId, tenantId);
+                return false;
+            }
+
+            var missingFrom = subscription.Status;
+            subscription.Cancel(clock.UtcNowOffset, null);
+
             logger.LogWarning(
-                "Subscription sync: Stripe has no subscription {SubscriptionId} for tenant {TenantId}; row left untouched",
-                targetId, tenantId);
-            return false;
+                "Subscription sync: tenant {TenantId} was {Status} on subscription {SubscriptionId}, which Stripe does "
+                + "not have, and the customer holds no live subscription; cancelled",
+                tenantId, missingFrom, targetId);
+
+            await auditService.LogAsync(
+                Audit(tenantId, AuditActions.SubscriptionCanceled, targetId,
+                    $"Subscription canceled: Stripe has no {targetId} and the customer holds none (synced)"),
+                cancellationToken);
+
+            await db.SaveChangesAsync(cancellationToken);
+            return true;
         }
 
         var now = clock.UtcNowOffset;
@@ -149,6 +179,33 @@ public sealed class StripeSubscriptionReconciler(
     /// The most recent subscription that gives access, among the customer's subscriptions and those tagged with the
     /// tenant at checkout. Search is best-effort (Stripe indexes it with a delay); the customer list is exact.
     /// </summary>
+    /// <summary>
+    /// Whether Stripe CONFIRMS this customer holds no live subscription.
+    ///
+    /// ★ FALSE MEANS "COULD NOT CONFIRM", NOT "HAS ONE". No customer on file, a failed call, a network error —
+    /// all return false, because the only safe default when closing somebody's access is to do nothing.
+    /// </summary>
+    private async Task<bool> ConfirmCustomerHasNoLiveSubscriptionAsync(
+        SubscriptionService service, string? customerId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(customerId))
+            return false;
+
+        try
+        {
+            var all = await service.ListAsync(
+                new SubscriptionListOptions { Customer = customerId, Status = "all", Limit = 20 },
+                cancellationToken: cancellationToken);
+
+            return all.Data.All(s => StripeSubscriptionStatus.IsEnded(s.Status));
+        }
+        catch (StripeException ex)
+        {
+            logger.LogWarning(ex, "Subscription sync: could not list subscriptions for customer {CustomerId}", customerId);
+            return false;
+        }
+    }
+
     private async Task<string?> FindLiveSubscriptionIdAsync(
         SubscriptionService service, Guid tenantId, string? customerId, CancellationToken cancellationToken)
     {

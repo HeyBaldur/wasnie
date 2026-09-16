@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using Stripe;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
@@ -51,7 +51,9 @@ public sealed class StripeBillingDetailsReader(IOptions<StripeOptions> options) 
                 i.Currency,
                 i.Status,
                 i.HostedInvoiceUrl,
-                i.InvoicePdf))
+                i.InvoicePdf,
+                i.NextPaymentAttempt,
+                i.AttemptCount))
             .ToList();
 
         return new StripeBillingDetails(Snapshot(subscription), Summarise(paymentMethod), summaries);

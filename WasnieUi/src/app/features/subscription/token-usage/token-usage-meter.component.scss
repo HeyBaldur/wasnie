@@ -52,8 +52,27 @@
   fill: var(--color-danger);
 }
 
+// ★★ THREE NOTES, THREE MEANINGS — AND THEY WERE ALL RED. The bar can be followed by "you have N extra
+// tokens available", "N expired unused" or "you are out of tokens". The first is GOOD NEWS and it was
+// painted in the danger token, so a healthy account read as if something had gone wrong. The colour now
+// says which of the three it is, which is the only reason to have a colour at all.
 .token-usage__note {
   font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+// Add-on left to spend: information, not a problem.
+.token-usage__note--addon {
+  color: var(--color-text-secondary);
+}
+
+// Tokens the customer PAID FOR and lost to expiry: worth noticing, not an error.
+.token-usage__note--expired {
+  color: var(--color-warning);
+}
+
+// The assistant has actually stopped.
+.token-usage__note--exhausted {
   color: var(--color-danger);
 }
 

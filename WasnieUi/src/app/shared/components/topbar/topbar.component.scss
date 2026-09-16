@@ -276,23 +276,39 @@
 
 // ── Manual (help) ─────────────────────────────────────────────────────────────
 //
-// Deliberately the same geometry as `.topbar__avatar-btn` below: same 32px circle, same 2px border, same
-// hover to brand. The two sit side by side, and a control that is nearly-but-not-quite its neighbour
-// reads as a mistake. Secondary, not filled — it is help, and it must not compete with the assistant.
+// ★★ IT NO LONGER COPIES THE AVATAR, AND THAT IS THE POINT OF THE REDESIGN. It used to wear the avatar's
+// exact geometry — 32px circle, 2px border, hover to brand — on the reasoning that neighbours should match.
+// Next to the real avatar that backfired: two rings of the same weight side by side, one filled with the
+// brand and one empty, read as one control that works and one that is switched off. The avatar's ring is
+// the account menu's affordance; a help link borrowing it claims a rank it does not have.
+//
+// ★ SO IT SPEAKS THE PILLS' LANGUAGE INSTEAD — a filled sunken surface behind a hairline border, lifting to
+// the raised surface on hover, exactly like the trial and HubSpot pills a few pixels to its left. Same row,
+// same material, and only the shape changes with the job: pills carry words, this carries a glyph, so it is
+// round. The avatar is then the only ring left on that end of the bar, which is what a ring should mean.
 .topbar__manual-btn {
   @apply flex items-center justify-center cursor-pointer rounded-full;
   width: 32px;
   height: 32px;
   padding: 0;
-  background: none;
-  border: 2px solid var(--color-bd-default);
+  border: 1px solid var(--color-bd-default);
+  background: var(--color-bg-surface-sunken);
   color: var(--color-fg-secondary);
   transition:
     border-color 150ms ease,
+    background 150ms ease,
     color 150ms ease;
 
   &:hover {
-    border-color: var(--color-brand);
-    color: var(--color-brand);
+    border-color: var(--color-bd-strong);
+    background: var(--color-surface-raised);
+    color: var(--color-fg-primary);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--color-surface-raised),
+      0 0 0 4px var(--color-focus-ring);
   }
 }

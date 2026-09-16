@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -90,8 +90,9 @@ public sealed class GetBillingDetailsHandlerTests : IDisposable
                 new StripeSubscriptionSnapshot("active", created, created.AddMonths(1), false, null, null),
                 new StripePaymentMethodSummary("card", "visa", "4242", 12, 2028),
                 [
-                    new StripeInvoiceSummary("in_1", "A1-0001", "Pro", created, 29900, "eur", "paid", "https://h", "https://p"),
-                    new StripeInvoiceSummary("in_2", "A1-0002", null, created, 1000, "jpy", "open", null, null),
+                    // A settled invoice carries no retry; the open one has been attempted and is scheduled again.
+                    new StripeInvoiceSummary("in_1", "A1-0001", "Pro", created, 29900, "eur", "paid", "https://h", "https://p", null, 1),
+                    new StripeInvoiceSummary("in_2", "A1-0002", null, created, 1000, "jpy", "open", null, null, created.AddDays(3), 4),
                 ]));
 
         var result = await Create().Handle(new GetBillingDetailsQuery(), default);
