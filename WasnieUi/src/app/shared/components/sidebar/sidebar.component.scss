@@ -397,10 +397,6 @@
 
 // Wrapper that fits the auto-sync banner card to the (narrow) sidebar width without changing its look.
 // Sits directly above the SETTINGS divider; the bottom padding is the small gap to that line.
-.sidebar__banner {
-  padding: 8px 8px 8px;
-}
-
 .sidebar__logout {
   @apply flex items-center gap-3 text-sm w-full cursor-pointer;
   font-weight: 600;

@@ -31,7 +31,7 @@
           </svg>
 
           @if (v.exhausted) {
-            <span class="token-usage__note" data-testid="token-usage-exhausted">{{ 'ASSISTANT_USAGE.TRIAL_EXHAUSTED' | translate }}</span>
+            <span class="token-usage__note token-usage__note--exhausted" data-testid="token-usage-exhausted">{{ 'ASSISTANT_USAGE.TRIAL_EXHAUSTED' | translate }}</span>
           }
         </div>
       }
@@ -53,13 +53,15 @@
             <span class="token-usage__figure">
               {{ (variant() === 'compact' ? 'ASSISTANT_USAGE.COMPACT_INCLUDED' : 'ASSISTANT_USAGE.PERIOD_OF') | translate: { used: format(v.used), limit: format(v.limit) } }}
             </span>
-            <span class="token-usage__caption">
-              @if (v.since) {
-                {{ 'ASSISTANT_USAGE.PERIOD_CAPTION' | translate: { date: (v.since | dateFormat) } }}
-              } @else {
-                {{ 'ASSISTANT_USAGE.PERIOD_CAPTION_NO_DATE' | translate }}
-              }
-            </span>
+            @if (caption()) {
+              <span class="token-usage__caption">
+                @if (v.since) {
+                  {{ 'ASSISTANT_USAGE.PERIOD_CAPTION' | translate: { date: (v.since | dateFormat) } }}
+                } @else {
+                  {{ 'ASSISTANT_USAGE.PERIOD_CAPTION_NO_DATE' | translate }}
+                }
+              </span>
+            }
           </div>
 
           <svg
@@ -81,7 +83,7 @@
             expires, so a tenant has to be able to see how much of it is left and until when.
           -->
           @if (v.addonRemaining > 0) {
-            <span class="token-usage__note" data-testid="token-usage-addon">
+            <span class="token-usage__note token-usage__note--addon" data-testid="token-usage-addon">
               {{ 'ASSISTANT_USAGE.ADDON_REMAINING' | translate: { tokens: format(v.addonRemaining) } }}
               @if (v.addonExpiresAt) {
                 {{ 'ASSISTANT_USAGE.ADDON_EXPIRES' | translate: { date: (v.addonExpiresAt | dateFormat) } }}
@@ -90,13 +92,13 @@
           }
 
           @if (v.addonExpired > 0) {
-            <span class="token-usage__note" data-testid="token-usage-addon-expired">
+            <span class="token-usage__note token-usage__note--expired" data-testid="token-usage-addon-expired">
               {{ 'ASSISTANT_USAGE.ADDON_EXPIRED' | translate: { tokens: format(v.addonExpired) } }}
             </span>
           }
 
           @if (v.exhausted) {
-            <span class="token-usage__note" data-testid="token-usage-exhausted">{{ 'ASSISTANT_USAGE.PERIOD_EXHAUSTED' | translate }}</span>
+            <span class="token-usage__note token-usage__note--exhausted" data-testid="token-usage-exhausted">{{ 'ASSISTANT_USAGE.PERIOD_EXHAUSTED' | translate }}</span>
           }
         </div>
       }

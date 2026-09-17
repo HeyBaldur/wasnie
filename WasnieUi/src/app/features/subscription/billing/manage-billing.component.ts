@@ -12,8 +12,8 @@ import type { BadgeVariant } from '../../../shared/ui/ws-badge/ws-badge.componen
 import { WsToastService } from '../../../shared/ui/ws-toast/ws-toast.service';
 import { SubscriptionStateService } from '../services/subscription-state.service';
 import {
-  AccountAccess, BillingDetails, BoostOffer, CurrentSubscription, SubscriptionPlan, SubscriptionService,
-  SubscriptionUsage,
+  AccountAccess, BillingDetails, BillingInvoice, BoostOffer, CurrentSubscription, SubscriptionPlan,
+  SubscriptionService, SubscriptionUsage,
 } from '../services/subscription.service';
 import {
   cardBrandLabel, invoiceStatusKey, invoiceStatusVariant, isLiveSubscriptionEnded, liveSubscriptionStatusKey,
@@ -212,6 +212,23 @@ export class ManageBillingComponent implements OnInit {
       },
     });
     this.loadDetails();
+  }
+
+  /**
+   * What an unpaid invoice should say about its retries, or null when there is nothing to say.
+   *
+   * ★ ONLY FOR AN INVOICE THAT IS STILL OPEN AND HAS ACTUALLY BEEN TRIED. A paid invoice's attempt count is
+   * history nobody needs, and "0 attempts" is noise. Returning the KEY and its parameters keeps the choice of
+   * sentence here and the wording in the translations (§C1).
+   */
+  invoiceRetryNote(invoice: BillingInvoice): { key: string; params: Record<string, unknown> } | null {
+    if (invoice.status !== 'open' || invoice.attemptCount < 1) {
+      return null;
+    }
+
+    return invoice.nextPaymentAttempt
+      ? { key: 'BILLING.INVOICE_RETRIED_NEXT', params: { count: invoice.attemptCount, date: invoice.nextPaymentAttempt } }
+      : { key: 'BILLING.INVOICE_RETRIED', params: { count: invoice.attemptCount } };
   }
 
   /** KAN-83 — opens the shared purchase dialog. The money question is asked inside it, never here. */

@@ -30,6 +30,15 @@ export class TokenUsageMeterComponent {
   /** `compact` sits inside another card's text (billing); `full` is its own block (settings). */
   readonly variant = input<'full' | 'compact'>('full');
 
+  /**
+   * Whether to print "this billing period, since …".
+   *
+   * ★ OFF WHERE THE PERIOD IS ALREADY STATED. On the billing card the renewal block names the period two
+   * lines above, and repeating it under the bar reads as a second, different period rather than the same
+   * one (§C3). Settings has no such line, so there it stays on.
+   */
+  readonly caption = input(true);
+
   readonly view = computed(() => tokenUsageView(this.access()));
 
   /** Width of the filled part of the bar, in the SVG's 0..100 viewBox units. */

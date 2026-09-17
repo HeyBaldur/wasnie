@@ -66,12 +66,25 @@
   max-width: 880px;
 }
 
-.paywall-card {
+// ★★ THE LAYOUT GOES ON THE INNER `.ws-card`, NOT ON `.paywall-card`. That class lands on the <ws-card>
+// ELEMENT, and the primitive renders ONE wrapper div inside it. A flex column on the host therefore laid out
+// that single div — it shrank to its content and got centred — while everything the card actually contains
+// stayed in normal block flow. The text still looked centred because `text-align` inherits; the lock did not,
+// because it is a 56px block that `text-align` cannot move. Runtime: host 880px wide, inner 724px, icon flush
+// against the inner's left edge.
+//
+// ★ ::ng-deep is the only way into a child component's template, and it stays behind `.paywall-card` so no
+// other ws-card in the application is touched.
+.paywall-card ::ng-deep .ws-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   text-align: center;
+}
+
+.paywall-card {
+  display: block;
 
   &--error {
     align-self: center;
@@ -79,21 +92,39 @@
   }
 }
 
+// ★ A RING, NOT A FILLED ALERT DISC. A solid warning circle reads as "something broke"; a soft ring with a halo
+// marks the state without turning a lapsed subscription into an error screen.
 .paywall-card__icon {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 56px;
   height: 56px;
+  margin-bottom: var(--space-2);
   border-radius: var(--radius-full);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
   background: var(--color-warning-bg);
   color: var(--color-warning);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-warning) 8%, transparent);
+}
+
+// Names the situation before the headline states it, the same eyebrow step the pricing card uses.
+.paywall-card__eyebrow {
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary, var(--color-text-secondary));
 }
 
 .paywall-card__title {
   margin: 0;
-  font-size: var(--font-size-24);
-  font-weight: 700;
+  // The display face, as on every other moment that carries weight in this product.
+  font-family: var(--font-display);
+  font-size: var(--font-size-32);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   color: var(--color-text-primary);
 }
 
@@ -106,17 +137,54 @@
   color: var(--color-text-secondary);
 }
 
-.paywall-card__data {
-  margin: 0;
-  font-size: var(--font-size-14);
-  font-weight: 600;
-  color: var(--color-text-primary);
+// ★ THE REASSURANCES, AS A SET. Two facts side by side read as terms; the same two buried in a paragraph read as
+// a softener. They wrap to one column on a narrow screen rather than shrinking.
+.paywall-card__assurances {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3) var(--space-6);
+  margin: var(--space-4) 0 0;
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--color-border-subtle);
+  list-style: none;
+  width: 100%;
 }
 
+.paywall-card__assurance {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-14);
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.paywall-card__check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-success) 18%, transparent);
+  color: var(--color-success);
+}
+
+// For someone who cannot subscribe: a note, not a dead end — and not styled as a failure either.
 .paywall-card__admin {
-  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
   font-size: var(--font-size-13);
   color: var(--color-text-secondary);
+  text-align: left;
 }
 
 .paywall-offers {

@@ -7,33 +7,47 @@ using Wasnie.Domain.Compensation.ValueObjects;
 namespace Wasnie.Infrastructure.Compensation.Calculation;
 
 /// <summary>
-/// Scoped per request. Caches (payeeId, planId, asOfDate) results so that batch processing
-/// of many transactions for the same payee+plan period only hits the DB once.
-/// Relies on the global EF query filter for tenant isolation (same as FieldRequirementService).
+/// Scoped per request. Relies on the global EF query filter for tenant isolation (same as
+/// FieldRequirementService).
+///
+/// ★★ IT DOES NOT CACHE, AND THAT IS THE WHOLE POINT (KAN-87). It used to memoise the reading by
+/// (payeeId, planId, asOfDate) for the life of the instance, to save a query when a batch held several
+/// transactions of the same payee and plan. That instance lives for an ENTIRE background job — Hangfire
+/// opens one scope per job and this service is Scoped — and the job commits every transaction before
+/// moving to the next. So the second sale of a day was priced with the attainment from before the first
+/// one was recorded: on tiers of 8% below quota and 12% above, a 30,000 sale came out at 2,400 instead
+/// of 3,600, and the amount depended on nothing but whether the two sales happened to be processed in
+/// one run or in two. Money that changes with how the work was batched is not a cache, it is a bug.
+///
+/// ★ THE SIBLING BELOW ALREADY KNEW. <see cref="GetSplitContextAsync"/> has never cached, and says why
+/// in its own comment: the cumulative moves after each transaction is committed. The two halves of the
+/// same feature disagreed, and this one was the half that was wrong.
+///
+/// ★ MEASURED BEFORE REMOVING, NOT ASSUMED. The cache could only ever hit when payee, plan AND date all
+/// matched — which is exactly the case it answered wrongly, so its entire benefit was realised where it
+/// did harm. The replacement cost is one indexed SELECT: 0.482 ms measured over 200 runs against the
+/// development database (10,814 transactions, 1,325 credits). The largest real group of same payee,
+/// plan and date is 22 sales, so the worst case this removes is about 10 ms — against a job that
+/// already performs one SaveChanges round-trip per transaction.
+///
+/// ★ IF A CACHE EVER COMES BACK it must be invalidated by whoever writes a credit, and that coupling is
+/// what was rejected here: a third writer that forgets to invalidate brings the defect back in silence.
 /// </summary>
 public sealed class QuotaAttainmentService : IQuotaAttainmentService
 {
     private readonly IApplicationDbContext _db;
-    private readonly Dictionary<(Guid, Guid, DateOnly), AttainmentReading> _cache = new();
 
     public QuotaAttainmentService(IApplicationDbContext db)
     {
         _db = db;
     }
 
-    public async Task<AttainmentReading> ComputeAsync(
+    public Task<AttainmentReading> ComputeAsync(
         Guid payeeId,
         Guid planId,
         DateOnly asOfDate,
         CancellationToken ct = default)
-    {
-        var key = (payeeId, planId, asOfDate);
-        if (_cache.TryGetValue(key, out var cached)) return cached;
-
-        var result = await ComputeInternalAsync(payeeId, planId, asOfDate, ct);
-        _cache[key] = result;
-        return result;
-    }
+        => ComputeInternalAsync(payeeId, planId, asOfDate, ct);
 
     private async Task<AttainmentReading> ComputeInternalAsync(
         Guid payeeId,

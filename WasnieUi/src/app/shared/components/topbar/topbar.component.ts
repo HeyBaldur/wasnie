@@ -6,13 +6,18 @@ import { AssistantTriggerComponent } from '../../../features/assistant/trigger/a
 import { Router } from '@angular/router';
 import { RouterLink } from '@angular/router';
 import { HasPermissionPipe } from '../../pipes/has-permission.pipe';
+import { WsTooltipDirective } from '../../ui';
 
 import { TrialBannerComponent } from '../../../features/subscription/trial-banner/trial-banner.component';
+import { HubSpotSyncPillComponent } from '../../../features/integrations/components/hubspot-sync-pill/hubspot-sync-pill.component';
 
 @Component({
   selector: 'app-topbar',
   standalone: true,
-  imports: [TranslatePipe, IconComponent, AssistantTriggerComponent, TrialBannerComponent, RouterLink, HasPermissionPipe],
+  imports: [
+    TranslatePipe, IconComponent, AssistantTriggerComponent, TrialBannerComponent,
+    HubSpotSyncPillComponent, RouterLink, HasPermissionPipe, WsTooltipDirective,
+  ],
   templateUrl: './topbar.component.html',
   styleUrl: './topbar.component.scss',
 })

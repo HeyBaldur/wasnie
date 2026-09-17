@@ -10,7 +10,6 @@ import { SidebarBadgesStore } from '../../../core/navigation/sidebar-badges.stor
 import { SessionExitService } from '../../../core/services/session-exit.service';
 import { IconComponent } from '../icon/icon.component';
 import { HasPermissionDirective } from '../../directives/has-permission.directive';
-import { HubSpotSyncBannerComponent } from '../../../features/integrations/components/hubspot-sync-banner/hubspot-sync-banner.component';
 import { AssistantStore } from '../../../features/assistant/state/assistant.store';
 
 interface NavItem {
@@ -55,7 +54,7 @@ const FLYOUT_LEAVE_MS = 120;
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [RouterLink, TranslatePipe, IconComponent, HasPermissionDirective, HubSpotSyncBannerComponent],
+  imports: [RouterLink, TranslatePipe, IconComponent, HasPermissionDirective],
   templateUrl: './sidebar.component.html',
   styleUrl: './sidebar.component.scss',
 })

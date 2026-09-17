@@ -125,12 +125,35 @@
   }
 }
 
+// ★ TOP-ALIGNED, NOT CENTRED. The price is one line and the renewal block is two or three; centred,
+// the amount floated against the middle of the dates and neither had a baseline to share.
 .billing-plan__main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-5);
+}
+
+// ★ THE USAGE BAND. Its own row under the plan facts, separated by the same hairline the footer uses:
+// price, dates and consumption are three questions, and crammed into one corner they read as a single
+// paragraph of small print. Full width, so the bar has room to mean something.
+.billing-plan__usage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+// The band's caption: the same small, spaced, uppercase step the pricing card uses for "EVERYTHING
+// INCLUDED" — it labels a block without competing with the figure under it.
+.billing-plan__usage-label {
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary, var(--color-text-secondary));
 }
 
 .billing-plan__meter {
@@ -566,4 +589,14 @@
   font-size: var(--font-size-14);
   line-height: 1.5;
   color: var(--color-text-secondary);
+}
+
+// KAN-83 — an unpaid invoice states its failed attempts. Danger ink and the smallest step: it belongs to the row
+// it sits under, and the badge beside it already carries the status.
+.billing-history__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-12);
+  color: var(--color-danger);
 }

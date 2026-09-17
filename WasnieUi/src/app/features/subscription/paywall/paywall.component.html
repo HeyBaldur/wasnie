@@ -20,17 +20,44 @@
     } @else {
       <div class="paywall-content">
         <ws-card class="paywall-card">
+          <!--
+            ★ A HALTED ACCOUNT, NOT AN ERROR. Somebody who reaches this screen has not done anything wrong: the card
+            states what happened, then immediately what is still true. The lock sits in a soft ring rather than a
+            filled alert disc — it marks the state without dressing a billing lapse as a failure.
+          -->
           <div class="paywall-card__icon" aria-hidden="true">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
           </div>
+
+          <span class="paywall-card__eyebrow">{{ 'PAYWALL.PAGE_TITLE' | translate }}</span>
           <h1 class="paywall-card__title">{{ titleKey() | translate }}</h1>
           <p class="paywall-card__desc">{{ 'PAYWALL.DESC' | translate }}</p>
-          <p class="paywall-card__data">{{ 'PAYWALL.DATA_KEPT' | translate }}</p>
+
+          <!--
+            ★ THE REASSURANCES ARE THE POINT, so they are a list and not a sentence buried under the description.
+            Both are things the system actually does: nothing is deleted on lock-out, and the webhook restores access
+            the moment Stripe confirms the payment (§C3).
+          -->
+          <ul class="paywall-card__assurances">
+            <li class="paywall-card__assurance">
+              <span class="paywall-card__check" aria-hidden="true"><app-icon name="check" [size]="12" /></span>
+              {{ 'PAYWALL.DATA_KEPT' | translate }}
+            </li>
+            <li class="paywall-card__assurance">
+              <span class="paywall-card__check" aria-hidden="true"><app-icon name="check" [size]="12" /></span>
+              {{ 'PAYWALL.ACCESS_RETURNS' | translate }}
+            </li>
+          </ul>
+
           @if (!('Subscription.Manage' | hasPermission)) {
-            <p class="paywall-card__admin">{{ 'PAYWALL.ASK_ADMIN' | translate }}</p>
+            <!-- Not a failure either: this person simply is not the one who can act. -->
+            <p class="paywall-card__admin">
+              <app-icon name="info-circle" [size]="14" />
+              {{ 'PAYWALL.ASK_ADMIN' | translate }}
+            </p>
           }
         </ws-card>
 

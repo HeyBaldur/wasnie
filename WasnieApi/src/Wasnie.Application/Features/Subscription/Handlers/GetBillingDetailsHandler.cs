@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Wasnie.Application.Common.Interfaces;
@@ -100,7 +100,9 @@ public sealed class GetBillingDetailsHandler(
             i.Currency.ToUpperInvariant(),
             i.Status,
             i.HostedInvoiceUrl,
-            i.InvoicePdfUrl))
+            i.InvoicePdfUrl,
+            i.NextPaymentAttempt,
+            i.AttemptCount))
         .ToList();
 
     /// <summary>Stripe.net returns UTC DateTimes with Kind unspecified.</summary>

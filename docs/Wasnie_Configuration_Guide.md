@@ -229,7 +229,21 @@ Applied after the rate table, in sequence: **modifier → cap → floor**.
 > supported."*. A cap in a different
 > currency to the commission is still skipped silently.
 
-**Floor** works as expected (raises commission up to the floor amount).
+**Floor** raises the commission up to the floor amount. Two consequences of *when* it runs are not
+obvious and are the ones that move money:
+
+> ⚠️ **The floor can beat the cap, and the cap is therefore not an absolute ceiling.** Because the
+> order is cap **then** floor, a floor above the cap wins. Sale 100,000, flat 10% (= 10,000), cap
+> 8,000, floor 12,000 → the cap lowers it to 8,000 and the floor lifts it to **12,000**. Budgeting
+> the cap as the maximum payable per transaction is wrong whenever a rule carries both.
+
+> ⚠️ **A floor does not pay when the rate REFUSED to calculate.** If the rate step could not produce
+> a figure — no quota in effect for an attainment rule, an attainment ratio no tier covers, or a
+> tiered ladder that stops below the sale amount — the floor is **skipped**, not applied, and the
+> credit is 0. A floor is the minimum commission *on a commissioned sale*; with no commission to be
+> the minimum of, paying it would be an orphan. (A draw — guaranteed income regardless of sales — is
+> a different mechanism and this engine does not implement it.) Note the credit still **exists** at
+> zero: that is not the same as a trigger that did not match, which creates no credit at all.
 
 **On screen.** The rule form shows Measurement and Rate table (three buttons) as always-visible
 sections, plus **four** collapsible sections that each start toggled **off**: **Trigger (optional)**,
@@ -371,6 +385,14 @@ Each tier is a **from**, a **to** and a **rate**, where from and to are **fracti
 This type **requires a quota** for the payee+plan. How it behaves depends entirely on the
 **Split commission at quota** toggle — see the next section.
 
+> ⚠️ **At exactly 100% of quota, the UPPER tier applies.** With tiers `0 → 1.0` and `1.0 → ∞`, an
+> attainment of exactly `1.00` is claimed by both — by the first tier's closed top and the second
+> tier's floor — and the engine resolves the tie in favour of the **higher** tier. On tiers of 8% and
+> 12%, a 30,000 sale at exactly 100% attainment pays **3,600, not 2,400**. The same rule holds
+> wherever two tiers share an edge: the revenue on the boundary is priced by exactly one tier, and it
+> is the upper one. (Toggle ON reaches the same answer by clipping each tier's ceiling to the next
+> tier's floor, so no euro is ever priced twice.)
+
 ---
 
 ## 6. SplitAtQuota — the accelerator question
@@ -402,6 +424,23 @@ applies to all of it → **4,100.00**.
 
 Across several deals, each is rated by the attainment reached before it, and **earlier deals are
 never re-rated**.
+
+> ⚠️ **"Before it" means before that deal, not before the batch — including deals on the SAME DAY.**
+> If two sales share a date and are processed in one run, the second is still rated by the attainment
+> the first one left behind. With a 100,000 quota, 90,000 of prior revenue and tiers of 8% / 12%, two
+> 30,000 sales on the same day pay **2,400 and 3,600**, in that order — not 2,400 twice. The amounts
+> are the same whether the two sales are processed together or in separate runs; how the work is
+> batched never changes what is paid.
+>
+> *(This was a real defect until KAN-87: the attainment reading was memoised per payee, plan and date
+> for the life of a job, so a same-day sibling was priced with the reading from before the first sale
+> existed. Fixed — the reading is now taken fresh each time — and guarded by tests at both the service
+> and the whole-job level.)*
+
+> ⚠️ **With the toggle OFF a sale is never split across tiers.** One bracket rate applies to the whole
+> transaction, even when that transaction is what crosses the quota. In the example above the first
+> sale is 30,000 × 8% = 2,400 — it is *not* part at 8% and part at 12%. Splitting a single sale at the
+> boundary is what the toggle ON does, and it is the only thing that does it.
 
 ### Real anchor
 

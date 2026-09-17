@@ -1,8 +1,27 @@
 @if (subState.isPastDue()) {
-  <div class="past-due-banner">
-    <span class="past-due-banner__msg">{{ 'SUBSCRIPTION.PAST_DUE_BANNER_MSG' | translate }}</span>
-    <ws-button variant="primary" size="sm" (click)="openBillingPortal()">
+  <div class="past-due-banner" role="alert">
+    <span class="past-due-banner__chip" aria-hidden="true"><app-icon name="alert-triangle" [size]="16" /></span>
+
+    <div class="past-due-banner__body">
+      <span class="past-due-banner__title">{{ 'SUBSCRIPTION.PAST_DUE_BANNER_TITLE' | translate }}</span>
+
+      <!--
+        ★ THE DATE IS THE FACT, AND IT IS ONLY SHOWN WHEN THERE IS ONE. Stripe schedules the next attempt on
+        the unpaid invoice; if it has not, the banner says what happened and what to do without inventing a
+        deadline to fill the gap.
+      -->
+      <span class="past-due-banner__msg">
+        @if (retryDate(); as date) {
+          {{ 'SUBSCRIPTION.PAST_DUE_BANNER_RETRY' | translate: { date: (date | dateFormat) } }}
+        } @else {
+          {{ 'SUBSCRIPTION.PAST_DUE_BANNER_MSG' | translate }}
+        }
+      </span>
+    </div>
+
+    <ws-button variant="primary" size="sm" [loading]="opening()" (click)="openBillingPortal()">
       {{ 'SUBSCRIPTION.PAST_DUE_BANNER_CTA' | translate }}
+      <app-icon name="external-link" [size]="14" />
     </ws-button>
   </div>
 }

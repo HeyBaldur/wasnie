@@ -303,6 +303,8 @@ describe('KAN-77 · ManageBillingComponent', () => {
       invoices: [{
         id: 'in_1', number: 'A1-0001', description: 'Incentra Pro', createdAt: '2026-09-01T08:00:00Z', total: 299,
         currency: 'EUR', status: 'paid', hostedInvoiceUrl: 'https://invoice', invoicePdfUrl: 'https://pdf',
+        // A settled invoice has no scheduled retry — that field only carries a date while one is unpaid.
+        nextPaymentAttempt: null, attemptCount: 1,
       }],
     });
     const el: HTMLElement = fixture.nativeElement;

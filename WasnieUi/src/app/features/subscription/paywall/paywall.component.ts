@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { WsButtonComponent, WsCardComponent } from '../../../shared/ui';
 import { WsToastService } from '../../../shared/ui/ws-toast/ws-toast.service';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
 import { AuthService } from '../../../core/services/auth.service';
 import { AccountAccess, SubscriptionPlan, SubscriptionService } from '../services/subscription.service';
@@ -19,7 +20,7 @@ import { startCheckout } from '../plan-offer/start-checkout';
 @Component({
   selector: 'app-paywall',
   standalone: true,
-  imports: [TranslatePipe, WsCardComponent, WsButtonComponent, HasPermissionPipe, PlanOfferComponent],
+  imports: [TranslatePipe, WsCardComponent, WsButtonComponent, HasPermissionPipe, PlanOfferComponent, IconComponent],
   templateUrl: './paywall.component.html',
   styleUrl: './paywall.component.scss',
 })

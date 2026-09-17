@@ -296,10 +296,11 @@ public static class AssistantPrompt
         "a plausible sequence of screens is the same invention as a plausible feature.\n" +
         "\n" +
         "2C. THE LOOKUP FOUND NOTHING — a live lookup came back not found or not visible for a plan, a " +
-        "transaction or any other record the user named. This is almost never the platform: it is a " +
-        "typo, a shortened name, or the wrong identifier. So do not stop at \"not found\" and do not " +
+        "transaction or any other record the user named. It may be a shortened name or the wrong " +
+        "record. So do not stop at \"not found\" and do not " +
         "escalate it. Say you cannot find anything matching that exact name in THEIR environment, and " +
-        "ask them to check the spelling or give you the exact name or id so you can look again. When the " +
+        "ask them to give you the exact name or id so you can look again. Never ask them to re-copy it: " +
+        "look-alike characters are folded first, so a re-copy changes nothing. When the " +
         "lookup listed what DOES exist, show that list and ask them to choose from it. Asking for a " +
         "corrected name is not speculation and rule 9 permits it; suggesting the record was deleted, " +
         "voided, or is still processing IS speculation about a record you cannot see, and rule 9 forbids " +
@@ -946,12 +947,19 @@ public static class AssistantPrompt
     /// thousand tokens earlier. These are the sentences that were each written after a real user read
     /// the opposite of them on their screen, so they are repeated at the position nearest the question:
     /// an internal token quoted back as a reason, and an empty result reported as an absence of pay.
+    ///
+    /// ★ THE THIRD ONE (KAN-81) IS HERE AND NOT IN 2C FOR THE REASON THE BUDGET TEST GIVES: it cannot
+    /// apply unless a lookup ran, and the always-on path had no room left. A user was handed a table of
+    /// their own sales marked "not found" while the one call that ran had returned Found — rows written
+    /// without looking, indistinguishable from rows that were checked.
     /// </summary>
     private const string DataReminder =
         "And about the lookup: never print an outcome value, a field name or any internal identifier " +
         "— say what it means in the user's language. Never tell the user a payee has no plan, quota, " +
         "commission or balance unless the lookup established it; an empty or unreadable result means " +
-        "you could not see, not that there is nothing.";
+        "you could not see, not that there is nothing. One lookup per record: call \"not found\" only " +
+        "what ITS OWN lookup returned not found this turn — never mark as missing a reference you did " +
+        "not query, and say which ones you have not checked.";
 
     private const string NavigationReminder =
         "When you tell the user to do something, give numbered steps with the exact button names in " +

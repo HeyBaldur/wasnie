@@ -1,6 +1,7 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Transactions;
 using Wasnie.Domain.Authorization;
@@ -34,7 +35,8 @@ public sealed class ExportTransactionsHandler(
         // or the file would omit rows the user sees (or vice versa).
         if (!string.IsNullOrWhiteSpace(p.Reference))
         {
-            var term = p.Reference.Trim().ToLower();
+            // KAN-81: same folding as the list, for the same reason and on the same input only.
+            var term = ReferenceSearchNormalizer.Normalize(p.Reference)!.ToLower();
             query = query.Where(t =>
                 t.ReferenceNumber.ToLower().Contains(term) ||
                 (t.Description != null && t.Description.ToLower().Contains(term)));
@@ -90,8 +92,9 @@ public sealed class ExportTransactionsHandler(
         if (!string.IsNullOrWhiteSpace(p.ReferenceNumbers))
         {
             var refList = p.ReferenceNumbers.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
+                .Select(s => ReferenceSearchNormalizer.Normalize(s))
                 .Where(s => !string.IsNullOrEmpty(s))
+                .Select(s => s!)
                 .ToList();
             if (refList.Count > 0)
                 query = query.Where(t => refList.Contains(t.ReferenceNumber));
