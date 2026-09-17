@@ -8,6 +8,7 @@ import {
   InviteUserRequest,
   TenantRole,
   TenantUsersResponse,
+  UnlinkedPayeesResponse,
 } from '../models/user.model';
 
 /**
@@ -27,6 +28,12 @@ export class UsersApiService {
    */
   getUsers(): Observable<TenantUsersResponse> {
     return this.http.get<TenantUsersResponse>(this.base);
+  }
+
+  /** The payees nobody owns yet. The email is a hint for the server's suggestion, nothing more. */
+  unlinkedPayees(emailHint?: string): Observable<UnlinkedPayeesResponse> {
+    const params = emailHint ? { email: emailHint } : undefined;
+    return this.http.get<UnlinkedPayeesResponse>(`${this.base}/unlinked-payees`, { params });
   }
 
   invite(request: InviteUserRequest): Observable<Invitation> {

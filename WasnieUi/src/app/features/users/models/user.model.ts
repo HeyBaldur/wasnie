@@ -63,6 +63,33 @@ export interface TenantUsersResponse {
 export interface InviteUserRequest {
   email: string;
   role: TenantRole;
+
+  /**
+   * KAN-92. Which payee record this person IS. Null for somebody who does not get paid.
+   *
+   * Never derived from the email on the client either: the server may SUGGEST a match, and the
+   * administrator is the one who picks.
+   */
+  payeeId?: string | null;
+}
+
+/** A payee no login owns yet — what the invite form can attach somebody to. */
+export interface UnlinkedPayee {
+  id: string;
+  fullName: string;
+  employeeCode: string | null;
+  email: string | null;
+}
+
+/**
+ * The pickable payees plus the one whose address matches.
+ *
+ * `suggested` is a hint and must never be pre-selected: a wrong match accepted by reflex shows one
+ * person another person's pay.
+ */
+export interface UnlinkedPayeesResponse {
+  payees: UnlinkedPayee[];
+  suggested: UnlinkedPayee | null;
 }
 
 /** What the public accept page is told before anybody signs in. Carries no identifiers. */

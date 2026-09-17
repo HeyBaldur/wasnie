@@ -1,0 +1,138 @@
+// KAN-92 — the personal dashboard.
+//
+// TOKENS ONLY (§5.5). The scale here is the real one: font sizes are numeric (--font-size-11 …
+// --font-size-32) and weights are plain numbers — `--font-size-sm` and `--font-weight-medium` do
+// NOT exist in styles.scss.
+
+.my-dash__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+}
+
+.my-dash__spin {
+  animation: my-dash-spin 1s linear infinite;
+}
+
+@keyframes my-dash-spin {
+  to { transform: rotate(360deg); }
+}
+
+.my-dash__block {
+  display: block;
+  margin-bottom: var(--space-6);
+}
+
+.my-dash__block-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.my-dash__block-title {
+  margin: 0;
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+// Four figures, equal weight. None of them gets a colour the others do not: they are parts of one
+// story, and dressing one differently would state a judgement the data does not carry. The two
+// exceptions below are semantic, not decorative — money owed and money due.
+.my-dash__figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+@media (min-width: 900px) {
+  .my-dash__figures { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.my-dash__figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+}
+
+.my-dash__figure-label {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+.my-dash__figure-value {
+  font-size: var(--font-size-20);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.my-dash__figure--owed .my-dash__figure-value { color: var(--color-success); }
+.my-dash__figure--debt .my-dash__figure-value { color: var(--color-danger); }
+
+.my-dash__state {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.my-dash__note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-13);
+  color: var(--color-warning);
+}
+
+.my-dash__quota {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border-default);
+
+  &:last-child { border-bottom: none; }
+}
+
+.my-dash__gauge {
+  flex: 0 0 auto;
+  width: 72px;
+}
+
+// No target set: a neutral mark, never a red zero. The reader cannot fix a missing quota.
+.my-dash__gauge--none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 72px;
+  color: var(--color-text-tertiary);
+}
+
+.my-dash__quota-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.my-dash__quota-plan {
+  font-size: var(--font-size-15);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.my-dash__quota-figures {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.my-dash__quota-period {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}

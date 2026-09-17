@@ -1,4 +1,4 @@
-using Wasnie.Domain.Common;
+﻿using Wasnie.Domain.Common;
 
 namespace Wasnie.Domain.Identity;
 
@@ -44,6 +44,21 @@ public sealed class Invitation : Entity
     /// <summary>What the person becomes on acceptance. Stored as the role name, as Identity holds it.</summary>
     public string Role { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// The payee record this person IS, chosen by the administrator when the invitation was sent
+    /// (KAN-92). Null when the invitation is for somebody who does not get paid — an administrator,
+    /// a finance user — which is why it is optional rather than required.
+    ///
+    /// THE LINK IS DECIDED HERE AND APPLIED ON ACCEPTANCE. Anywhere else it would be a guess: the
+    /// only moment a human being states "this login is that payee" is when they grant the access.
+    ///
+    /// AND IT IS NEVER INFERRED FROM THE EMAIL. Addresses match by coincidence — a shared mailbox, a
+    /// person who replaced another in the same role, two people at one small company. A wrong match
+    /// does not show somebody the wrong screen; it shows them another person's pay. The invite form
+    /// may SUGGEST a payee whose address matches and ask, but the answer comes from the admin.
+    /// </summary>
+    public Guid? PayeeId { get; private set; }
+
     public string TokenHash { get; private set; } = string.Empty;
     public DateTimeOffset ExpiresAt { get; private set; }
 
@@ -79,7 +94,8 @@ public sealed class Invitation : Entity
         string tokenHash,
         string invitedBy,
         DateTimeOffset expiresAt,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        Guid? payeeId = null)
     {
         if (tenantId == Guid.Empty)
             throw new ArgumentException("An invitation must belong to a tenant.", nameof(tenantId));
@@ -96,6 +112,7 @@ public sealed class Invitation : Entity
             TenantId = tenantId,
             Email = Normalise(email),
             Role = role.Trim(),
+            PayeeId = payeeId,
             TokenHash = tokenHash,
             InvitedBy = invitedBy,
             ExpiresAt = expiresAt,

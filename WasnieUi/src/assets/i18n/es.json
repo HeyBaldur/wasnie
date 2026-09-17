@@ -233,7 +233,8 @@
     "GUIDED_TOUR": "Sandbox",
     "PRICING": "Precios",
     "MANAGE_BILLING": "Facturación",
-    "USERS": "Usuarios"
+    "USERS": "Usuarios",
+    "MY_DASHBOARD": "Mi panel"
   },
   "WELCOME": {
     "EYEBROW": "Tu espacio está listo",
@@ -529,7 +530,8 @@
     "RETRY": "Intentar de nuevo",
     "NO_RESULTS": "Sin resultados",
     "DISMISS": "Descartar",
-    "CLOSE": "Cerrar"
+    "CLOSE": "Cerrar",
+    "YES": "Sí"
   },
   "ERRORS": {
     "GENERIC": "Algo salió mal. Por favor, inténtalo de nuevo.",
@@ -1052,7 +1054,9 @@
     "COUNTER_IN_RANGE": "en este rango",
     "COMMISSIONS_UNREACHABLE_NOTE": "De lo no pagado, ningún pay run puede alcanzar:",
     "COMMISSIONS_UNREACHABLE_LINK": "Ver qué está bloqueado y por qué",
-    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Revisar asignaciones desactivadas"
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Revisar asignaciones desactivadas",
+    "NOT_YOURS_TITLE": "Este resumen es para administradores",
+    "NOT_YOURS_DESC": "Muestra las comisiones de toda la empresa, que su rol no incluye. Sus propias cifras llegarán a esta pantalla en breve; mientras tanto, use el menú de la izquierda para lo que sí tiene disponible."
   },
   "QUOTAS": {
     "TITLE": "Cuotas",
@@ -3075,7 +3079,11 @@
       "ROLE_PLACEHOLDER": "Elija un rol",
       "ROLE_ERROR": "Elija un rol.",
       "HINT": "Recibirá un correo con un enlace para establecer su contraseña. El enlace es válido 7 días.",
-      "SUBMIT": "Enviar invitación"
+      "SUBMIT": "Enviar invitación",
+      "PAYEE_LABEL": "Payee vinculado",
+      "PAYEE_PLACEHOLDER": "Nadie - esta persona no cobra comisiones",
+      "PAYEE_HINT": "Elija la ficha de payee que ES esta persona, para que pueda ver sus propias comisiones. Déjelo vacío para un administrador o un usuario de finanzas.",
+      "PAYEE_SUGGESTED": "{{name}} tiene el mismo correo. ¿Es la misma persona?"
     },
     "DEACTIVATE": {
       "TITLE": "¿Desactivar a este usuario?",
@@ -3103,7 +3111,9 @@
       "EXPIRED": "Esa invitación ha caducado. Envíe una nueva.",
       "REVOKED": "Esa invitación fue retirada.",
       "LAST_ADMIN": "Es el único administrador que queda. Asigne antes el rol de administrador a otra persona, o nadie podrá gestionar usuarios.",
-      "CANNOT_ACT_ON_SELF": "No puede cambiar su propio acceso. Pídaselo a otro administrador."
+      "CANNOT_ACT_ON_SELF": "No puede cambiar su propio acceso. Pídaselo a otro administrador.",
+      "PAYEE_NOT_FOUND": "Ese payee ya no existe.",
+      "PAYEE_ALREADY_LINKED": "{{payee}} ya pertenece a otro inicio de sesión. Desvincúlelo primero."
     },
     "REMOVE": {
       "TITLE": "¿Quitar a esta persona del espacio de trabajo?",
@@ -3135,5 +3145,29 @@
       "ALREADY_MEMBER": "Esa dirección ya tiene una cuenta. Pruebe a iniciar sesión.",
       "GENERIC": "Esta invitación no se puede usar. Pida a quien le invitó que le envíe una nueva."
     }
+  },
+  "MY_DASHBOARD": {
+    "SUBTITLE": "Sus comisiones, su saldo y cómo van sus objetivos.",
+    "ERROR_TITLE": "No se pudieron cargar sus cifras",
+    "ERROR_DESC": "No falta nada en su cuenta: la consulta falló. Recargue la página y avise al administrador si vuelve a ocurrir.",
+    "UNLINKED_TITLE": "Su cuenta aún no está vinculada a un payee",
+    "UNLINKED_DESC": "Las comisiones se registran sobre una ficha de payee, y la suya no está asociada a este inicio de sesión. Pida a un administrador que la vincule: hasta entonces no hay cifras que mostrar, lo cual no significa que no haya ganado nada.",
+    "MONEY_TITLE": "Sus comisiones",
+    "EARNED": "Generado",
+    "PAID": "Pagado",
+    "AWAITING": "Pendiente de cobro",
+    "DEBT": "Usted debe",
+    "DISPUTED_NOTE": "En disputa y no incluido arriba:",
+    "NO_MONEY_YET": "Aún no hay nada registrado a su nombre.",
+    "STATE_NOTHING_RECORDED": "No hay pagos ni deuda registrados.",
+    "STATE_EARNINGS_NO_DEBT": "Tiene ingresos y no debe nada.",
+    "STATE_EARNINGS_WITH_DEBT": "Tiene ingresos y una deuda, con pendiente suficiente para cubrirla.",
+    "STATE_DEBT_ONLY": "Tiene una deuda y nada pendiente que compensarla.",
+    "STATE_DEBT_EXCEEDS": "Su deuda supera todo lo pendiente, así que la diferencia se arrastra.",
+    "STATE_UNKNOWN": "Su saldo se muestra arriba.",
+    "QUOTAS_TITLE": "Sus objetivos",
+    "QUOTAS_EMPTY": "Hoy no tiene ningún objetivo vigente.",
+    "NO_TARGET": "No se ha fijado objetivo para este plan.",
+    "UNITS": "operaciones"
   }
 }

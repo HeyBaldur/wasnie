@@ -19,7 +19,7 @@
 
   <div class="sidebar__scroll ws-scroll-thin">
   <div class="sidebar__body">
-    @for (section of navSections; track section.sectionKey) {
+    @for (section of navSections(); track section.sectionKey) {
       <div class="sidebar__section">
         @if (sidebarState.isExpanded()) {
           <span class="sidebar__section-label">{{ section.sectionKey | translate }}</span>

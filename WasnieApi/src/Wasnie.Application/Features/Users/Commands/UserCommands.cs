@@ -4,8 +4,14 @@ using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Features.Users.Commands;
 
-/// <summary>Invites an email address to this tenant with a role. Requires Users.Manage.</summary>
-public sealed record InviteUserCommand(string Email, string Role) : IRequest<Result<InvitationDto>>;
+/// <summary>
+/// Invites an email address to this tenant with a role. Requires Users.Manage.
+///
+/// PayeeId is OPTIONAL and says which payee record this person is (KAN-92). Null for somebody who
+/// does not get paid — an administrator, a finance user. It is never inferred from the address.
+/// </summary>
+public sealed record InviteUserCommand(string Email, string Role, Guid? PayeeId = null)
+    : IRequest<Result<InvitationDto>>;
 
 /// <summary>Sends the invitation again with a NEW token; the previous link stops working.</summary>
 public sealed record ResendInvitationCommand(Guid InvitationId) : IRequest<Result<InvitationDto>>;

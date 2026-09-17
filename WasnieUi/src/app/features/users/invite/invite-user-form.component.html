@@ -7,6 +7,7 @@
       [placeholder]="'USERS.INVITE.EMAIL_PLACEHOLDER' | translate"
       [error]="form.controls.email.touched && form.controls.email.invalid
         ? ('USERS.INVITE.EMAIL_ERROR' | translate) : ''"
+      (valueChange)="onEmailChange($event)"
     />
   </div>
 
@@ -20,6 +21,34 @@
       [error]="form.controls.role.touched && form.controls.role.invalid
         ? ('USERS.INVITE.ROLE_ERROR' | translate) : ''"
     />
+  </div>
+
+  <!-- KAN-92. Which payee this person IS. Optional: an administrator or a finance user does not get
+       paid and has no payee, and a required picker would force whoever invites them to attach
+       somebody at random. -->
+  <div class="invite-form__field">
+    <ws-select
+      formControlName="payeeId"
+      [options]="payeeOptions()"
+      [searchable]="true"
+      [label]="'USERS.INVITE.PAYEE_LABEL' | translate"
+      [placeholder]="'USERS.INVITE.PAYEE_PLACEHOLDER' | translate"
+    />
+    <p class="invite-form__hint">{{ 'USERS.INVITE.PAYEE_HINT' | translate }}</p>
+
+    <!-- ★ THE SUGGESTION IS A QUESTION, NOT A DEFAULT. The server found a payee with this exact
+         address; addresses coincide for boring reasons, and a match accepted by reflex shows one
+         person another person's pay. So it asks, and the admin answers. -->
+    @if (suggested(); as match) {
+      @if (form.controls.payeeId.value !== match.id) {
+        <div class="invite-form__suggestion">
+          <span>{{ 'USERS.INVITE.PAYEE_SUGGESTED' | translate:{ name: match.fullName } }}</span>
+          <ws-button variant="ghost" size="sm" type="button" (click)="acceptSuggestion()">
+            {{ 'COMMON.YES' | translate }}
+          </ws-button>
+        </div>
+      }
+    }
   </div>
 
   <p class="invite-form__hint">{{ 'USERS.INVITE.HINT' | translate }}</p>

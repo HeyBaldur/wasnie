@@ -16,3 +16,18 @@
   justify-content: flex-end;
   gap: var(--space-2);
 }
+
+// KAN-92. The suggested payee: a question the admin answers, styled as a quiet prompt rather than
+// an alert — it is not a problem, it is an offer.
+.invite-form__suggestion {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}

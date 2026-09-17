@@ -233,7 +233,8 @@
     "GUIDED_TOUR": "Piaskownica",
     "PRICING": "Cennik",
     "MANAGE_BILLING": "Rozliczenia",
-    "USERS": "Użytkownicy"
+    "USERS": "Użytkownicy",
+    "MY_DASHBOARD": "Mój panel"
   },
   "WELCOME": {
     "EYEBROW": "Twoja przestrzeń jest gotowa",
@@ -529,7 +530,8 @@
     "RETRY": "Spróbuj ponownie",
     "NO_RESULTS": "Brak wyników",
     "DISMISS": "Zamknij",
-    "CLOSE": "Zamknij"
+    "CLOSE": "Zamknij",
+    "YES": "Tak"
   },
   "ERRORS": {
     "GENERIC": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -1052,7 +1054,9 @@
     "COUNTER_IN_RANGE": "w tym zakresie",
     "COMMISSIONS_UNREACHABLE_NOTE": "Z kwoty niewypłaconej żaden pay run nie może objąć:",
     "COMMISSIONS_UNREACHABLE_LINK": "Zobacz, co jest zablokowane i dlaczego",
-    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Przejrzyj dezaktywowane przypisania"
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Przejrzyj dezaktywowane przypisania",
+    "NOT_YOURS_TITLE": "To zestawienie jest dla administratorów",
+    "NOT_YOURS_DESC": "Pokazuje prowizje całej firmy, czego Twoja rola nie obejmuje. Twoje własne dane wkrótce pojawią się na tym ekranie; w międzyczasie korzystaj z menu po lewej stronie."
   },
   "QUOTAS": {
     "TITLE": "Kwoty",
@@ -3075,7 +3079,11 @@
       "ROLE_PLACEHOLDER": "Wybierz rolę",
       "ROLE_ERROR": "Wybierz rolę.",
       "HINT": "Otrzyma e-mail z linkiem do ustawienia hasła. Link jest ważny 7 dni.",
-      "SUBMIT": "Wyślij zaproszenie"
+      "SUBMIT": "Wyślij zaproszenie",
+      "PAYEE_LABEL": "Powiązany odbiorca",
+      "PAYEE_PLACEHOLDER": "Nikt - ta osoba nie otrzymuje prowizji",
+      "PAYEE_HINT": "Wybierz rekord odbiorcy, którym jest ta osoba, aby mogła widzieć własne prowizje. Zostaw puste dla administratora lub osoby z finansów.",
+      "PAYEE_SUGGESTED": "{{name}} ma ten sam adres e-mail. Czy to ta sama osoba?"
     },
     "DEACTIVATE": {
       "TITLE": "Dezaktywować tego użytkownika?",
@@ -3103,7 +3111,9 @@
       "EXPIRED": "To zaproszenie wygasło. Wyślij nowe.",
       "REVOKED": "To zaproszenie zostało cofnięte.",
       "LAST_ADMIN": "To jedyny pozostały administrator. Nadaj najpierw komuś innemu rolę administratora, inaczej nikt nie będzie mógł zarządzać użytkownikami.",
-      "CANNOT_ACT_ON_SELF": "Nie możesz zmienić własnego dostępu. Poproś innego administratora."
+      "CANNOT_ACT_ON_SELF": "Nie możesz zmienić własnego dostępu. Poproś innego administratora.",
+      "PAYEE_NOT_FOUND": "Ten odbiorca już nie istnieje.",
+      "PAYEE_ALREADY_LINKED": "{{payee}} należy już do innego konta. Najpierw usuń powiązanie."
     },
     "REMOVE": {
       "TITLE": "Usunąć tę osobę z przestrzeni roboczej?",
@@ -3135,5 +3145,29 @@
       "ALREADY_MEMBER": "Ten adres ma już konto. Spróbuj się zalogować.",
       "GENERIC": "Tego zaproszenia nie można użyć. Poproś osobę zapraszającą o nowe."
     }
+  },
+  "MY_DASHBOARD": {
+    "SUBTITLE": "Twoje prowizje, saldo i postępy względem celów.",
+    "ERROR_TITLE": "Nie udało się wczytać Twoich danych",
+    "ERROR_DESC": "Niczego nie brakuje na Twoim koncie - zapytanie się nie powiodło. Odśwież stronę, a jeśli błąd się powtarza, powiadom administratora.",
+    "UNLINKED_TITLE": "Twoje konto nie jest jeszcze powiązane z odbiorcą",
+    "UNLINKED_DESC": "Prowizje są zapisywane na rekordzie odbiorcy, a Twój nie został powiązany z tym kontem. Poproś administratora o powiązanie - do tego czasu nie ma danych do pokazania, co nie oznacza, że nic nie zarobiłeś.",
+    "MONEY_TITLE": "Twoje prowizje",
+    "EARNED": "Naliczone",
+    "PAID": "Wypłacone",
+    "AWAITING": "Oczekuje na wypłatę",
+    "DEBT": "Twoje zadłużenie",
+    "DISPUTED_NOTE": "Sporne i nieuwzględnione powyżej:",
+    "NO_MONEY_YET": "Nie zarejestrowano jeszcze niczego na Twoim koncie.",
+    "STATE_NOTHING_RECORDED": "Brak wypłat i brak zadłużenia.",
+    "STATE_EARNINGS_NO_DEBT": "Masz naliczone środki i żadnego zadłużenia.",
+    "STATE_EARNINGS_WITH_DEBT": "Masz naliczone środki i zadłużenie, a oczekujące kwoty je pokrywają.",
+    "STATE_DEBT_ONLY": "Masz zadłużenie i nic oczekującego, czym można je zrównoważyć.",
+    "STATE_DEBT_EXCEEDS": "Zadłużenie przewyższa wszystkie oczekujące kwoty, więc różnica przechodzi dalej.",
+    "STATE_UNKNOWN": "Twoje saldo pokazano powyżej.",
+    "QUOTAS_TITLE": "Twoje cele",
+    "QUOTAS_EMPTY": "Nie masz dziś aktywnego celu.",
+    "NO_TARGET": "Dla tego planu nie ustalono celu.",
+    "UNITS": "transakcji"
   }
 }

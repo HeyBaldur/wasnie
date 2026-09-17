@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Wasnie.Domain.Identity;
 
@@ -25,6 +25,11 @@ public sealed class InvitationConfiguration : IEntityTypeConfiguration<Invitatio
         builder.Property(i => i.TokenHash)
             .IsRequired()
             .HasMaxLength(64); // SHA256 hex = 64 chars, same as the other token tables
+
+        // No foreign key to Payees on purpose: the payee could be deleted between sending and
+        // accepting, and a cascade would take the invitation with it. The accept path re-checks that
+        // the payee still exists and is still unlinked, which is the check that actually matters.
+        builder.Property(i => i.PayeeId);
 
         builder.Property(i => i.InvitedBy)
             .IsRequired()

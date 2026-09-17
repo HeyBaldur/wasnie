@@ -256,7 +256,8 @@
     "GUIDED_TOUR": "Sandbox",
     "PRICING": "Pricing",
     "MANAGE_BILLING": "Manage billing",
-    "USERS": "Users"
+    "USERS": "Users",
+    "MY_DASHBOARD": "My dashboard"
   },
   "WELCOME": {
     "EYEBROW": "Your workspace is ready",
@@ -552,7 +553,8 @@
     "RETRY": "Try again",
     "NO_RESULTS": "No results found",
     "DISMISS": "Dismiss",
-    "CLOSE": "Close"
+    "CLOSE": "Close",
+    "YES": "Yes"
   },
   "ERRORS": {
     "GENERIC": "Something went wrong. Please try again.",
@@ -1075,7 +1077,9 @@
     "COUNTER_IN_RANGE": "in this range",
     "COMMISSIONS_UNREACHABLE_NOTE": "Of the unpaid amount, no pay run can reach:",
     "COMMISSIONS_UNREACHABLE_LINK": "See what is stuck and why",
-    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Review deactivated assignments"
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Review deactivated assignments",
+    "NOT_YOURS_TITLE": "This overview is for administrators",
+    "NOT_YOURS_DESC": "It shows the whole company's commissions, which your role does not include. Your own figures are coming to this screen shortly; in the meantime, use the menu on the left for what you can access."
   },
   "IMPORTS": {
     "STEPS": {
@@ -3098,7 +3102,11 @@
       "ROLE_PLACEHOLDER": "Choose a role",
       "ROLE_ERROR": "Choose a role.",
       "HINT": "They will get an email with a link to set their password. The link is valid for 7 days.",
-      "SUBMIT": "Send invitation"
+      "SUBMIT": "Send invitation",
+      "PAYEE_LABEL": "Linked payee",
+      "PAYEE_PLACEHOLDER": "Nobody - this person does not get paid",
+      "PAYEE_HINT": "Pick the payee record this person is, so they can see their own commissions. Leave it empty for an administrator or a finance user.",
+      "PAYEE_SUGGESTED": "{{name}} has the same email address. Is this the same person?"
     },
     "DEACTIVATE": {
       "TITLE": "Deactivate this user?",
@@ -3126,7 +3134,9 @@
       "EXPIRED": "That invitation has expired. Send a new one.",
       "REVOKED": "That invitation was withdrawn.",
       "LAST_ADMIN": "This is the only administrator left. Give somebody else the administrator role first, or nobody will be able to manage users.",
-      "CANNOT_ACT_ON_SELF": "You cannot change your own access. Ask another administrator."
+      "CANNOT_ACT_ON_SELF": "You cannot change your own access. Ask another administrator.",
+      "PAYEE_NOT_FOUND": "That payee no longer exists.",
+      "PAYEE_ALREADY_LINKED": "{{payee}} already belongs to another login. Unlink it first."
     },
     "REMOVE": {
       "TITLE": "Remove this person from the workspace?",
@@ -3158,5 +3168,29 @@
       "ALREADY_MEMBER": "That email address already has an account. Try signing in instead.",
       "GENERIC": "This invitation cannot be used. Ask whoever invited you to send a new one."
     }
+  },
+  "MY_DASHBOARD": {
+    "SUBTITLE": "Your commissions, your balance and how your targets are going.",
+    "ERROR_TITLE": "We could not load your figures",
+    "ERROR_DESC": "Nothing is missing from your account - the request failed. Reload the page, and tell your administrator if it keeps happening.",
+    "UNLINKED_TITLE": "Your account is not linked to a payee yet",
+    "UNLINKED_DESC": "Commissions are recorded against a payee record, and yours has not been attached to this login. Ask an administrator to link it - until then there are no figures to show, which is not the same as having earned nothing.",
+    "MONEY_TITLE": "Your commissions",
+    "EARNED": "Earned",
+    "PAID": "Paid to you",
+    "AWAITING": "Awaiting payment",
+    "DEBT": "You owe",
+    "DISPUTED_NOTE": "Under dispute and not counted above:",
+    "NO_MONEY_YET": "Nothing has been recorded against you yet.",
+    "STATE_NOTHING_RECORDED": "No payouts and no debt recorded.",
+    "STATE_EARNINGS_NO_DEBT": "You have earnings and owe nothing.",
+    "STATE_EARNINGS_WITH_DEBT": "You have earnings and a debt, with enough pending to cover it.",
+    "STATE_DEBT_ONLY": "You have a debt and nothing pending to set against it.",
+    "STATE_DEBT_EXCEEDS": "Your debt is larger than everything pending, so the difference carries over.",
+    "STATE_UNKNOWN": "Your balance is shown above.",
+    "QUOTAS_TITLE": "Your targets",
+    "QUOTAS_EMPTY": "You have no target running today.",
+    "NO_TARGET": "No target has been set for this plan.",
+    "UNITS": "deals"
   }
 }

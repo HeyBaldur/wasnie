@@ -241,14 +241,31 @@ export class SidebarComponent implements OnInit {
    */
   readonly assistant = inject(AssistantStore);
 
-  readonly navSections: NavSection[] = [
+  /**
+   * ★★ IT IS COMPUTED, BECAUSE THE FIRST ENTRY IS NOT THE SAME SCREEN FOR EVERYONE (KAN-92). The
+   * company dashboard needs Reports.ViewAll; whoever lacks it gets their OWN dashboard in that slot
+   * instead. One "home" entry, always the one that will actually open — a menu that lists both would
+   * offer most people a page that refuses them, which is the trap the comment below already names.
+   */
+  readonly navSections = computed<NavSection[]>(() => [
     {
       sectionKey: 'NAV.SECTION_OVERVIEW',
       items: [
-        { path: '/dashboard', labelKey: 'NAV.DASHBOARD', icon: 'dashboard', permission: 'Payees.Read' },
+        // KAN-92. THE PERMISSION HERE MUST BE THE ONE THE SCREEN ACTUALLY ENFORCES. It said
+        // 'Payees.Read', which a Rep holds, while GetDashboardSummaryHandler requires
+        // 'Reports.ViewAll', which a Rep does not: the menu offered a page that refused them, and
+        // every visit raised a permission toast. A nav entry whose permission disagrees with its
+        // handler is not a menu, it is a trap.
+        this.currentUser.hasPermission('Reports.ViewAll')
+          ? { path: '/dashboard', labelKey: 'NAV.DASHBOARD', icon: 'dashboard', permission: 'Reports.ViewAll' }
+          // The permission is the one /api/me/dashboard really enforces, so the entry cannot offer a
+          // page that then refuses. Every assignable role holds it.
+          : { path: '/my-dashboard', labelKey: 'NAV.MY_DASHBOARD', icon: 'dashboard', permission: 'LedgerSummary.Read' },
         // ★ ENTRADA PERMANENTE, NO SÓLO LA PRIMERA VEZ. El recorrido guiado es también el sitio donde
         // probar cosas sin miedo: se vuelve a él cuando hace falta, no cuando el producto lo ofrece.
-        { path: '/guided-tour', labelKey: 'NAV.GUIDED_TOUR', icon: 'bowl-chopsticks', permission: 'Payees.Read' },
+        // The guided tour builds a plan and a payee end to end, so it needs the permissions to
+        // create them — not merely to read a payee.
+        { path: '/guided-tour', labelKey: 'NAV.GUIDED_TOUR', icon: 'bowl-chopsticks', permission: 'Plans.Create' },
       ],
     },
     {
@@ -281,7 +298,7 @@ export class SidebarComponent implements OnInit {
         },
       ],
     },
-  ];
+  ]);
 
   // The manual is NOT in this menu. It moved to the topbar, beside the user: it is help, not a place in
   // the product's navigation, and it sat oddly among Subscription / Integrations / Settings.

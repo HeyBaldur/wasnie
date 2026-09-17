@@ -18,6 +18,10 @@
       [label]="'DASHBOARD.RANGE_LABEL' | translate"
     />
 
+    <!-- KAN-92 batch 3: the interim "this screen is not yours" block is GONE, and so is the branch it
+         needed. Nobody without Reports.ViewAll reaches this component any more — companyDashboardGuard
+         sends them to /my-dashboard, which answers their question instead of apologising for this one. -->
+
     <!-- ── Commissions: Total / Paid / Unpaid over the range ──────────────
          MONEY RULE: total = paid + unpaid, to the cent. All three come from ONE server-side query over
          the same credits, so they cannot drift.
@@ -1014,7 +1018,6 @@
         }
       </div>
     }
-
   </ws-page-layout>
 
   <!-- Revert-commission confirmation (money): shows exactly which commission and how much before acting. -->

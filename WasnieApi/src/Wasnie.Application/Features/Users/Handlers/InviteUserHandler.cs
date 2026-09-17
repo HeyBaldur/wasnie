@@ -102,6 +102,25 @@ public sealed class InviteUserHandler(
             throw new DomainCodedException(InvitationRefusal.EmailAlreadyInvited,
                 new Dictionary<string, object?> { ["email"] = email });
 
+        // -- Is the chosen payee real, here, and free? --
+        //
+        // Checked at SEND time so the administrator hears about it while the form is still open. It is
+        // re-checked on acceptance, because days pass and a payee can be linked or deleted in between.
+        if (request.PayeeId is Guid payeeId)
+        {
+            var payee = await db.Payees
+                .Where(p => p.Id == payeeId)
+                .Select(p => new { p.Id, p.UserId, p.FullName })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (payee is null)
+                throw new DomainCodedException(InvitationRefusal.PayeeNotFound);
+
+            if (payee.UserId is not null)
+                throw new DomainCodedException(InvitationRefusal.PayeeAlreadyLinked,
+                    new Dictionary<string, object?> { ["payee"] = payee.FullName });
+        }
+
         // ── Room for one more? ────────────────────────────────────────────────
         var seats = await tierLimitChecker.GetSeatUsageAsync(cancellationToken);
         if (!seats.HasRoom)
@@ -118,7 +137,8 @@ public sealed class InviteUserHandler(
             tokenHash,
             currentUser.UserId ?? string.Empty,
             now.AddDays(ExpiryDays),
-            now);
+            now,
+            request.PayeeId);
 
         db.Invitations.Add(invitation);
         await db.SaveChangesAsync(cancellationToken);

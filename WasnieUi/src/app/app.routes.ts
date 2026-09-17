@@ -3,12 +3,14 @@ import { planGuard } from './core/guards/plan.guard';
 import { hasPermissionGuard } from './core/auth/guards/has-permission.guard';
 import { subscriptionGuard } from './core/guards/subscription.guard';
 import { authGuard } from './core/guards/auth.guard';
+import { companyDashboardGuard, landingRedirect } from './core/guards/landing.guard';
 import { environment } from '../environments/environment';
 
 export const routes: Routes = [
   {
+    // KAN-92: the landing depends on what the person can see. See landingRedirect.
     path: '',
-    redirectTo: 'dashboard',
+    redirectTo: landingRedirect,
     pathMatch: 'full',
   },
   {
@@ -37,10 +39,21 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     title: 'NAV.DASHBOARD',
-    canActivate: [planGuard, subscriptionGuard],
+    canActivate: [planGuard, subscriptionGuard, companyDashboardGuard],
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then(
         (m) => m.DashboardComponent
+      ),
+  },
+  {
+    // The personal dashboard (KAN-92). No permission guard: it shows the caller their OWN figures and
+    // the server resolves whose they are from the token, so there is nothing here to be entitled to.
+    path: 'my-dashboard',
+    title: 'NAV.MY_DASHBOARD',
+    canActivate: [planGuard, subscriptionGuard],
+    loadComponent: () =>
+      import('./features/my-dashboard/my-dashboard.component').then(
+        (m) => m.MyDashboardComponent
       ),
   },
   {

@@ -1,0 +1,131 @@
+<app-shell [refreshOnEnter]="store">
+  <ws-page-layout
+    icon="dashboard"
+    titleSize="lg"
+    [title]="greetingKey() | translate: { name: greetingNamePart() }"
+    [subtitle]="'MY_DASHBOARD.SUBTITLE' | translate"
+  >
+    <!-- ★★ FOUR STATES, NEVER FOLDED INTO ONE. Loading, failed, not-linked and real figures each get
+         their own block: three of them would otherwise be drawn as a page of zeros, and a zero on a
+         pay screen is read as "you earned nothing". -->
+    @if (store.loading()) {
+      <div class="my-dash__status">
+        <app-icon name="loader" [size]="18" class="my-dash__spin" />
+        <span>{{ 'COMMON.LOADING' | translate }}</span>
+      </div>
+    } @else if (store.error()) {
+      <ws-empty-state
+        icon="alert-triangle"
+        titleKey="MY_DASHBOARD.ERROR_TITLE"
+        descKey="MY_DASHBOARD.ERROR_DESC"
+      />
+    } @else if (store.linked() === false) {
+      <!-- C3: the screen says what the system did, and who can undo it. -->
+      <ws-empty-state
+        icon="user"
+        titleKey="MY_DASHBOARD.UNLINKED_TITLE"
+        descKey="MY_DASHBOARD.UNLINKED_DESC"
+      />
+    } @else if (store.linked()) {
+
+      <!-- ── Money, one block per currency ───────────────────────────────────
+           Currencies are never summed: adding euros to zlotys would invent a number. -->
+      @if (store.hasMoney()) {
+        @for (balance of store.balances(); track balance.currency) {
+          <ws-card padding="md" class="my-dash__block">
+            <div class="my-dash__block-hd">
+              <h2 class="my-dash__block-title">
+                {{ 'MY_DASHBOARD.MONEY_TITLE' | translate }}
+              </h2>
+              <ws-badge variant="neutral" size="sm">{{ balance.currency }}</ws-badge>
+            </div>
+
+            <div class="my-dash__figures">
+              @for (card of cards(balance); track card.key) {
+                <div class="my-dash__figure" [class]="'my-dash__figure--' + card.tone">
+                  <span class="my-dash__figure-label">{{ card.labelKey | translate }}</span>
+                  <span class="my-dash__figure-value">
+                    {{ card.value | currencyFormat: balance.currency }}
+                  </span>
+                </div>
+              }
+            </div>
+
+            <!-- The token decides the sentence; the sentence is never sent by the server. -->
+            <p class="my-dash__state">{{ interpretationKey(balance) | translate }}</p>
+
+            @if (balance.disputedInPeriod > 0) {
+              <p class="my-dash__note">
+                {{ 'MY_DASHBOARD.DISPUTED_NOTE' | translate }}
+                <strong>{{ balance.disputedInPeriod | currencyFormat: balance.currency }}</strong>
+              </p>
+            }
+          </ws-card>
+        }
+      } @else {
+        <ws-card padding="md" class="my-dash__block">
+          <p class="my-dash__state">{{ 'MY_DASHBOARD.NO_MONEY_YET' | translate }}</p>
+        </ws-card>
+      }
+
+      <!-- ── Attainment against the live quotas ──────────────────────────── -->
+      <ws-card padding="md" class="my-dash__block">
+        <div class="my-dash__block-hd">
+          <h2 class="my-dash__block-title">{{ 'MY_DASHBOARD.QUOTAS_TITLE' | translate }}</h2>
+        </div>
+
+        @if (!store.quotas().length) {
+          <p class="my-dash__state">{{ 'MY_DASHBOARD.QUOTAS_EMPTY' | translate }}</p>
+        } @else {
+          @for (q of store.quotas(); track q.quotaId) {
+            <div class="my-dash__quota">
+              <!-- ★ A quota with no target gets no gauge. Drawing 0% would accuse the reader of a
+                   result that is really a gap in the configuration, and they cannot fix it. -->
+              @if (hasTarget(q)) {
+                <div class="my-dash__gauge">
+                  <ws-gauge [value]="q.attainmentRatio" />
+                </div>
+              } @else {
+                <div class="my-dash__gauge my-dash__gauge--none">
+                  <app-icon name="help-circle" [size]="24" />
+                </div>
+              }
+
+              <div class="my-dash__quota-info">
+                <span class="my-dash__quota-plan">{{ q.planName }}</span>
+
+                @if (hasTarget(q)) {
+                  <span class="my-dash__quota-figures">
+                    @if (isUnits(q)) {
+                      {{ q.achievedAmount }} / {{ q.targetAmount }}
+                      {{ 'MY_DASHBOARD.UNITS' | translate }}
+                    } @else {
+                      {{ q.achievedAmount | currencyFormat: q.currency }} /
+                      {{ q.targetAmount | currencyFormat: q.currency }}
+                    }
+                  </span>
+                } @else {
+                  <span class="my-dash__quota-figures">
+                    {{ 'MY_DASHBOARD.NO_TARGET' | translate }}
+                  </span>
+                }
+
+                <span class="my-dash__quota-period">
+                  {{ q.periodStart | dateFormat }} – {{ q.periodEnd | dateFormat }}
+                </span>
+              </div>
+            </div>
+          }
+        }
+      </ws-card>
+
+      <!-- ── Every movement, and why the balance is what it is ───────────────
+           ★ THE PANEL THE PAYEE PAGE ALREADY MOUNTS (§5.1). One rendering of the ledger, not two, so
+           the two screens cannot start telling different stories. The adjustment form inside it is
+           gated on Ledger.Adjust and is therefore invisible here. -->
+      @if (store.payeeId(); as payeeId) {
+        <app-payee-ledger-panel [payeeId]="payeeId" />
+      }
+    }
+  </ws-page-layout>
+</app-shell>

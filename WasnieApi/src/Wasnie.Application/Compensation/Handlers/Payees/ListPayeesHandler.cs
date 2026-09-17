@@ -12,10 +12,25 @@ using Wasnie.Domain.Compensation.Payees;
 
 namespace Wasnie.Application.Compensation.Handlers.Payees;
 
+/// <summary>
+/// The payee list (KAN-92, batch 4).
+///
+/// ★★ THE PERMISSION WAS NEVER THE WHOLE ANSWER. Payees.Read says "this role may read payee data";
+/// it does not say WHICH payees, and for a long time this handler asked only the first question. A
+/// Rep holds Payees.Read legitimately — they have to see their own record — and so every Rep could
+/// page through the entire company: names, employee codes and EMAIL ADDRESSES of every colleague.
+/// The per-resource endpoints were already guarded; a list cannot be, because it takes no payee id.
+/// It has to be FILTERED, which is why PayeeVisibility carries a set and not a boolean.
+///
+/// ★ AN EMPTY SET IS AN EMPTY PAGE, NOT AN ERROR. Somebody whose account is not linked to a payee
+/// sees no rows and a total of zero — the same answer as a company with no payees, which is correct:
+/// from where they stand there is nothing to list. It is not a refusal, so it raises no alert.
+/// </summary>
 public sealed class ListPayeesHandler(
     IApplicationDbContext db,
     ITenantContext tenantContext,
-    IAuthorizationService authorizationService)
+    IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard)
     : IRequestHandler<ListPayeesQuery, Result<PagedResult<PayeeDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -26,6 +41,16 @@ public sealed class ListPayeesHandler(
         await authorizationService.RequireAsync(Permission.PayeesRead, cancellationToken);
         var p = request.Pagination;
         var query = db.Payees.AsQueryable();
+
+        // ★ The narrowing goes FIRST, before search, filters and paging, so the total count is the
+        // count of what this reader may see. Applying it later would page over other people's rows and
+        // report a total that includes them — the number itself would disclose the roster.
+        var visibility = await payeeAccessGuard.GetVisibilityAsync(cancellationToken);
+        if (!visibility.IsUnrestricted)
+        {
+            var visibleIds = visibility.PayeeIds;
+            query = query.Where(x => visibleIds.Contains(x.Id));
+        }
 
         // Search
         if (!string.IsNullOrWhiteSpace(p.Search))

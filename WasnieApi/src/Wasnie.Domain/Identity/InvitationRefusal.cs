@@ -1,4 +1,4 @@
-namespace Wasnie.Domain.Identity;
+﻿namespace Wasnie.Domain.Identity;
 
 /// <summary>
 /// WHY AN INVITATION WAS REFUSED, AS A CODE THE FRONT END TRANSLATES (KAN-32).
@@ -40,6 +40,18 @@ public static class InvitationRefusal
 
     /// <summary>The role asked for is not one this product has.</summary>
     public const string RoleUnknown = "INVITATION_ROLE_UNKNOWN";
+
+    /// <summary>The payee chosen for this invitation is not in this workspace, or no longer exists.</summary>
+    public const string PayeeNotFound = "INVITATION_PAYEE_NOT_FOUND";
+
+    /// <summary>
+    /// That payee already belongs to somebody else's login.
+    ///
+    /// IT IS REFUSED RATHER THAN RE-POINTED. Moving a payee from one user to another is a change of
+    /// who sees that person's pay, and it is not a side effect of sending an invitation. Unlink it
+    /// deliberately first.
+    /// </summary>
+    public const string PayeeAlreadyLinked = "INVITATION_PAYEE_ALREADY_LINKED";
 
     /// <summary>
     /// The last remaining administrator cannot be deactivated or demoted.

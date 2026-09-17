@@ -9,6 +9,7 @@ import {
   TenantRole,
   TenantUser,
   TenantUsersResponse,
+  UnlinkedPayeesResponse,
 } from '../models/user.model';
 
 /**
@@ -75,8 +76,23 @@ export class UsersStore {
     }
   }
 
-  async invite(email: string, role: TenantRole): Promise<boolean> {
-    return this.mutate(() => firstValueFrom(this.api.invite({ email, role })));
+  async invite(email: string, role: TenantRole, payeeId: string | null): Promise<boolean> {
+    return this.mutate(() => firstValueFrom(this.api.invite({ email, role, payeeId })));
+  }
+
+  /**
+   * KAN-92. The payees the invite form may attach somebody to.
+   *
+   * ★ IT DOES NOT GO THROUGH `mutate`. Failing to load the picker must not raise the refusal toast:
+   * the admin can still invite without attaching a payee, and an error here is not a refusal of
+   * anything they asked for.
+   */
+  async loadUnlinkedPayees(emailHint?: string): Promise<UnlinkedPayeesResponse | null> {
+    try {
+      return await firstValueFrom(this.api.unlinkedPayees(emailHint));
+    } catch {
+      return null;
+    }
   }
 
   async resend(invitationId: string): Promise<boolean> {
@@ -147,6 +163,8 @@ export class UsersStore {
       case 'INVITATION_EMAIL_ALREADY_INVITED': return 'USERS.REFUSAL.ALREADY_INVITED';
       case 'INVITATION_NO_SEATS_AVAILABLE': return 'USERS.REFUSAL.NO_SEATS';
       case 'INVITATION_ROLE_UNKNOWN': return 'USERS.REFUSAL.ROLE_UNKNOWN';
+      case 'INVITATION_PAYEE_NOT_FOUND': return 'USERS.REFUSAL.PAYEE_NOT_FOUND';
+      case 'INVITATION_PAYEE_ALREADY_LINKED': return 'USERS.REFUSAL.PAYEE_ALREADY_LINKED';
       case 'INVITATION_TOKEN_ALREADY_USED': return 'USERS.REFUSAL.ALREADY_USED';
       case 'INVITATION_TOKEN_EXPIRED': return 'USERS.REFUSAL.EXPIRED';
       case 'INVITATION_TOKEN_REVOKED': return 'USERS.REFUSAL.REVOKED';

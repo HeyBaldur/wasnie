@@ -1,4 +1,4 @@
-using Wasnie.Domain.Identity;
+﻿using Wasnie.Domain.Identity;
 
 namespace Wasnie.Application.Features.Users.DTOs;
 
@@ -65,3 +65,17 @@ public sealed record SeatUsageDto(int Used, int ActiveUsers, int PendingInvitati
 /// Nothing else about the tenant leaves the server on this route.
 /// </summary>
 public sealed record InvitationPreviewDto(string Email, string CompanyName, string InviterName);
+
+/// <summary>A payee that could be attached to the person being invited.</summary>
+public sealed record UnlinkedPayeeDto(Guid Id, string FullName, string? EmployeeCode, string? Email);
+
+/// <summary>
+/// The pickable payees, plus the one whose address matches — if any.
+///
+/// SUGGESTED IS A SUGGESTION AND NOTHING MORE. It is offered so the admin does not hunt through a
+/// list of fifty names, and the form must PRE-SELECT NOTHING: a matching address is a hint, and a
+/// wrong hint accepted by reflex shows one person another person's pay. The admin chooses.
+/// </summary>
+public sealed record UnlinkedPayeesResponse(
+    IReadOnlyList<UnlinkedPayeeDto> Payees,
+    UnlinkedPayeeDto? Suggested);

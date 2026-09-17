@@ -31,6 +31,22 @@ public sealed class UsersController(IMediator mediator) : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// The payees nobody owns yet, for the invite form's picker (KAN-92). The optional email hint
+    /// makes the server point at a likely match — it never selects it.
+    /// </summary>
+    [HttpGet("unlinked-payees")]
+    public async Task<IActionResult> UnlinkedPayees(
+        [FromQuery] string? email,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ListUnlinkedPayeesQuery(email), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(result.Value);
+    }
+
     [HttpPost("invitations")]
     public async Task<IActionResult> Invite(
         [FromBody] InviteUserCommand command,

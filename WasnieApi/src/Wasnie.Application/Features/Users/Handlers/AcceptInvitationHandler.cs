@@ -121,6 +121,35 @@ public sealed class AcceptInvitationHandler(
             invitation.InvitedBy,
             now));
 
+        // KAN-92. THE PAYEE IS LINKED HERE, and this is the whole point of carrying PayeeId on the
+        // invitation: the administrator decided WHO this person is, and acceptance is when there is
+        // finally a user id to attach.
+        //
+        // IT IS RE-CHECKED, NOT TRUSTED. Days pass between sending and accepting; the payee may have
+        // been deleted or linked to somebody else meanwhile. A stale id that silently pointed at
+        // another person would hand them that person's pay, so a payee that is gone or already taken
+        // is SKIPPED and logged rather than forced. The account is still created and can be linked by
+        // hand - refusing the whole acceptance over it would strand somebody outside the product for
+        // a problem only an administrator can fix.
+        if (invitation.PayeeId is Guid linkPayeeId)
+        {
+            var payee = await db.Payees
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(
+                    p => p.Id == linkPayeeId && p.TenantId == invitation.TenantId, cancellationToken);
+
+            if (payee is null)
+                logger.LogWarning(
+                    "Invitation {InvitationId} named payee {PayeeId}, which no longer exists. Link skipped.",
+                    invitation.Id, linkPayeeId);
+            else if (payee.UserId is not null && payee.UserId != userId)
+                logger.LogWarning(
+                    "Invitation {InvitationId} named payee {PayeeId}, already linked to another user. Link skipped.",
+                    invitation.Id, linkPayeeId);
+            else
+                payee.LinkToUser(userId, invitation.Email, now);
+        }
+
         // One SaveChanges: the invitation stops being usable and the access row appears together, or
         // neither does. There is no unit of work in this codebase — atomicity IS the single save.
         await db.SaveChangesAsync(cancellationToken);
