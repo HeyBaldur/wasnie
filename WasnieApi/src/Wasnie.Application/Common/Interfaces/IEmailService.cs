@@ -27,6 +27,18 @@ public interface IEmailService
         string language,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Invites somebody who may have no Incentra account at all to join a tenant (KAN-32).
+    /// </summary>
+    Task SendInvitationAsync(
+        string to,
+        string inviterName,
+        string companyName,
+        string acceptUrl,
+        int expiryDays,
+        string language,
+        CancellationToken cancellationToken = default);
+
     Task SendEmailChangeConfirmationAsync(
         string to,
         string firstName,

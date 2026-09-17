@@ -32,6 +32,9 @@ export class LoginComponent {
   readonly emailNotConfirmed = signal(false);
   /** null = not locked. minutes === null = locked, but the API did not give a usable countdown. */
   readonly accountLocked = signal<{ minutes: number | null } | null>(null);
+
+  /** KAN-91. True once the API has said the address is in more than one workspace. */
+  readonly organizationRequired = signal(false);
   readonly alreadyConfirmed = signal(
     this.route.snapshot.queryParamMap.has('alreadyConfirmed')
   );
@@ -42,6 +45,9 @@ export class LoginComponent {
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', Validators.required],
+    // KAN-91. Not required: the field only appears after the API says the address is in more than
+    // one workspace, so asking for it up front would teach a new step to people who never need it.
+    organizationId: [''],
   });
 
   private readonly toast = inject(ToastService);
@@ -95,7 +101,16 @@ export class LoginComponent {
         const message: string = err?.error?.message ?? '';
         const lock = LoginComponent.parseAccountLocked(message);
 
-        if (message === 'EMAIL_NOT_CONFIRMED') {
+        if (message === 'ORGANIZATION_REQUIRED') {
+          // KAN-91. The password was already accepted; what is missing is WHICH workspace. The field
+          // appears now rather than on first load, and the answer names no workspace — that list is
+          // private, and returning it would tell whoever holds this password every company the
+          // person works for.
+          this.organizationRequired.set(true);
+          this.form.controls.organizationId.addValidators(Validators.required);
+          this.form.controls.organizationId.updateValueAndValidity();
+          this.error.set(this.translate.instant('AUTH.ORGANIZATION_REQUIRED'));
+        } else if (message === 'EMAIL_NOT_CONFIRMED') {
           this.emailNotConfirmed.set(true);
         } else if (lock !== null) {
           this.accountLocked.set(lock);

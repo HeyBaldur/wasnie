@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -11,6 +11,7 @@ using Wasnie.Application.Features.Auth.Commands;
 using Wasnie.Application.Features.Auth.DTOs;
 using Wasnie.Application.Features.Auth.Mappings;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Entities;
 using Wasnie.Domain.Identity;
@@ -88,6 +89,17 @@ public sealed class RegisterTenantCommandHandler(
         var (rawToken, tokenHash) = GenerateToken();
         dbContext.EmailConfirmationTokens.Add(
             EmailConfirmationToken.Create(guid.NewGuid(), userId, tokenHash, now.AddHours(48), now));
+
+        // KAN-91. THE FOUNDER GETS A MEMBERSHIP, NOT JUST A CLAIM, and forgetting this was a real
+        // defect an integration test caught: B44 backfilled every account that existed when it ran,
+        // so the gap only appeared for tenants registered AFTERWARDS. Those founders fell through to
+        // the claim fallback in sign-in, which works — and would have quietly kept working — while
+        // making it impossible for them ever to belong to a second workspace.
+        //
+        // InvitedBy is null on purpose: nobody invited them, they created the place.
+        dbContext.TenantUsers.Add(Wasnie.Domain.Identity.TenantUser.Create(
+            guid.NewGuid(), tenant.Id, userId, Roles.TenantAdmin, null, null, now));
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         // Send confirmation email. Log failure but don't abort registration.

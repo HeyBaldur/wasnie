@@ -1,4 +1,5 @@
-using System.Text;
+﻿using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Wasnie.Application.Common.Interfaces;
 
@@ -309,5 +310,67 @@ public sealed class IdentityService(
             sb.Append(char.ToUpperInvariant(key[i]));
         }
         return sb.ToString();
+    }
+
+    // ── KAN-32, user administration ──────────────────────────────────────────
+
+    public async Task<(bool Succeeded, IList<string> Errors)> ReplaceUserRolesAsync(
+        string userId, IList<string> roles)
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null) return (false, new List<string> { "User not found." });
+
+        var current = await userManager.GetRolesAsync(user);
+
+        var removed = await userManager.RemoveFromRolesAsync(user, current);
+        if (!removed.Succeeded)
+            return (false, removed.Errors.Select(e => e.Description).ToList());
+
+        var added = await userManager.AddToRolesAsync(user, roles);
+        return added.Succeeded
+            ? (true, new List<string>())
+            : (false, added.Errors.Select(e => e.Description).ToList());
+    }
+
+    public async Task<IReadOnlyList<string>> GetTenantUserIdsAsync(string tenantId)
+    {
+        var users = await userManager.GetUsersForClaimAsync(
+            new System.Security.Claims.Claim("tenant_id", tenantId));
+
+        return users.Select(u => u.Id).ToList();
+    }
+
+    public async Task<IReadOnlyList<IdentityUserSummary>> GetUserSummariesAsync(
+        IReadOnlyCollection<string> userIds)
+    {
+        if (userIds.Count == 0) return [];
+
+        var ids = userIds.ToHashSet(StringComparer.Ordinal);
+
+        var users = await userManager.Users
+            .Where(u => ids.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email, u.EmailConfirmed })
+            .ToListAsync();
+
+        var summaries = new List<IdentityUserSummary>(users.Count);
+
+        foreach (var u in users)
+        {
+            var user = await userManager.FindByIdAsync(u.Id);
+            if (user is null) continue;
+
+            var claims = await userManager.GetClaimsAsync(user);
+            var roles = await userManager.GetRolesAsync(user);
+
+            summaries.Add(new IdentityUserSummary(
+                u.Id,
+                u.Email ?? string.Empty,
+                claims.FirstOrDefault(c => c.Type == "given_name")?.Value,
+                claims.FirstOrDefault(c => c.Type == "family_name")?.Value,
+                roles.FirstOrDefault(),
+                u.EmailConfirmed));
+        }
+
+        return summaries;
     }
 }

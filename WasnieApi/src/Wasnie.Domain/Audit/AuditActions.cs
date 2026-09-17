@@ -194,4 +194,28 @@ public static class AuditActions
     // ReconciliationClosures, never by this entry: an audit log that has been known to record
     // actions that did not happen may not be what hides money from a CFO. See KAN-34.
     public const string ReconciliationRowClosed = "RECONCILIATION_ROW_CLOSED";
+
+    // ── KAN-32, user administration ──────────────────────────────────────────
+    //
+    // ★ THE INVITE AND THE ACCEPT ARE TWO ENTRIES, NOT ONE. They are done by two different people,
+    // possibly days apart, and the question an auditor asks — "who let this person in" — is answered
+    // by the first while "when did they actually get in" is answered by the second. One entry would
+    // have to pick a single actor and would get the other one wrong.
+    public const string UserInvited = "USER_INVITED";
+    public const string InvitationAccepted = "INVITATION_ACCEPTED";
+    public const string InvitationResent = "INVITATION_RESENT";
+    public const string InvitationRevoked = "INVITATION_REVOKED";
+    public const string UserDeactivated = "USER_DEACTIVATED";
+    public const string UserReactivated = "USER_REACTIVATED";
+    public const string UserRoleChanged = "USER_ROLE_CHANGED";
+
+    /// <summary>
+    /// KAN-91. Somebody was taken out of a workspace entirely.
+    ///
+    /// ★ THE ROW GOES, THE PERSON DOES NOT. Deactivating keeps them listed with access closed;
+    /// removing ends their membership of THIS workspace and leaves the account, their sign-in and
+    /// everything they ever approved untouched. This entry is what remembers the membership existed,
+    /// which is why removal writes one before it deletes anything.
+    /// </summary>
+    public const string UserRemoved = "USER_REMOVED";
 }

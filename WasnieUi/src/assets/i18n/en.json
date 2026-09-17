@@ -41,7 +41,10 @@
     "ALREADY_CONFIRMED": "Your account is already confirmed. Sign in below.",
     "FORGOT_PASSWORD": "Forgot password?",
     "PASSWORD_RESET_SUCCESS": "Password updated. Sign in with your new password.",
-    "BACK_TO_LOGIN": "Back to sign in"
+    "BACK_TO_LOGIN": "Back to sign in",
+    "ORGANIZATION_ID": "Organization identifier",
+    "ORGANIZATION_ID_HINT": "Only needed if your email is used in more than one workspace.",
+    "ORGANIZATION_REQUIRED": "This email is used in more than one workspace. Enter the organization identifier to continue."
   },
   "FORGOT_PASSWORD": {
     "TITLE": "AI token usage",
@@ -220,7 +223,8 @@
     "UPGRADE_BTN": "Upgrade",
     "UPGRADE_TOOLTIP": "You're on the Free plan — upgrade to Professional",
     "PLAN_BADGE_TOOLTIP": "Manage your subscription",
-    "AUDIT_LOGS": "Audit logs"
+    "AUDIT_LOGS": "Audit logs",
+    "USERS": "Users"
   },
   "NAV": {
     "TOGGLE": "Toggle sidebar",
@@ -251,7 +255,8 @@
     "AUDIT_LOGS": "Audit logs",
     "GUIDED_TOUR": "Sandbox",
     "PRICING": "Pricing",
-    "MANAGE_BILLING": "Manage billing"
+    "MANAGE_BILLING": "Manage billing",
+    "USERS": "Users"
   },
   "WELCOME": {
     "EYEBROW": "Your workspace is ready",
@@ -2144,7 +2149,7 @@
     "SUBTITLE": "Manage your personal details and account security.",
     "LOAD_ERROR": "We couldn't load your profile. Please try again.",
     "SECTION_YOUR_PROFILE": "Personal Details",
-    "SECTION_ORGANIZATION": "Organization",
+    "SECTION_ORGANIZATION": "Your organization",
     "NAME_HEADING": "Full Name",
     "NAME_MISSING_NOTICE": "Your name isn't set yet. Please fill in your first and last name and save.",
     "SAVE_NAME": "Save Name",
@@ -2176,7 +2181,10 @@
     "CONFIRM_EMAIL_LOADING": "Confirming your new email address…",
     "CONFIRM_EMAIL_SUCCESS_TITLE": "Email address updated!",
     "CONFIRM_EMAIL_SUCCESS_DESC": "Your email has been updated. Please sign in with your new address. Redirecting…",
-    "CONFIRM_EMAIL_ERROR_TITLE": "Link expired or invalid"
+    "CONFIRM_EMAIL_ERROR_TITLE": "Link expired or invalid",
+    "ORGANIZATION_ID_HEADING": "Organization identifier",
+    "ORGANIZATION_ID_HINT": "Give this to anyone you invite. They need it to sign in when their email is used in more than one workspace.",
+    "ORGANIZATION_ID_COPY": "Copy identifier"
   },
   "TWO_FACTOR": {
     "SECTION_TITLE": "Security",
@@ -3030,5 +3038,125 @@
     "LABEL": "Free trial",
     "ENDS_ON": "Your trial ends {{date}}",
     "CTA": "Upgrade"
+  },
+  "USERS": {
+    "TITLE": "Users",
+    "SUBTITLE": "Who has access to this workspace, and the invitations still open.",
+    "SECTION": {
+      "PEOPLE": "People",
+      "PENDING": "Pending invitations",
+      "HISTORY": "Closed invitations ({{count}})"
+    },
+    "TABLE": {
+      "NAME": "Name",
+      "EMAIL": "Email",
+      "ROLE": "Role",
+      "STATUS": "Status",
+      "INVITED_BY": "Invited by",
+      "SENT": "Sent",
+      "EXPIRES": "Expires",
+      "FOUNDER": "Created the workspace",
+      "RESENT": "Resent {{count}}x"
+    },
+    "STATUS": {
+      "ACTIVE": "Active",
+      "DEACTIVATED": "Deactivated",
+      "UNCONFIRMED": "Email not confirmed"
+    },
+    "INVITATION_STATUS": {
+      "PENDING": "Pending",
+      "ACCEPTED": "Accepted",
+      "EXPIRED": "Expired",
+      "REVOKED": "Revoked"
+    },
+    "ROLES": {
+      "TENANT_ADMIN": "Administrator",
+      "COMP_MANAGER": "Compensation manager",
+      "MANAGER": "Manager",
+      "REP": "Sales rep",
+      "UNKNOWN": "No role"
+    },
+    "ACTION": {
+      "DEACTIVATE": "Deactivate",
+      "REACTIVATE": "Reactivate",
+      "RESEND": "Resend",
+      "REVOKE": "Revoke",
+      "CHANGE_ROLE": "Change role",
+      "REMOVE": "Remove from workspace"
+    },
+    "SEATS": {
+      "USED": "{{used}} of {{limit}} seats used",
+      "FULL": "All {{limit}} seats are in use. Deactivate somebody or withdraw an invitation to free one."
+    },
+    "INVITE": {
+      "BUTTON": "Invite user",
+      "TITLE": "Invite someone to this workspace",
+      "EMAIL_LABEL": "Email address",
+      "EMAIL_PLACEHOLDER": "name@company.com",
+      "EMAIL_ERROR": "Enter a valid email address.",
+      "ROLE_LABEL": "Role",
+      "ROLE_PLACEHOLDER": "Choose a role",
+      "ROLE_ERROR": "Choose a role.",
+      "HINT": "They will get an email with a link to set their password. The link is valid for 7 days.",
+      "SUBMIT": "Send invitation"
+    },
+    "DEACTIVATE": {
+      "TITLE": "Deactivate this user?",
+      "MESSAGE": "{{name}} will no longer be able to sign in. Nothing is deleted: their name stays on everything they approved or changed, and you can reactivate them at any time."
+    },
+    "REVOKE": {
+      "TITLE": "Withdraw this invitation?",
+      "MESSAGE": "The link sent to {{email}} will stop working. You can invite them again later."
+    },
+    "EMPTY": {
+      "TITLE": "Nobody here yet",
+      "MESSAGE": "Invite a colleague to give them access to this workspace."
+    },
+    "CHANGE_ROLE": {
+      "TITLE": "Change role",
+      "MESSAGE": "Choose the new role for {{name}}.",
+      "SUBMIT": "Save role"
+    },
+    "REFUSAL": {
+      "ALREADY_MEMBER": "That person is already in this workspace.",
+      "ALREADY_INVITED": "That address already has an invitation open. Resend it instead.",
+      "NO_SEATS": "All {{limit}} seats are in use. Free one before inviting anybody else.",
+      "ROLE_UNKNOWN": "That role does not exist.",
+      "ALREADY_USED": "That invitation has already been accepted.",
+      "EXPIRED": "That invitation has expired. Send a new one.",
+      "REVOKED": "That invitation was withdrawn.",
+      "LAST_ADMIN": "This is the only administrator left. Give somebody else the administrator role first, or nobody will be able to manage users.",
+      "CANNOT_ACT_ON_SELF": "You cannot change your own access. Ask another administrator."
+    },
+    "REMOVE": {
+      "TITLE": "Remove this person from the workspace?",
+      "MESSAGE": "{{name}} will no longer belong to this workspace and will disappear from this list. Their account, their access to any other workspace and their name on everything they approved all stay exactly as they are. You can invite them back at any time."
+    }
+  },
+  "ACCEPT_INVITATION": {
+    "TITLE_PLAIN": "Accept invitation",
+    "TITLE": "Join {{company}}",
+    "SUBTITLE": "You were invited at {{email}}. Choose a password to finish.",
+    "CHECKING": "Checking your invitation...",
+    "FIRST_NAME": "First name",
+    "LAST_NAME": "Last name",
+    "PASSWORD": "Password",
+    "PASSWORD_HINT": "At least 10 characters, with an uppercase letter, a digit and a symbol.",
+    "CONFIRM_PASSWORD": "Confirm password",
+    "PASSWORDS_MISMATCH": "The passwords do not match.",
+    "SUBMIT": "Create my account",
+    "GO_TO_LOGIN": "Go to sign in",
+    "DONE_TITLE": "You are all set",
+    "DONE_MESSAGE": "Your account is ready. Sign in to get started.",
+    "ERROR_GENERIC": "We could not finish that. Please try again.",
+    "REFUSAL": {
+      "TITLE": "This invitation cannot be used",
+      "INVALID": "This link is not valid. Ask whoever invited you to send a new one.",
+      "ALREADY_USED": "This invitation has already been accepted. Try signing in instead.",
+      "EXPIRED": "This invitation has expired. Ask whoever invited you to send a new one.",
+      "REVOKED": "This invitation was withdrawn. Contact whoever invited you.",
+      "ALREADY_MEMBER": "That email address already has an account. Try signing in instead.",
+      "GENERIC": "This invitation cannot be used. Ask whoever invited you to send a new one."
+    }
   }
 }

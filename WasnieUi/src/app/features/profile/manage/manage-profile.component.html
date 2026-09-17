@@ -23,6 +23,23 @@
     @if (!loading() && !loadError() && profile()) {
       <div class="profile-sections">
 
+        <!-- ── KAN-91: the workspace identifier ──────────────────────────────── -->
+        <!-- It sits FIRST because it is the one thing on this page an administrator opens the page
+             to fetch: their team cannot sign in without it once they belong to more than one
+             workspace. Read-only and copyable — it is an identifier, not a setting. -->
+        <section class="profile-section">
+          <h2 class="profile-section__title">{{ 'PROFILE.SECTION_ORGANIZATION' | translate }}</h2>
+
+          <ws-card class="profile-card">
+            <h3 class="profile-card__heading">{{ 'PROFILE.ORGANIZATION_ID_HEADING' | translate }}</h3>
+            <p class="profile-org__hint">{{ 'PROFILE.ORGANIZATION_ID_HINT' | translate }}</p>
+            <div class="profile-org__value">
+              <code>{{ organizationId() }}</code>
+              <ws-copy-button [value]="organizationId()" label="PROFILE.ORGANIZATION_ID_COPY" [size]="16" />
+            </div>
+          </ws-card>
+        </section>
+
         <!-- ── Section 1: Your Profile (editable) ────────────────────────────── -->
         <section class="profile-section">
           <h2 class="profile-section__title">{{ 'PROFILE.SECTION_YOUR_PROFILE' | translate }}</h2>

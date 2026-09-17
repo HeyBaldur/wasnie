@@ -1,4 +1,4 @@
-namespace Wasnie.Infrastructure.Services.Email;
+﻿namespace Wasnie.Infrastructure.Services.Email;
 
 internal static class EmailTemplates
 {
@@ -75,6 +75,50 @@ internal static class EmailTemplates
             "Prawie gotowe. Potwierdź swój adres e-mail, aby aktywować swoją przestrzeń roboczą w Incentrze.",
             "Potwierdź adres e-mail", url,
             "Link jest ważny przez 48 godzin. Jeśli nie zakładałeś konta w Incentrze, możesz zignorować tę wiadomość."));
+
+    /// <summary>
+    /// The invitation to join a tenant (KAN-32).
+    ///
+    /// ★ IT NAMES THE INVITER AND THE COMPANY. The recipient may have no idea what Incentra is, and an
+    /// unexplained "set your password" link from an unknown product is indistinguishable from phishing.
+    /// Saying who asked for them by name is what makes it legible.
+    ///
+    /// ★ IT DOES NOT NAME THE ROLE. What "CompManager" means is a matter for the person's first day,
+    /// not for an email they read before they have an account, and a role name out of context reads as
+    /// jargon rather than as information.
+    /// </summary>
+    public static (string Subject, string Html) Invitation(
+        string inviterName, string companyName, string acceptUrl, int expiryDays, string language) =>
+        language switch
+        {
+            "es" => InvitationEs(inviterName, companyName, acceptUrl, expiryDays),
+            "pl" => InvitationPl(inviterName, companyName, acceptUrl, expiryDays),
+            _ => InvitationEn(inviterName, companyName, acceptUrl, expiryDays),
+        };
+
+    private static (string, string) InvitationEn(string inviter, string company, string url, int days) => (
+        $"{Escape(inviter)} invited you to {Escape(company)} on Incentra",
+        Layout("Hello,",
+            $"{Escape(inviter)} has invited you to join <strong>{Escape(company)}</strong> on Incentra, "
+            + "where the company manages its sales commissions. Use the button below to set your password and sign in.",
+            "Accept the invitation", url,
+            $"This invitation expires in {days} days. If you were not expecting it, you can ignore this email — no account is created until you accept."));
+
+    private static (string, string) InvitationEs(string inviter, string company, string url, int days) => (
+        $"{Escape(inviter)} le ha invitado a {Escape(company)} en Incentra",
+        Layout("Hola:",
+            $"{Escape(inviter)} le ha invitado a unirse a <strong>{Escape(company)}</strong> en Incentra, "
+            + "la plataforma donde la empresa gestiona sus comisiones de ventas. Use el botón para establecer su contraseña y acceder.",
+            "Aceptar la invitación", url,
+            $"Esta invitación caduca en {days} días. Si no la esperaba, puede ignorar este mensaje: no se crea ninguna cuenta hasta que la acepte."));
+
+    private static (string, string) InvitationPl(string inviter, string company, string url, int days) => (
+        $"{Escape(inviter)} zaprasza Cię do {Escape(company)} w Incentrze",
+        Layout("Witaj,",
+            $"{Escape(inviter)} zaprasza Cię do dołączenia do firmy <strong>{Escape(company)}</strong> w Incentrze, "
+            + "gdzie firma zarządza prowizjami sprzedażowymi. Użyj przycisku poniżej, aby ustawić hasło i się zalogować.",
+            "Przyjmij zaproszenie", url,
+            $"To zaproszenie wygasa za {days} dni. Jeśli się go nie spodziewałeś, zignoruj tę wiadomość — konto powstaje dopiero po jego przyjęciu."));
 
     private static (string, string) PasswordResetEn(string firstName, string url) => (
         "Reset your Incentra password",

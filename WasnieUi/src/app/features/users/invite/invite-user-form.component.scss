@@ -1,0 +1,18 @@
+// The invite form (KAN-32). Lives inside ws-modal — never on the page background (§5.2).
+// Tokens only; the numeric font scale, because --font-size-sm does not exist.
+
+.invite-form__field {
+  margin-bottom: var(--space-4);
+}
+
+.invite-form__hint {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+.invite-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

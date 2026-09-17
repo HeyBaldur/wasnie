@@ -137,4 +137,26 @@ public static class Permission
 
     // Connecting a CRM exposes the tenant's data to a third party — restricted to tenant admins.
     public const string IntegrationsManage = "Integrations.Manage";
+
+    /// <summary>
+    /// Seeing who has access to the tenant, and which invitations are outstanding.
+    ///
+    /// ★ SEPARATE FROM <see cref="UsersManage"/> because the two answer different questions. Reading
+    /// the list is how a CompManager works out who to ask about a pay run; handing somebody a login is
+    /// not part of that job. The same split as Ledger.Read against Ledger.Adjust.
+    /// </summary>
+    public const string UsersRead = "Users.Read";
+
+    /// <summary>
+    /// Inviting, revoking, deactivating and changing somebody's role (KAN-32).
+    ///
+    /// ★★ ONE PERMISSION FOR ALL FOUR, AND ON PURPOSE. They are the same power wearing four verbs:
+    /// whoever can invite a TenantAdmin can already grant themselves anything, so withholding "change
+    /// role" from them would protect nothing. Splitting it would suggest a boundary that does not
+    /// exist. This is the opposite case to Payouts.MarkPaid against Payouts.Discard, where the two
+    /// genuinely are different authorities over money.
+    ///
+    /// ★ TENANT ADMIN ONLY. A CompManager runs compensation; they do not decide who works here.
+    /// </summary>
+    public const string UsersManage = "Users.Manage";
 }

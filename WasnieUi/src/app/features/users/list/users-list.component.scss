@@ -1,0 +1,197 @@
+@reference "../../../../styles.scss";
+
+// Users and invitations (KAN-32).
+//
+// ★★ THE VISUAL LANGUAGE IS THE PAYEES LIST'S, NOT A NEW ONE. Same avatar chip, same identity
+//    column with a secondary line under the name, same column classes, same ⋮ row menu. Two screens
+//    that list people differently are two screens to learn (§5.1).
+//
+// ★ THE AVATAR AND ROW-MENU BLOCKS ARE COPIED, NOT SHARED, and that is this repo's existing
+//   convention rather than a preference: payees, assignments and quotas each carry their own copy
+//   because Angular's view encapsulation scopes them per component. This makes a fourth. Extracting
+//   all four into a global partial is worth doing and is NOT this ticket — it would touch three
+//   working screens to change nothing a user can see.
+//
+// ★ TOKENS ONLY (§5.5), and the scale was checked rather than assumed: `--font-size-sm`,
+//   `--font-size-xs` and `--font-weight-medium` DO NOT EXIST in styles.scss. Sizes are numeric
+//   (--font-size-11 … --font-size-32); weights are plain numbers.
+
+.users__toolbar {
+  @apply flex items-center flex-wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.users__seats {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.users__notice {
+  @apply flex items-center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+// A section is a heading plus its table. The gap above is what separates it from the table before,
+// so the page reads as bands rather than one undifferentiated run of rows.
+.users__section {
+  margin-top: var(--space-8);
+}
+
+.users__section-title {
+  @apply flex items-center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-15);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.users__history-toggle {
+  @apply flex items-center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+
+  &:hover { color: var(--color-text-primary); }
+}
+
+// ★ Greyed, not hidden. A deactivated person keeps holding the audit trail's references (§B6), so
+//   the row stays readable — just visibly out of service.
+.users__row--inactive {
+  .user-name, .user-email { color: var(--color-text-tertiary); }
+
+  .user-avatar {
+    background: var(--color-bg-surface-sunken);
+    color: var(--color-text-tertiary);
+  }
+}
+
+// ── Columns, matching the Payees list ──────────────────────────────────────
+
+.col-name { min-width: 240px; }
+.col-secondary { font-size: var(--font-size-13); color: var(--color-text-secondary); }
+.col-actions { width: 48px; }
+
+// ── Identity, matching the Payees list ─────────────────────────────────────
+
+.user-identity {
+  @apply flex items-center;
+  gap: var(--space-3);
+}
+
+.user-avatar {
+  @apply flex items-center justify-center shrink-0 text-xs font-semibold;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand-subtle);
+  color: var(--color-brand);
+}
+
+// An invitation has no person behind it yet, so it gets an envelope rather than initials — and a
+// quieter colour, because it is not yet somebody.
+.user-avatar--pending {
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-tertiary);
+}
+
+.user-identity__text {
+  @apply flex flex-col min-w-0;
+}
+
+.user-name {
+  font-size: var(--font-size-14);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  @apply truncate;
+}
+
+.user-email {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  @apply truncate;
+}
+
+// ── The ⋮ row menu, matching the Payees list ───────────────────────────────
+
+.row-menu {
+  position: relative;
+
+  &__trigger {
+    @apply flex items-center justify-center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-tertiary);
+    transition: background var(--transition-fast), color var(--transition-fast);
+
+    &:hover, &--open {
+      background: var(--color-bg-surface-sunken);
+      color: var(--color-text-primary);
+    }
+  }
+
+  &__dropdown {
+    position: fixed;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-popover);
+    min-width: 176px;
+    z-index: 20;
+    padding: var(--space-1);
+    animation: row-menu-in var(--transition-base) ease;
+  }
+
+  &__item {
+    @apply flex items-center w-full;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-13);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    text-decoration: none;
+
+    &:hover { background: var(--color-bg-surface-raised); }
+    &--danger { color: var(--color-danger); }
+    &--danger:hover { background: var(--color-danger-bg); }
+  }
+}
+
+@keyframes row-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+// ── The role modal ─────────────────────────────────────────────────────────
+
+.users__role-form {
+  @apply flex flex-col;
+  gap: var(--space-4);
+}
+
+.users__role-form-who {
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.users__role-form-actions {
+  @apply flex justify-end;
+  gap: var(--space-2);
+}

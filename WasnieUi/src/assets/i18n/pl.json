@@ -41,7 +41,10 @@
     "ALREADY_CONFIRMED": "Twoje konto jest już potwierdzone. Zaloguj się poniżej.",
     "FORGOT_PASSWORD": "Nie pamiętasz hasła?",
     "PASSWORD_RESET_SUCCESS": "Hasło zostało zaktualizowane. Zaloguj się nowym hasłem.",
-    "BACK_TO_LOGIN": "Powrót do logowania"
+    "BACK_TO_LOGIN": "Powrót do logowania",
+    "ORGANIZATION_ID": "Identyfikator organizacji",
+    "ORGANIZATION_ID_HINT": "Potrzebny tylko wtedy, gdy Twój adres jest używany w więcej niż jednej przestrzeni roboczej.",
+    "ORGANIZATION_REQUIRED": "Ten adres e-mail jest używany w więcej niż jednej przestrzeni roboczej. Podaj identyfikator organizacji, aby kontynuować."
   },
   "FORGOT_PASSWORD": {
     "TITLE": "Zresetuj swoje hasło",
@@ -197,7 +200,8 @@
     "UPGRADE_BTN": "Uaktualnij",
     "UPGRADE_TOOLTIP": "Jesteś na planie Darmowym — przejdź na Profesjonalny",
     "PLAN_BADGE_TOOLTIP": "Zarządzaj subskrypcją",
-    "AUDIT_LOGS": "Dziennik audytu"
+    "AUDIT_LOGS": "Dziennik audytu",
+    "USERS": "Użytkownicy"
   },
   "NAV": {
     "TOGGLE": "Zwiń pasek boczny",
@@ -228,7 +232,8 @@
     "AUDIT_LOGS": "Dziennik audytu",
     "GUIDED_TOUR": "Piaskownica",
     "PRICING": "Cennik",
-    "MANAGE_BILLING": "Rozliczenia"
+    "MANAGE_BILLING": "Rozliczenia",
+    "USERS": "Użytkownicy"
   },
   "WELCOME": {
     "EYEBROW": "Twoja przestrzeń jest gotowa",
@@ -2121,7 +2126,7 @@
     "SUBTITLE": "Zarządzaj swoimi danymi osobowymi i bezpieczeństwem konta.",
     "LOAD_ERROR": "Nie udało się załadować profilu. Spróbuj ponownie.",
     "SECTION_YOUR_PROFILE": "Dane osobowe",
-    "SECTION_ORGANIZATION": "Organizacja",
+    "SECTION_ORGANIZATION": "Twoja organizacja",
     "NAME_HEADING": "Imię i nazwisko",
     "NAME_MISSING_NOTICE": "Twoje imię i nazwisko nie zostało jeszcze ustawione. Uzupełnij je i zapisz zmiany.",
     "SAVE_NAME": "Zapisz imię",
@@ -2153,7 +2158,10 @@
     "CONFIRM_EMAIL_LOADING": "Potwierdzanie nowego adresu e-mail…",
     "CONFIRM_EMAIL_SUCCESS_TITLE": "Adres e-mail zaktualizowany!",
     "CONFIRM_EMAIL_SUCCESS_DESC": "Twój e-mail został zaktualizowany. Zaloguj się przy użyciu nowego adresu. Przekierowywanie…",
-    "CONFIRM_EMAIL_ERROR_TITLE": "Link wygasł lub jest nieprawidłowy"
+    "CONFIRM_EMAIL_ERROR_TITLE": "Link wygasł lub jest nieprawidłowy",
+    "ORGANIZATION_ID_HEADING": "Identyfikator organizacji",
+    "ORGANIZATION_ID_HINT": "Przekaż go osobom, które zapraszasz. Potrzebują go do logowania, gdy ich adres jest używany w więcej niż jednej przestrzeni roboczej.",
+    "ORGANIZATION_ID_COPY": "Kopiuj identyfikator"
   },
   "TWO_FACTOR": {
     "SECTION_TITLE": "Bezpieczeństwo",
@@ -3007,5 +3015,125 @@
     "LABEL": "Okres próbny",
     "ENDS_ON": "Okres próbny kończy się {{date}}",
     "CTA": "Ulepsz plan"
+  },
+  "USERS": {
+    "TITLE": "Użytkownicy",
+    "SUBTITLE": "Kto ma dostęp do tej przestrzeni i które zaproszenia są wciąż otwarte.",
+    "SECTION": {
+      "PEOPLE": "Osoby",
+      "PENDING": "Oczekujące zaproszenia",
+      "HISTORY": "Zamknięte zaproszenia ({{count}})"
+    },
+    "TABLE": {
+      "NAME": "Imię i nazwisko",
+      "EMAIL": "E-mail",
+      "ROLE": "Rola",
+      "STATUS": "Status",
+      "INVITED_BY": "Zaproszony przez",
+      "SENT": "Wysłano",
+      "EXPIRES": "Wygasa",
+      "FOUNDER": "Założył przestrzeń",
+      "RESENT": "Wysłano ponownie {{count}}x"
+    },
+    "STATUS": {
+      "ACTIVE": "Aktywny",
+      "DEACTIVATED": "Dezaktywowany",
+      "UNCONFIRMED": "E-mail niepotwierdzony"
+    },
+    "INVITATION_STATUS": {
+      "PENDING": "Oczekuje",
+      "ACCEPTED": "Przyjęte",
+      "EXPIRED": "Wygasło",
+      "REVOKED": "Cofnięte"
+    },
+    "ROLES": {
+      "TENANT_ADMIN": "Administrator",
+      "COMP_MANAGER": "Menedżer wynagrodzeń",
+      "MANAGER": "Kierownik",
+      "REP": "Handlowiec",
+      "UNKNOWN": "Brak roli"
+    },
+    "ACTION": {
+      "DEACTIVATE": "Dezaktywuj",
+      "REACTIVATE": "Aktywuj ponownie",
+      "RESEND": "Wyślij ponownie",
+      "REVOKE": "Cofnij",
+      "CHANGE_ROLE": "Zmień rolę",
+      "REMOVE": "Usuń z przestrzeni roboczej"
+    },
+    "SEATS": {
+      "USED": "Wykorzystano {{used}} z {{limit}} miejsc",
+      "FULL": "Wszystkie {{limit}} miejsc jest zajętych. Dezaktywuj kogoś lub cofnij zaproszenie, aby zwolnić miejsce."
+    },
+    "INVITE": {
+      "BUTTON": "Zaproś użytkownika",
+      "TITLE": "Zaproś kogoś do tej przestrzeni",
+      "EMAIL_LABEL": "Adres e-mail",
+      "EMAIL_PLACEHOLDER": "imie@firma.com",
+      "EMAIL_ERROR": "Podaj prawidłowy adres e-mail.",
+      "ROLE_LABEL": "Rola",
+      "ROLE_PLACEHOLDER": "Wybierz rolę",
+      "ROLE_ERROR": "Wybierz rolę.",
+      "HINT": "Otrzyma e-mail z linkiem do ustawienia hasła. Link jest ważny 7 dni.",
+      "SUBMIT": "Wyślij zaproszenie"
+    },
+    "DEACTIVATE": {
+      "TITLE": "Dezaktywować tego użytkownika?",
+      "MESSAGE": "{{name}} nie będzie mógł się już zalogować. Nic nie jest usuwane: nazwisko pozostaje przy wszystkim, co zatwierdził lub zmienił, a dostęp możesz przywrócić w każdej chwili."
+    },
+    "REVOKE": {
+      "TITLE": "Cofnąć to zaproszenie?",
+      "MESSAGE": "Link wysłany na {{email}} przestanie działać. Możesz zaprosić tę osobę ponownie później."
+    },
+    "EMPTY": {
+      "TITLE": "Nikogo tu jeszcze nie ma",
+      "MESSAGE": "Zaproś współpracownika, aby dać mu dostęp do tej przestrzeni."
+    },
+    "CHANGE_ROLE": {
+      "TITLE": "Zmień rolę",
+      "MESSAGE": "Wybierz nową rolę dla {{name}}.",
+      "SUBMIT": "Zapisz rolę"
+    },
+    "REFUSAL": {
+      "ALREADY_MEMBER": "Ta osoba jest już w tej przestrzeni roboczej.",
+      "ALREADY_INVITED": "Ten adres ma już otwarte zaproszenie. Wyślij je ponownie zamiast tworzyć nowe.",
+      "NO_SEATS": "Wszystkie {{limit}} miejsc jest zajętych. Zwolnij jedno, zanim zaprosisz kogoś jeszcze.",
+      "ROLE_UNKNOWN": "Taka rola nie istnieje.",
+      "ALREADY_USED": "To zaproszenie zostało już przyjęte.",
+      "EXPIRED": "To zaproszenie wygasło. Wyślij nowe.",
+      "REVOKED": "To zaproszenie zostało cofnięte.",
+      "LAST_ADMIN": "To jedyny pozostały administrator. Nadaj najpierw komuś innemu rolę administratora, inaczej nikt nie będzie mógł zarządzać użytkownikami.",
+      "CANNOT_ACT_ON_SELF": "Nie możesz zmienić własnego dostępu. Poproś innego administratora."
+    },
+    "REMOVE": {
+      "TITLE": "Usunąć tę osobę z przestrzeni roboczej?",
+      "MESSAGE": "{{name}} przestanie należeć do tej przestrzeni i zniknie z tej listy. Konto, dostęp do innych przestrzeni oraz nazwisko przy wszystkim, co zatwierdziła, pozostają bez zmian. Możesz zaprosić ją ponownie w dowolnej chwili."
+    }
+  },
+  "ACCEPT_INVITATION": {
+    "TITLE_PLAIN": "Przyjmij zaproszenie",
+    "TITLE": "Dołącz do {{company}}",
+    "SUBTITLE": "Zaproszono Cię na adres {{email}}. Wybierz hasło, aby zakończyć.",
+    "CHECKING": "Sprawdzanie zaproszenia...",
+    "FIRST_NAME": "Imię",
+    "LAST_NAME": "Nazwisko",
+    "PASSWORD": "Hasło",
+    "PASSWORD_HINT": "Co najmniej 10 znaków, w tym wielka litera, cyfra i symbol.",
+    "CONFIRM_PASSWORD": "Potwierdź hasło",
+    "PASSWORDS_MISMATCH": "Hasła nie są takie same.",
+    "SUBMIT": "Utwórz konto",
+    "GO_TO_LOGIN": "Przejdź do logowania",
+    "DONE_TITLE": "Wszystko gotowe",
+    "DONE_MESSAGE": "Twoje konto jest gotowe. Zaloguj się, aby zacząć.",
+    "ERROR_GENERIC": "Nie udało się tego dokończyć. Spróbuj ponownie.",
+    "REFUSAL": {
+      "TITLE": "Tego zaproszenia nie można użyć",
+      "INVALID": "Ten link jest nieprawidłowy. Poproś osobę zapraszającą o nowy.",
+      "ALREADY_USED": "To zaproszenie zostało już przyjęte. Spróbuj się zalogować.",
+      "EXPIRED": "To zaproszenie wygasło. Poproś osobę zapraszającą o nowe.",
+      "REVOKED": "To zaproszenie zostało cofnięte. Skontaktuj się z osobą zapraszającą.",
+      "ALREADY_MEMBER": "Ten adres ma już konto. Spróbuj się zalogować.",
+      "GENERIC": "Tego zaproszenia nie można użyć. Poproś osobę zapraszającą o nowe."
+    }
   }
 }

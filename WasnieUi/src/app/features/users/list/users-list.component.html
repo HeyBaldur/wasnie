@@ -1,0 +1,337 @@
+<app-shell>
+  <ws-page-layout
+    icon="users"
+    [title]="'USERS.TITLE' | translate"
+    [subtitle]="'USERS.SUBTITLE' | translate"
+  >
+    <!-- The action rides in the header slot, on the title's line — where Payees puts "Import" and
+         "New Payee". A button on its own row below the header was the first draft and read as an
+         afterthought bolted onto the page. -->
+    <ws-button
+      slot="actions"
+      variant="primary"
+      [hidden]="!('Users.Manage' | hasPermission)"
+      [disabled]="!store.canInvite() || store.saving()"
+      (click)="inviteOpen.set(true)"
+    >
+      <app-icon name="plus" [size]="16" />
+      {{ 'USERS.INVITE.BUTTON' | translate }}
+    </ws-button>
+
+    <!-- Only when a plan caps seats. Every plan is unlimited today, so this is normally absent
+         rather than reading "4 of unlimited". -->
+    @if (store.showsSeatCounter()) {
+      <div class="users__toolbar">
+        <span class="users__seats">
+          {{ 'USERS.SEATS.USED' | translate:{ used: store.seats()!.used, limit: store.seats()!.limit } }}
+        </span>
+      </div>
+    }
+
+    @if (!store.canInvite()) {
+      <!-- ★ Shown-but-disabled, and the one place on this screen where that is right: the cap is a
+           fact about the SUBSCRIPTION, not about this reader's authority, so hiding the button would
+           leave an admin with no explanation. §5.8 governs permissions, and this is not one. -->
+      <div class="users__notice">
+        <app-icon name="alert-triangle" [size]="16" />
+        <span>{{ 'USERS.SEATS.FULL' | translate:{ used: store.seats()?.used, limit: store.seats()?.limit } }}</span>
+      </div>
+    }
+
+    <!-- ── People ──────────────────────────────────────────────────────────── -->
+    <ws-table>
+      <table>
+      <thead>
+        <tr>
+          <th class="col-name">{{ 'USERS.TABLE.NAME' | translate }}</th>
+          <th>{{ 'USERS.TABLE.ROLE' | translate }}</th>
+          <th>{{ 'USERS.TABLE.STATUS' | translate }}</th>
+          <th class="col-secondary">{{ 'USERS.TABLE.INVITED_BY' | translate }}</th>
+          <th class="col-actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (user of store.users(); track user.userId) {
+          <tr [class.users__row--inactive]="!user.isActive">
+            <td class="col-name">
+              <div class="user-identity">
+                <span class="user-avatar">{{ initialsFor(user) }}</span>
+                <div class="user-identity__text">
+                  <span class="user-name">{{ displayName(user) }}</span>
+                  <span class="user-email">{{ user.email }}</span>
+                </div>
+              </div>
+            </td>
+            <td>{{ roleKey(user.role) | translate }}</td>
+            <td>
+              @if (user.isActive) {
+                <ws-badge variant="success" [dot]="true">{{ 'USERS.STATUS.ACTIVE' | translate }}</ws-badge>
+              } @else {
+                <ws-badge variant="neutral">{{ 'USERS.STATUS.DEACTIVATED' | translate }}</ws-badge>
+              }
+              @if (!user.emailConfirmed) {
+                &nbsp;<ws-badge variant="warning">{{ 'USERS.STATUS.UNCONFIRMED' | translate }}</ws-badge>
+              }
+            </td>
+            <td class="col-secondary">{{ user.invitedByEmail ?? ('USERS.TABLE.FOUNDER' | translate) }}</td>
+            <td class="col-actions" (click)="$event.stopPropagation()">
+              <div *hasPermission="'Users.Manage'" class="row-menu">
+                <button
+                  class="row-menu__trigger"
+                  [class.row-menu__trigger--open]="openMenuId() === user.userId"
+                  type="button"
+                  (click)="toggleMenu(user.userId, $event)"
+                >
+                  <app-icon name="more-vertical" [size]="16" />
+                </button>
+                @if (openMenuId() === user.userId) {
+                  <div class="row-menu__dropdown"
+                    [style.top.px]="menuPosition()!.top ?? null"
+                    [style.bottom.px]="menuPosition()!.bottom ?? null"
+                    [style.right.px]="menuPosition()!.right"
+                  >
+                    @if (user.isActive) {
+                      <button class="row-menu__item" type="button" (click)="openRoleChange(user)">
+                        <app-icon name="shield" [size]="14" />
+                        {{ 'USERS.ACTION.CHANGE_ROLE' | translate }}
+                      </button>
+                      <button class="row-menu__item row-menu__item--danger" type="button"
+                              (click)="askDeactivate(user)">
+                        <app-icon name="user-minus" [size]="14" />
+                        {{ 'USERS.ACTION.DEACTIVATE' | translate }}
+                      </button>
+                    } @else {
+                      <button class="row-menu__item" type="button" (click)="reactivate(user)">
+                        <app-icon name="user-check" [size]="14" />
+                        {{ 'USERS.ACTION.REACTIVATE' | translate }}
+                      </button>
+                    }
+                    <!-- Removing is offered whatever the access state: an account switched off months
+                         ago is the likeliest one an admin wants gone for good. -->
+                    <button class="row-menu__item row-menu__item--danger" type="button"
+                            (click)="askRemove(user)">
+                      <app-icon name="trash-2" [size]="14" />
+                      {{ 'USERS.ACTION.REMOVE' | translate }}
+                    </button>
+                  </div>
+                }
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <ws-table-empty icon="users" messageKey="USERS.EMPTY.MESSAGE" />
+        }
+      </tbody>
+      </table>
+    </ws-table>
+
+    <!-- ── Outstanding invitations ─────────────────────────────────────────── -->
+    @if (store.pendingInvitations().length > 0) {
+      <div class="users__section">
+        <h2 class="users__section-title">
+          {{ 'USERS.SECTION.PENDING' | translate }}
+          <ws-badge variant="brand" size="sm">{{ store.pendingInvitations().length }}</ws-badge>
+        </h2>
+
+        <ws-table>
+          <table>
+          <thead>
+            <tr>
+              <th class="col-name">{{ 'USERS.TABLE.EMAIL' | translate }}</th>
+              <th>{{ 'USERS.TABLE.ROLE' | translate }}</th>
+              <th class="col-secondary">{{ 'USERS.TABLE.SENT' | translate }}</th>
+              <th class="col-secondary">{{ 'USERS.TABLE.EXPIRES' | translate }}</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (invitation of store.pendingInvitations(); track invitation.id) {
+              <tr>
+                <td class="col-name">
+                  <div class="user-identity">
+                    <span class="user-avatar user-avatar--pending">
+                      <app-icon name="mail" [size]="14" />
+                    </span>
+                    <div class="user-identity__text">
+                      <span class="user-name">{{ invitation.email }}</span>
+                      @if (invitation.resendCount > 0) {
+                        <span class="user-email">
+                          {{ 'USERS.TABLE.RESENT' | translate:{ count: invitation.resendCount } }}
+                        </span>
+                      }
+                    </div>
+                  </div>
+                </td>
+                <td>{{ roleKey(invitation.role) | translate }}</td>
+                <td class="col-secondary">{{ invitation.createdAt | dateFormat }}</td>
+                <td class="col-secondary">{{ invitation.expiresAt | dateFormat }}</td>
+                <td class="col-actions" (click)="$event.stopPropagation()">
+                  <div *hasPermission="'Users.Manage'" class="row-menu">
+                    <button
+                      class="row-menu__trigger"
+                      [class.row-menu__trigger--open]="openMenuId() === invitation.id"
+                      type="button"
+                      (click)="toggleMenu(invitation.id, $event)"
+                    >
+                      <app-icon name="more-vertical" [size]="16" />
+                    </button>
+                    @if (openMenuId() === invitation.id) {
+                      <div class="row-menu__dropdown"
+                        [style.top.px]="menuPosition()!.top ?? null"
+                        [style.bottom.px]="menuPosition()!.bottom ?? null"
+                        [style.right.px]="menuPosition()!.right"
+                      >
+                        <button class="row-menu__item" type="button" (click)="resend(invitation)">
+                          <app-icon name="send" [size]="14" />
+                          {{ 'USERS.ACTION.RESEND' | translate }}
+                        </button>
+                        <button class="row-menu__item row-menu__item--danger" type="button"
+                                (click)="askRevoke(invitation)">
+                          <app-icon name="x" [size]="14" />
+                          {{ 'USERS.ACTION.REVOKE' | translate }}
+                        </button>
+                      </div>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+          </table>
+        </ws-table>
+      </div>
+    }
+
+    <!-- ── Closed invitations, collapsed ───────────────────────────────────── -->
+    @if (store.closedInvitations().length > 0) {
+      <div class="users__section">
+        <button class="users__history-toggle" type="button"
+                (click)="showClosedInvitations.set(!showClosedInvitations())">
+          <app-icon [name]="showClosedInvitations() ? 'chevron-up' : 'chevron-down'" [size]="14" />
+          {{ 'USERS.SECTION.HISTORY' | translate:{ count: store.closedInvitations().length } }}
+        </button>
+
+        @if (showClosedInvitations()) {
+          <ws-table>
+            <table>
+            <thead>
+              <tr>
+                <th class="col-name">{{ 'USERS.TABLE.EMAIL' | translate }}</th>
+                <th>{{ 'USERS.TABLE.ROLE' | translate }}</th>
+                <th>{{ 'USERS.TABLE.STATUS' | translate }}</th>
+                <th class="col-secondary">{{ 'USERS.TABLE.SENT' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (invitation of store.closedInvitations(); track invitation.id) {
+                <tr>
+                  <td class="col-name">{{ invitation.email }}</td>
+                  <td>{{ roleKey(invitation.role) | translate }}</td>
+                  <td>
+                    <ws-badge variant="neutral">
+                      {{ invitationStatusKey(invitation.status) | translate }}
+                    </ws-badge>
+                  </td>
+                  <td class="col-secondary">{{ invitation.createdAt | dateFormat }}</td>
+                </tr>
+              }
+            </tbody>
+            </table>
+          </ws-table>
+        }
+      </div>
+    }
+  </ws-page-layout>
+</app-shell>
+
+<!-- ── Invite ────────────────────────────────────────────────────────────── -->
+@if (inviteOpen()) {
+  <ws-modal
+    [isOpen]="true"
+    [title]="'USERS.INVITE.TITLE' | translate"
+    size="sm"
+    (closed)="inviteOpen.set(false)"
+  >
+    <app-invite-user-form (invited)="onInvited()" (cancelled)="inviteOpen.set(false)" />
+  </ws-modal>
+}
+
+<!-- ★ A modal, not an inline dropdown. ws-select is a ControlValueAccessor: one control per row
+     would be rebuilt on every reload and lose focus mid-interaction. -->
+@if (changeRoleFor(); as user) {
+  <ws-modal
+    [isOpen]="true"
+    [title]="'USERS.CHANGE_ROLE.TITLE' | translate"
+    size="sm"
+    (closed)="changeRoleFor.set(null)"
+  >
+    <form [formGroup]="roleForm" (ngSubmit)="submitRoleChange()" class="users__role-form">
+      <p class="users__role-form-who">
+        {{ 'USERS.CHANGE_ROLE.MESSAGE' | translate:{ name: displayName(user) } }}
+      </p>
+
+      <ws-select
+        formControlName="role"
+        [options]="roleOptions()"
+        [label]="'USERS.TABLE.ROLE' | translate"
+        [placeholder]="'USERS.INVITE.ROLE_PLACEHOLDER' | translate"
+      />
+
+      <div class="users__role-form-actions">
+        <ws-button variant="ghost" type="button" [disabled]="store.saving()"
+                   (click)="changeRoleFor.set(null)">
+          {{ 'COMMON.CANCEL' | translate }}
+        </ws-button>
+        <ws-button variant="primary" type="submit" [disabled]="store.saving()">
+          {{ 'USERS.CHANGE_ROLE.SUBMIT' | translate }}
+        </ws-button>
+      </div>
+    </form>
+  </ws-modal>
+}
+
+<!-- ★ The confirmation says what deactivation ACTUALLY does (§C3): the account keeps existing and
+     keeps holding its audit trail, and only signing in stops. -->
+@if (confirmDeactivate(); as user) {
+  <ws-confirmation-modal
+    [isOpen]="true"
+    [cancelLabel]="'COMMON.CANCEL' | translate"
+    [loading]="store.saving()"
+    [title]="'USERS.DEACTIVATE.TITLE' | translate"
+    [message]="'USERS.DEACTIVATE.MESSAGE' | translate:{ name: displayName(user) }"
+    [confirmLabel]="'USERS.ACTION.DEACTIVATE' | translate"
+    variant="danger"
+    (confirmed)="confirmDeactivation()"
+    (cancelled)="confirmDeactivate.set(null)"
+  />
+}
+
+<!-- The message spells out the difference from Deactivate, because the two words are close enough
+     that an admin could pick the wrong one: what survives is named, and so is what does not. -->
+@if (confirmRemove(); as user) {
+  <ws-confirmation-modal
+    [isOpen]="true"
+    [cancelLabel]="'COMMON.CANCEL' | translate"
+    [loading]="store.saving()"
+    [title]="'USERS.REMOVE.TITLE' | translate"
+    [message]="'USERS.REMOVE.MESSAGE' | translate:{ name: displayName(user) }"
+    [confirmLabel]="'USERS.ACTION.REMOVE' | translate"
+    variant="danger"
+    (confirmed)="confirmRemoval()"
+    (cancelled)="confirmRemove.set(null)"
+  />
+}
+
+@if (confirmRevoke(); as invitation) {
+  <ws-confirmation-modal
+    [isOpen]="true"
+    [cancelLabel]="'COMMON.CANCEL' | translate"
+    [loading]="store.saving()"
+    [title]="'USERS.REVOKE.TITLE' | translate"
+    [message]="'USERS.REVOKE.MESSAGE' | translate:{ email: invitation.email }"
+    [confirmLabel]="'USERS.ACTION.REVOKE' | translate"
+    variant="danger"
+    (confirmed)="confirmRevocation()"
+    (cancelled)="confirmRevoke.set(null)"
+  />
+}

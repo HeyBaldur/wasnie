@@ -50,6 +50,19 @@ public sealed class ResendEmailService(
         return SendAsync(to, subject, html, cancellationToken);
     }
 
+    public Task SendInvitationAsync(
+        string to,
+        string inviterName,
+        string companyName,
+        string acceptUrl,
+        int expiryDays,
+        string language,
+        CancellationToken cancellationToken = default)
+    {
+        var (subject, html) = EmailTemplates.Invitation(inviterName, companyName, acceptUrl, expiryDays, language);
+        return SendAsync(to, subject, html, cancellationToken);
+    }
+
     public Task SendEmailChangeConfirmationAsync(
         string to,
         string firstName,

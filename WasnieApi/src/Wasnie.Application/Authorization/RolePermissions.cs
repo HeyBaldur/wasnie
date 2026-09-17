@@ -29,6 +29,8 @@ public static class RolePermissions
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.ReconciliationClose,
             Permission.SubscriptionManage,
             Permission.SettingsUpdate, Permission.IntegrationsManage,
+            // KAN-32. Manage is admin-only: deciding who has a login is not running compensation.
+            Permission.UsersRead, Permission.UsersManage,
         };
 
     private static readonly IReadOnlySet<string> CompManagerPermissions =
@@ -54,6 +56,9 @@ public static class RolePermissions
             Permission.AuditRead,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.ReconciliationClose,
+            // KAN-32. Read WITHOUT Manage: knowing who approved a pay run is part of the job;
+            // handing out logins is not.
+            Permission.UsersRead,
         };
 
     private static readonly IReadOnlySet<string> ManagerPermissions =

@@ -33,6 +33,17 @@ export const authRoutes: Routes = [
       ),
   },
   {
+    // KAN-32. NO noAuthGuard: somebody already signed in to another tenant may legitimately be
+    // holding an invitation for this one, and bouncing them to the dashboard would strand the link
+    // with no way to act on it.
+    path: 'accept-invitation',
+    title: 'ACCEPT_INVITATION.TITLE_PLAIN',
+    loadComponent: () =>
+      import('./accept-invitation/accept-invitation.component').then(
+        (m) => m.AcceptInvitationComponent
+      ),
+  },
+  {
     path: 'reset-password',
     loadComponent: () =>
       import('./reset-password/reset-password.component').then(

@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Hangfire;
@@ -198,6 +198,24 @@ try
                 {
                     PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthPasswordReset:PermitLimit", 3),
                     Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthPasswordReset:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
+        // KAN-32 invitations: the two PUBLIC routes, partitioned by IP (10 requests / 5 minutes).
+        //
+        // ★ ITS OWN BUCKET, NOT the login one. A person accepting an invitation is not signing in and
+        // must not be able to exhaust, or be blocked by, the quota that protects sign-in.
+        //
+        // ★ AND IT IS WHAT MAKES THE TOKEN UNGUESSABLE IN PRACTICE. The token itself is 256 bits, so
+        // guessing is hopeless already; this stops anybody bothering to try at volume.
+        options.AddPolicy("invitations", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:Invitations:PermitLimit", 10),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:Invitations:WindowSeconds", 300)),
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                     QueueLimit = 0,
                 }));

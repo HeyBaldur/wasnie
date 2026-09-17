@@ -99,6 +99,16 @@ export const routes: Routes = [
       import('./features/audit-logs/audit-logs.routes').then((m) => m.auditLogsRoutes),
   },
   {
+    // KAN-32. Users.Read, not Users.Manage: a CompManager may see the roster and cannot change it.
+    // The guard is what makes hiding the menu entry more than decoration — without it a typed URL
+    // would still render a page full of colleagues' addresses.
+    path: 'users',
+    title: 'NAV.USERS',
+    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Users.Read')],
+    loadChildren: () =>
+      import('./features/users/users.routes').then((m) => m.usersRoutes),
+  },
+  {
     path: 'payouts',
     title: 'NAV.PAYOUTS',
     canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Payouts.Read')],

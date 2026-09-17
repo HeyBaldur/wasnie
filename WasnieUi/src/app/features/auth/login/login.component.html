@@ -58,6 +58,20 @@
             placeholder="••••••••"
           />
 
+          <!-- KAN-91. ALWAYS VISIBLE, AND OPTIONAL. The first cut revealed it only after the API
+               said the address was in more than one workspace, which read as the form changing its
+               mind mid-sign-in. Somebody invited into a workspace is TOLD their organization
+               identifier along with the invitation and arrives expecting to type it; a field that is
+               not there yet cannot be filled in. Leaving it blank still works for the one-workspace
+               case, so nobody is made to learn it who does not need it. -->
+          <ws-input
+            formControlName="organizationId"
+            [label]="'AUTH.ORGANIZATION_ID' | translate"
+            [error]="fieldError('organizationId')"
+            placeholder="acme-corp"
+          />
+          <p class="login__hint">{{ 'AUTH.ORGANIZATION_ID_HINT' | translate }}</p>
+
           <ws-button
             type="submit"
             variant="primary"

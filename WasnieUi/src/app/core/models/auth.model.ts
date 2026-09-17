@@ -19,6 +19,14 @@ export interface AuthResult {
 export interface LoginRequest {
   email: string;
   password: string;
+
+  /**
+   * KAN-91. The workspace's identifier — its slug, e.g. `wasnie-ldta-polska`.
+   *
+   * Optional: an address that belongs to exactly one workspace never needs it, which is every
+   * account today. It is only required once the same address is in two.
+   */
+  organizationId?: string;
 }
 
 export interface RegisterTenantRequest {

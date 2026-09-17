@@ -1,0 +1,158 @@
+﻿import { computed, inject, Injectable, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { ToastService } from '../../../shared/services/toast.service';
+import { extractApiError, extractApiErrorCode } from '../../../shared/utils/api-error';
+import { UsersApiService } from '../services/users.api.service';
+import {
+  Invitation,
+  SeatUsage,
+  TenantRole,
+  TenantUser,
+  TenantUsersResponse,
+} from '../models/user.model';
+
+/**
+ * KAN-32 — the users screen's state.
+ *
+ * ★★ THERE IS NO PAGINATION AND NO SERVER-SIDE SEARCH HERE, unlike every other list store in this
+ * app. The population is the staff of one company using one tool: tens of rows, and it does not grow
+ * with the customer's revenue. The backend handler carries the same note. If a tenant ever turns up
+ * with hundreds of logins, this is the comment that says the decision was made with a number in mind.
+ *
+ * ★ EVERY MUTATION RELOADS THE WHOLE RESPONSE. Seats, users and invitations are computed together on
+ * the server against one clock; patching one of them locally after a revoke would leave the seat
+ * counter describing a world that no longer exists.
+ */
+@Injectable({ providedIn: 'root' })
+export class UsersStore {
+  private readonly api = inject(UsersApiService);
+  private readonly toast = inject(ToastService);
+
+  readonly loading = signal(false);
+  readonly saving = signal(false);
+  readonly error = signal<string | null>(null);
+
+  private readonly response = signal<TenantUsersResponse | null>(null);
+
+  readonly users = computed<TenantUser[]>(() => this.response()?.users ?? []);
+  readonly seats = computed<SeatUsage | null>(() => this.response()?.seats ?? null);
+
+  /**
+   * Only what is still outstanding.
+   *
+   * ★ Accepted invitations are deliberately NOT listed: the person is in the users table above, and
+   * showing them twice would make a two-person tenant look like four rows.
+   */
+  readonly pendingInvitations = computed<Invitation[]>(() =>
+    (this.response()?.invitations ?? []).filter((i) => i.status === 'Pending'),
+  );
+
+  /** Invitations that ran out or were withdrawn — history, collapsed by default on screen. */
+  readonly closedInvitations = computed<Invitation[]>(() =>
+    (this.response()?.invitations ?? []).filter(
+      (i) => i.status === 'Expired' || i.status === 'Revoked',
+    ),
+  );
+
+  readonly activeUsers = computed(() => this.users().filter((u) => u.isActive));
+  readonly deactivatedUsers = computed(() => this.users().filter((u) => !u.isActive));
+
+  /** Whether the invite button may be pressed at all. Derived from the server's answer, never local. */
+  readonly canInvite = computed(() => this.seats()?.hasRoom ?? true);
+
+  /** A seat counter is only meaningful when there is a limit; today there never is. */
+  readonly showsSeatCounter = computed(() => this.seats()?.limit != null);
+
+  async load(): Promise<void> {
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      this.response.set(await firstValueFrom(this.api.getUsers()));
+    } catch {
+      this.error.set('USERS_LOAD_FAILED');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async invite(email: string, role: TenantRole): Promise<boolean> {
+    return this.mutate(() => firstValueFrom(this.api.invite({ email, role })));
+  }
+
+  async resend(invitationId: string): Promise<boolean> {
+    return this.mutate(() => firstValueFrom(this.api.resendInvitation(invitationId)));
+  }
+
+  async revoke(invitationId: string): Promise<boolean> {
+    return this.mutate(() => firstValueFrom(this.api.revokeInvitation(invitationId)));
+  }
+
+  async deactivate(userId: string): Promise<boolean> {
+    return this.mutate(() => firstValueFrom(this.api.deactivate(userId)));
+  }
+
+  async reactivate(userId: string): Promise<boolean> {
+    return this.mutate(() => firstValueFrom(this.api.reactivate(userId)));
+  }
+
+  async remove(userId: string): Promise<boolean> {
+    return this.mutate(() => firstValueFrom(this.api.remove(userId)));
+  }
+
+  async changeRole(userId: string, role: TenantRole): Promise<boolean> {
+    return this.mutate(() => firstValueFrom(this.api.changeRole(userId, role)));
+  }
+
+  /**
+   * One shape for all six mutations: run it, SAY SOMETHING IF IT FAILED, reload, report.
+   *
+   * ★★ THE TOAST IS RAISED HERE AND THAT WAS A DEFECT FOUND IN RUNTIME, NOT A DESIGN. The first cut
+   * caught the error and returned false with a comment claiming "the interceptor has already
+   * surfaced the coded refusal". It has not: `error.interceptor` handles 401 and nothing else.
+   * Confirmed on screen — refusing to deactivate the last administrator closed the dialog and said
+   * NOTHING, which is §B1 exactly: a system that cannot do something has to leave something a person
+   * can see.
+   *
+   * ★ THE CODE GOES THROUGH A WHITELIST, NEVER STRAIGHT TO THE SCREEN. `refusalKey` maps the ones
+   * this build knows; anything else falls back to the server sentence and then to a generic line, so
+   * an unrecognised identifier is never painted at a user (§C2).
+   */
+  private async mutate(action: () => Promise<unknown>): Promise<boolean> {
+    this.saving.set(true);
+    try {
+      await action();
+      await this.load();
+      return true;
+    } catch (err: unknown) {
+      const coded = extractApiErrorCode(err);
+      this.toast.show(
+        coded ? this.refusalKey(coded.code) : extractApiError(err),
+        'error',
+        coded?.parameters);
+      return false;
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  /**
+   * The translation key for a refusal code.
+   *
+   * ★ AN EXPLICIT LIST (§C2). `'USERS.REFUSAL.' + code` would print an internal identifier the day
+   * the backend adds a code this build has never heard of.
+   */
+  private refusalKey(code: string): string {
+    switch (code) {
+      case 'INVITATION_EMAIL_ALREADY_MEMBER': return 'USERS.REFUSAL.ALREADY_MEMBER';
+      case 'INVITATION_EMAIL_ALREADY_INVITED': return 'USERS.REFUSAL.ALREADY_INVITED';
+      case 'INVITATION_NO_SEATS_AVAILABLE': return 'USERS.REFUSAL.NO_SEATS';
+      case 'INVITATION_ROLE_UNKNOWN': return 'USERS.REFUSAL.ROLE_UNKNOWN';
+      case 'INVITATION_TOKEN_ALREADY_USED': return 'USERS.REFUSAL.ALREADY_USED';
+      case 'INVITATION_TOKEN_EXPIRED': return 'USERS.REFUSAL.EXPIRED';
+      case 'INVITATION_TOKEN_REVOKED': return 'USERS.REFUSAL.REVOKED';
+      case 'USER_LAST_ADMIN': return 'USERS.REFUSAL.LAST_ADMIN';
+      case 'USER_CANNOT_ACT_ON_SELF': return 'USERS.REFUSAL.CANNOT_ACT_ON_SELF';
+      default: return 'ERRORS.GENERIC';
+    }
+  }
+}

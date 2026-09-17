@@ -463,3 +463,26 @@
   color: var(--color-text-tertiary);
   margin: 0 0 var(--space-3);
 }
+
+// KAN-91. The workspace identifier: an identifier, so monospace and copyable, not a form field.
+.profile-org__hint {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.profile-org__value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+
+  code {
+    font-family: ui-monospace, monospace;
+    font-size: var(--font-size-14);
+    color: var(--color-text-primary);
+  }
+}
