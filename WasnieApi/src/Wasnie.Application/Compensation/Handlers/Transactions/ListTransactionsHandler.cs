@@ -79,7 +79,9 @@ public sealed class ListTransactionsHandler(
         // this exact predicate so the Excel export of the filtered set stays consistent.
         if (!string.IsNullOrWhiteSpace(p.Reference))
         {
-            var term = p.Reference.Trim().ToLower();
+            // KAN-81: the term is folded first, so a pasted non-breaking hyphen finds the plain one.
+            // Only the INPUT is normalised — never the column; see ReferenceSearchNormalizer for why.
+            var term = ReferenceSearchNormalizer.Normalize(p.Reference)!.ToLower();
             query = query.Where(t =>
                 t.ReferenceNumber.ToLower().Contains(term) ||
                 (t.Description != null && t.Description.ToLower().Contains(term)));
@@ -131,8 +133,9 @@ public sealed class ListTransactionsHandler(
         if (!string.IsNullOrWhiteSpace(p.ReferenceNumbers))
         {
             var refList = p.ReferenceNumbers.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
+                .Select(s => ReferenceSearchNormalizer.Normalize(s))
                 .Where(s => !string.IsNullOrEmpty(s))
+                .Select(s => s!)
                 .ToList();
             if (refList.Count > 0)
                 query = query.Where(t => refList.Contains(t.ReferenceNumber));

@@ -6,6 +6,7 @@ using Wasnie.Application.Assistant.Abstractions;
 using Wasnie.Application.Assistant.Common;
 using Wasnie.Application.Common.Exceptions;
 using Wasnie.Application.Common.Models;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Credits;
 using Wasnie.Application.Compensation.Queries.Payouts;
@@ -153,8 +154,14 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
                 throw new InvalidOperationException($"The transaction query failed: {found.Error}");
             }
 
+            // Both sides folded: the argument was normalised on the way in, and the stored side is
+            // folded here too so a reference that IS dirty in the database still narrows correctly.
+            // This runs over one page already in memory, so it costs nothing and touches no index.
             transaction = found.Value?.Items?.FirstOrDefault(t =>
-                string.Equals(t.ReferenceNumber, reference, StringComparison.OrdinalIgnoreCase));
+                string.Equals(
+                    ReferenceSearchNormalizer.Normalize(t.ReferenceNumber),
+                    reference,
+                    StringComparison.OrdinalIgnoreCase));
         }
         catch (ForbiddenException)
         {
@@ -247,8 +254,13 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
         try
         {
             using var document = JsonDocument.Parse(argumentsJson);
+
+            // KAN-81: folded here, at the single point where the reference enters the tool, so every
+            // use below — the query filter AND the in-memory equality — sees the same plain form. The
+            // assistant itself writes non-breaking hyphens (166 of its messages carry one), so the
+            // model can hand this method a reference that no longer matches the text it came from.
             return document.RootElement.TryGetProperty("reference", out var value)
-                ? value.GetString()?.Trim()
+                ? ReferenceSearchNormalizer.Normalize(value.GetString())
                 : null;
         }
         catch (JsonException)
@@ -298,7 +310,10 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
             // `Reference` is a SUBSTRING filter on the credit's transaction reference, so "TERM-CC-1"
             // would drag in "TERM-CC-10". Narrowed back to the exact reference here.
             var mine = credits.Value.Items
-                .Where(c => string.Equals(c.ReferenceNumber, reference, StringComparison.OrdinalIgnoreCase))
+                .Where(c => string.Equals(
+                    ReferenceSearchNormalizer.Normalize(c.ReferenceNumber),
+                    reference,
+                    StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             // ★★ WHOSE ROW IS THIS. Assigned once per distinct payee, in the order the rows arrive, so
