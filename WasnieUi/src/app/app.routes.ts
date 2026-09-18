@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 import { planGuard } from './core/guards/plan.guard';
-import { hasPermissionGuard } from './core/auth/guards/has-permission.guard';
+import { hasPermissionGuard, hasAnyPermissionGuard } from './core/auth/guards/has-permission.guard';
 import { subscriptionGuard } from './core/guards/subscription.guard';
 import { authGuard } from './core/guards/auth.guard';
 import { companyDashboardGuard, landingRedirect } from './core/guards/landing.guard';
@@ -59,7 +59,11 @@ export const routes: Routes = [
   {
     path: 'plans',
     title: 'NAV.PLANS',
-    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Plans.Read')],
+    // KAN-93 bug 6. EITHER PERMISSION OPENS THE BRANCH, and the child routes narrow it from there:
+    // the list, the creation form and the rule editor still require `Plans.Read`, so a rep holding
+    // only `Plans.ReadOwn` reaches a plan of theirs and nothing else. The nav entry keeps asking for
+    // `Plans.Read`, so the catalogue stays out of their menu.
+    canActivate: [planGuard, subscriptionGuard, hasAnyPermissionGuard('Plans.Read', 'Plans.ReadOwn')],
     loadChildren: () =>
       import('./features/plans/plans.routes').then((m) => m.plansRoutes),
   },

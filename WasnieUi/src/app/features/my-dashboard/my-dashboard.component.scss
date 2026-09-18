@@ -1,138 +1,89 @@
 // KAN-92 — the personal dashboard.
 //
+// ★★ ALMOST NOTHING LIVES HERE, AND THAT IS DELIBERATE. The figures use the metric-card language from
+// `src/styles/_metric-cards.scss` and the attainment rows use `src/styles/_attainment-rows.scss`, both
+// global. Every rule this file could add for those blocks would be a second definition of something
+// another screen already draws — which is exactly how two screens meant to be identical drift apart.
+// What remains below is the section furniture that is genuinely local to this page.
+//
 // TOKENS ONLY (§5.5). The scale here is the real one: font sizes are numeric (--font-size-11 …
 // --font-size-32) and weights are plain numbers — `--font-size-sm` and `--font-weight-medium` do
 // NOT exist in styles.scss.
 
-.my-dash__status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-6) 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-14);
-}
-
-.my-dash__spin {
-  animation: my-dash-spin 1s linear infinite;
-}
-
-@keyframes my-dash-spin {
-  to { transform: rotate(360deg); }
-}
-
-.my-dash__block {
-  display: block;
-  margin-bottom: var(--space-6);
-}
-
-.my-dash__block-hd {
+// The strip above each group of cards: what this block is, and the scope it covers.
+//
+// ★ THE SCOPE CHIP IS NOT DECORATION. All four figures are all-time, and a reader who assumes they
+// are "this month" reads every one of them wrong. Saying it once, next to the heading, is cheaper
+// than four labels and harder to miss.
+.my-dash__section-hd {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
 }
 
-.my-dash__block-title {
+.my-dash__section-title {
   margin: 0;
-  font-size: var(--font-size-16);
+  font-size: var(--font-size-18);
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
-// Four figures, equal weight. None of them gets a colour the others do not: they are parts of one
-// story, and dressing one differently would state a judgement the data does not carry. The two
-// exceptions below are semantic, not decorative — money owed and money due.
-.my-dash__figures {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-}
-
-@media (min-width: 900px) {
-  .my-dash__figures { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-
-.my-dash__figure {
+.my-dash__section-tags {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface-sunken);
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.my-dash__figure-label {
-  font-size: var(--font-size-12);
-  color: var(--color-text-tertiary);
+.my-dash__block {
+  display: block;
+  margin-bottom: var(--space-8);
 }
-
-.my-dash__figure-value {
-  font-size: var(--font-size-20);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.my-dash__figure--owed .my-dash__figure-value { color: var(--color-success); }
-.my-dash__figure--debt .my-dash__figure-value { color: var(--color-danger); }
 
 .my-dash__state {
-  margin: var(--space-4) 0 0;
+  margin: 0;
   font-size: var(--font-size-13);
   color: var(--color-text-secondary);
 }
 
-.my-dash__note {
-  margin: var(--space-2) 0 0;
-  font-size: var(--font-size-13);
+// ── Sales awaiting setup (KAN-94) ──────────────────────────────────────────
+//
+// ★ A WARNING, NOT AN ERROR. The sale is safely recorded; what is missing is configuration somebody
+// else has to do. Danger colouring would tell the reader their money is lost, which is the opposite
+// of what happened.
+.my-dash__pending-card {
+  display: block;
+  margin-bottom: var(--space-6);
+}
+
+.my-dash__pending {
+  @apply flex items-start;
+  gap: var(--space-3);
+}
+
+.my-dash__pending-icon {
   color: var(--color-warning);
+  flex-shrink: 0;
 }
 
-.my-dash__quota {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--color-border-default);
-
-  &:last-child { border-bottom: none; }
-}
-
-.my-dash__gauge {
-  flex: 0 0 auto;
-  width: 72px;
-}
-
-// No target set: a neutral mark, never a red zero. The reader cannot fix a missing quota.
-.my-dash__gauge--none {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 72px;
-  color: var(--color-text-tertiary);
-}
-
-.my-dash__quota-info {
-  display: flex;
-  flex-direction: column;
+.my-dash__pending-text {
+  @apply flex flex-col;
   gap: var(--space-1);
   min-width: 0;
 }
 
-.my-dash__quota-plan {
-  font-size: var(--font-size-15);
+.my-dash__pending-title {
+  margin: 0;
+  font-size: var(--font-size-14);
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
-.my-dash__quota-figures {
+.my-dash__pending-desc {
+  margin: 0;
   font-size: var(--font-size-13);
+  line-height: 1.5;
   color: var(--color-text-secondary);
-}
-
-.my-dash__quota-period {
-  font-size: var(--font-size-12);
-  color: var(--color-text-tertiary);
 }

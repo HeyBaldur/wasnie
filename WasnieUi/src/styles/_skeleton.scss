@@ -32,6 +32,11 @@
 .skeleton--short { width: 40px; }
 .skeleton--badge { width: 60px; height: 20px; border-radius: var(--radius-full); }
 
+/* El hueco de una cifra grande mientras carga. Las medidas son las del dashboard, que lo define
+   ademas en su propio componente: el local sigue ganando y vale exactamente lo mismo, asi que las dos
+   pantallas reservan el mismo espacio y ninguna da un salto al llegar el dato. */
+.skeleton--num { width: 56px; height: 30px; border-radius: var(--radius-md); }
+
 /* El nombre lleva prefijo a propósito: varios componentes tienen su propio `shimmer` y dos keyframes
    con el mismo nombre en el CSS servido es una moneda al aire sobre cuál gana. */
 @keyframes ws-skeleton-shimmer {

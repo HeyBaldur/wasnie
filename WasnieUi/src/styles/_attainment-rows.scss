@@ -1,0 +1,121 @@
+/* ── The attainment-row language ─────────────────────────────────────────────── */
+/* */
+/* ★★ GLOBAL, FOR THE SAME REASON THE METRIC CARDS ARE. These rules lived inside */
+/* payee-detail.component.scss, where Angular's view encapsulation kept them to that one screen. The */
+/* moment a second screen showed the same thing — a gauge, a plan name, target and achieved — it */
+/* rendered the same markup and received none of the rules, and the tempting fix is to copy the CSS */
+/* across. That copy is how two screens meant to be identical start to drift. */
+/* */
+/* One definition, every screen: /payees/:id and /my-dashboard today. A third gets this look by */
+/* writing the markup, not by copying rules. */
+/* */
+/* ★ THIS FILE IS PROCESSED BY POSTCSS, NOT SASS. Single-line // comments break the build (an */
+/* apostrophe inside reads as an unterminated string) and the @import must sit flush with the others */
+/* in styles.scss, with no comment between them. Block comments only. */
+/* */
+/* Loaded from styles.scss. */
+
+.bento-gauge-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+
+  &:hover { background: var(--color-bg-surface-raised); }
+
+  & + & { border-top: 1px solid var(--color-border-subtle); }
+
+  /* A quota whose currency does not match its plan: marked, never hidden, and never silently */
+  /* dropped from the list. */
+  &--invalid {
+    border-left: 3px solid var(--color-warning);
+    padding-left: var(--space-2);
+    background: var(--color-warning-bg);
+    opacity: 0.85;
+  }
+
+  /* ★ NOT EVERY ROW IS A LINK. On the payee page the row opens the quota; on a person's own */
+  /* dashboard there is nothing they may open, so the row must not offer a hand cursor or a hover */
+  /* state promising a click that does nothing. */
+  &--static {
+    cursor: default;
+
+    &:hover { background: transparent; }
+  }
+}
+
+.bento-gauge-wrap {
+  flex-shrink: 0;
+  width: 88px;
+
+  &--faded { opacity: 0.45; }
+}
+
+/* ★ THE PLACE OF A GAUGE THAT MUST NOT BE DRAWN. A quota with no target set has an attainment of 0, */
+/* and 0 drawn as a gauge reads as a failure by the person looking at it — when it is really a gap in */
+/* the configuration, which they cannot fix. It keeps the row's geometry so the list stays aligned. */
+.bento-gauge-wrap--none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88px;
+  color: var(--color-text-tertiary);
+}
+
+.bento-gauge-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-2);
+
+  &__plan {
+    font-size: var(--font-size-13);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__period {
+    font-size: var(--font-size-11);
+    color: var(--color-text-tertiary);
+    margin-bottom: var(--space-2);
+  }
+
+  &__amounts {
+    display: flex;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-2);
+  }
+
+  &__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    font-size: var(--font-size-12);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The sentence that replaces the two figures when there is no target to compare against. */
+  &__note {
+    font-size: var(--font-size-12);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-2);
+  }
+}
+
+.bento-stat-lbl {
+  font-size: var(--font-size-10);
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

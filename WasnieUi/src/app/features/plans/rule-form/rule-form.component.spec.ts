@@ -9,6 +9,7 @@ import { RuleFormComponent } from './rule-form.component';
 import { PlansStore } from '../state/plans.store';
 import { ToastService } from '../../../shared/services/toast.service';
 import { Plan } from '../models/plan.model';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 import {
   Rule,
   MeasurementType,
@@ -92,6 +93,10 @@ describe('RuleFormComponent — MeasurementType picker filter (V1)', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        // KAN-93. The ADMINISTRATOR's path: only a `Plans.Read` holder asks for the tenant's category
+        // vocabulary. A reader with `Plans.ReadOwn` deliberately does not, so the permission has to be
+        // stated or the expected request is never made.
+        { provide: CurrentUserService, useValue: { hasPermission: (p: string) => p === 'Plans.Read' } },
         {
           provide: PlansStore,
           useValue: { selectedPlan: planSignal as unknown as PlansStore['selectedPlan'], loadPlan: jasmine.createSpy('loadPlan').and.returnValue(Promise.resolve()) },
@@ -138,6 +143,10 @@ describe('RuleFormComponent — floor above cap warning', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        // KAN-93. The ADMINISTRATOR's path: only a `Plans.Read` holder asks for the tenant's category
+        // vocabulary. A reader with `Plans.ReadOwn` deliberately does not, so the permission has to be
+        // stated or the expected request is never made.
+        { provide: CurrentUserService, useValue: { hasPermission: (p: string) => p === 'Plans.Read' } },
         {
           provide: PlansStore,
           useValue: {
@@ -220,6 +229,10 @@ describe('RuleFormComponent — the flat rate protects itself', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        // KAN-93. The ADMINISTRATOR's path: only a `Plans.Read` holder asks for the tenant's category
+        // vocabulary. A reader with `Plans.ReadOwn` deliberately does not, so the permission has to be
+        // stated or the expected request is never made.
+        { provide: CurrentUserService, useValue: { hasPermission: (p: string) => p === 'Plans.Read' } },
         {
           provide: PlansStore,
           useValue: {
@@ -350,6 +363,10 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        // KAN-93. The ADMINISTRATOR's path: only a `Plans.Read` holder asks for the tenant's category
+        // vocabulary. A reader with `Plans.ReadOwn` deliberately does not, so the permission has to be
+        // stated or the expected request is never made.
+        { provide: CurrentUserService, useValue: { hasPermission: (p: string) => p === 'Plans.Read' } },
         { provide: PlansStore, useValue: storeMock },
         { provide: ToastService, useValue: jasmine.createSpyObj('ToastService', ['show']) },
         {
@@ -667,6 +684,10 @@ describe('RuleFormComponent — category value picker', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        // KAN-93. The ADMINISTRATOR's path: only a `Plans.Read` holder asks for the tenant's category
+        // vocabulary. A reader with `Plans.ReadOwn` deliberately does not, so the permission has to be
+        // stated or the expected request is never made.
+        { provide: CurrentUserService, useValue: { hasPermission: (p: string) => p === 'Plans.Read' } },
         {
           provide: PlansStore,
           useValue: {
@@ -808,6 +829,10 @@ describe('RuleFormComponent — rate table type help text', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        // KAN-93. The ADMINISTRATOR's path: only a `Plans.Read` holder asks for the tenant's category
+        // vocabulary. A reader with `Plans.ReadOwn` deliberately does not, so the permission has to be
+        // stated or the expected request is never made.
+        { provide: CurrentUserService, useValue: { hasPermission: (p: string) => p === 'Plans.Read' } },
         {
           provide: PlansStore,
           useValue: {

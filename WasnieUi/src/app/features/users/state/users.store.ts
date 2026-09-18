@@ -87,9 +87,9 @@ export class UsersStore {
    * the admin can still invite without attaching a payee, and an error here is not a refusal of
    * anything they asked for.
    */
-  async loadUnlinkedPayees(emailHint?: string): Promise<UnlinkedPayeesResponse | null> {
+  async loadUnlinkedPayees(emailHint?: string, search?: string): Promise<UnlinkedPayeesResponse | null> {
     try {
-      return await firstValueFrom(this.api.unlinkedPayees(emailHint));
+      return await firstValueFrom(this.api.unlinkedPayees(emailHint, search));
     } catch {
       return null;
     }
@@ -117,6 +117,16 @@ export class UsersStore {
 
   async changeRole(userId: string, role: TenantRole): Promise<boolean> {
     return this.mutate(() => firstValueFrom(this.api.changeRole(userId, role)));
+  }
+
+  /**
+   * KAN-93. Attaches this login to a payee record, or detaches it with null.
+   *
+   * ★ IT GOES THROUGH `mutate` AND THEREFORE RELOADS. The linked payee is now a column on this
+   * screen; patching it locally would leave the row describing a link the server may have refused.
+   */
+  async linkPayee(userId: string, payeeId: string | null): Promise<boolean> {
+    return this.mutate(() => firstValueFrom(this.api.linkPayee(userId, payeeId)));
   }
 
   /**

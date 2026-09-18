@@ -3,6 +3,7 @@ import { firstValueFrom, Subject } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { PlansApiService } from '../services/plans.api.service';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { Plan, PlanSummary, PlanStatus, CreatePlanRequest } from '../models/plan.model';
 import { PlanListParams } from '../models/plan-list.params';
 import { AddRuleRequest, Rule, UpdateRuleRequest } from '../models/rule.model';
@@ -12,6 +13,7 @@ import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 @Injectable({ providedIn: 'root' })
 export class PlansStore {
   private readonly api = inject(PlansApiService);
+  private readonly currentUser = inject(CurrentUserService);
 
   readonly selectedPlan = signal<Plan | null>(null);
   readonly loading = signal(false);
@@ -58,6 +60,27 @@ export class PlansStore {
   // last and overwrite the narrower one, leaving the list looking unfiltered until a manual reload.
   private readonly _latest = new LatestRequestGuard();
 
+  /**
+   * The detail page's OWN state, separate from the list's.
+   *
+   * ★★ ONE FIELD, ONE MEANING (§B3) — AND THIS IS THE BUG THAT BOUGHT IT. `loading` and `error` were
+   * shared by two unrelated requests: "the catalogue" and "this one plan". The detail template reads
+   * `error` BEFORE `selectedPlan`, so a failure of the LIST blanked a plan that had loaded perfectly,
+   * with "Something went wrong. Please try again." over a page that had the data in hand.
+   *
+   * ★★ IT SURFACED AS A RACE, WHICH IS WHY IT LOOKED INTERMITTENT. Opening a plan fires both requests
+   * at once; each clears `error` when it starts and writes it when it fails, so whichever finished
+   * LAST decided the screen. Arriving by click, few requests are in flight and the plan usually won.
+   * On a refresh the list queues behind a dozen bootstrap calls, lands last, and the page broke every
+   * time — the exact "works on click, fails on refresh" the report describes.
+   *
+   * ★ IT IS NOT A REP-ONLY BUG. A rep makes the list fail every time (they hold no `Plans.Read`, by
+   * design), so they meet it constantly; for anybody else a slow or failed catalogue does the same
+   * thing. Separating the state fixes it for every reader instead of special-casing a role.
+   */
+  readonly planLoading = signal(false);
+  readonly planError = signal<string | null>(null);
+
   constructor() {
     effect(() => {
       const p = this.page();
@@ -66,6 +89,14 @@ export class PlansStore {
       const so = this.sortOrder();
       const st = this.status();
       const srch = this.search();
+
+      // ★★ THE CATALOGUE IS NOT FETCHED FOR SOMEBODY WHO MAY NOT READ IT. This effect runs the moment
+      // the store is first injected — including from the DETAIL page, which needs one plan and not the
+      // list. For a rep holding only `Plans.ReadOwn` that request is a guaranteed 403 and, because
+      // ListPlansHandler refuses through `RequireAsync`, a PermissionDenied audit row every single
+      // time they open their own plan. Asking first costs nothing and keeps the trail meaningful.
+      if (!this.currentUser.hasPermission('Plans.Read')) return;
+
       void this._loadInternal(p, ps, sb, so, st, srch);
     });
   }
@@ -117,16 +148,20 @@ export class PlansStore {
     );
   }
 
+  /** Loads ONE plan. Writes only the detail's state — never the list's. */
   async loadPlan(planId: string): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
+    this.planLoading.set(true);
+    this.planError.set(null);
     try {
       const data = await firstValueFrom(this.api.getPlan(planId));
       this.selectedPlan.set(data);
     } catch {
-      this.error.set('ERRORS.GENERIC');
+      // ★ AND IT CLEARS THE PLAN. A refused or missing plan must not leave the previous one on screen
+      // under an error message — that is two contradictory things said at once.
+      this.selectedPlan.set(null);
+      this.planError.set('ERRORS.GENERIC');
     } finally {
-      this.loading.set(false);
+      this.planLoading.set(false);
     }
   }
 

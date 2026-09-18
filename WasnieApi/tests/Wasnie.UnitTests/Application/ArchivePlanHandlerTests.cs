@@ -14,6 +14,7 @@ using Wasnie.Domain.Exceptions;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Infrastructure.Persistence;
+using Wasnie.UnitTests.TestDoubles;
 
 namespace Wasnie.UnitTests.Application;
 
@@ -141,7 +142,7 @@ public sealed class ArchivePlanHandlerTests : IDisposable
         var otherPlan = SeedActiveAssignment(Guid.NewGuid(), Guid.NewGuid());
         await _db.SaveChangesAsync();
 
-        var read = new GetPlanByIdHandler(_db, _auth);
+        var read = new GetPlanByIdHandler(_db, _auth, FakePlanAccessGuard.SeesEverything());
         var dto = await read.Handle(new GetPlanByIdQuery(planId), CancellationToken.None);
 
         dto.IsSuccess.Should().BeTrue();
@@ -171,7 +172,7 @@ public sealed class ArchivePlanHandlerTests : IDisposable
         var planId = Guid.NewGuid();
         SeedActivePlan(planId);
 
-        var read = new GetPlanByIdHandler(_db, _auth);
+        var read = new GetPlanByIdHandler(_db, _auth, FakePlanAccessGuard.SeesEverything());
         var dto = await read.Handle(new GetPlanByIdQuery(planId), CancellationToken.None);
 
         dto.IsSuccess.Should().BeTrue();

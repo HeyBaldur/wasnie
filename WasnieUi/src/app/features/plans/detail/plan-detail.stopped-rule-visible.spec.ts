@@ -104,6 +104,10 @@ describe('PlanDetailComponent — the rules list shows stopped rules', () => {
             unfilteredTotal: signal(0) as unknown as PlansStore['unfilteredTotal'],
             loading: signal(false) as unknown as PlansStore['loading'],
             error: signal(null) as unknown as PlansStore['error'],
+            // KAN-93. The detail reads its OWN state now: the list's `loading`/`error` no longer
+            // decide what this page shows (§B3 — one field, one meaning).
+            planLoading: signal(false) as unknown as PlansStore['planLoading'],
+            planError: signal(null) as unknown as PlansStore['planError'],
             loadPlan: jasmine.createSpy('loadPlan').and.returnValue(Promise.resolve()),
             loadVersions: jasmine.createSpy('loadVersions').and.returnValue(Promise.resolve()),
             activatePlan: jasmine.createSpy('activatePlan').and.returnValue(Promise.resolve()),

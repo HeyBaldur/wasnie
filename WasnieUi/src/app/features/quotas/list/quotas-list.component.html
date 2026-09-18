@@ -104,13 +104,17 @@
                             {{ 'COMMON.VIEW' | translate }}
                           </a>
                           @if (quota.status === 'Draft') {
-                            <button *hasPermission="'Quotas.Update'" class="row-menu__item" type="button" (click)="onActivate(quota.id)">
+                            <!-- `Quotas.Set` is what ActivateQuotaHandler requires; this said
+                                 `Quotas.Update`, which is UpdateQuotaHandler's key. Both are held by
+                                 the same two roles today, so nothing broke — and a gate that happens
+                                 to agree is still a gate asking the wrong question. -->
+                            <button *hasPermission="'Quotas.Set'" class="row-menu__item" type="button" (click)="onActivate(quota.id)">
                               <app-icon name="check-circle" [size]="14" />
                               {{ 'QUOTAS.ACTION_ACTIVATE' | translate }}
                             </button>
                           }
                           @if (quota.status === 'Active') {
-                            <button *hasPermission="'Quotas.Update'" class="row-menu__item row-menu__item--danger" type="button" (click)="onClose(quota.id)">
+                            <button *hasPermission="'Quotas.Set'" class="row-menu__item row-menu__item--danger" type="button" (click)="onClose(quota.id)">
                               <app-icon name="x-circle" [size]="14" />
                               {{ 'QUOTAS.ACTION_CLOSE' | translate }}
                             </button>

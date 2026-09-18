@@ -93,7 +93,7 @@ public sealed class AssistantAmbiguousPayeeTests
             switch (request)
             {
                 case ListPayeesQuery q:
-                    return (TResponse)(object)await new ListPayeesHandler(db, tenantContext, auth)
+                    return (TResponse)(object)await new ListPayeesHandler(db, tenantContext, auth, guard)
                         .Handle(q, cancellationToken);
 
                 case GetPayeeByIdQuery q:

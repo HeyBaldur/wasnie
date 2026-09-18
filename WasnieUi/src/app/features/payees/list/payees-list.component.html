@@ -36,11 +36,16 @@
     </div>
 
     @if (!store.loading() && store.pagedPayees().length === 0 && !store.listParams().search && store.listParams().status === null) {
+      <!-- KAN-93. THE EMPTY STATE'S BUTTON IS GATED LIKE THE HEADER'S, and it was not: the "New payee"
+           button above carries `Payees.Create` while this one carried nothing, so whoever may read
+           payees but not create them was invited to add their first colleague and refused on save.
+           The key is bound rather than wrapped in an `@if` around the whole block: two copies of the
+           empty state differing by one attribute is how the two drift apart. -->
       <ws-empty-state
         illustration="payees-empty"
         titleKey="PAYEES.EMPTY_TITLE"
         descKey="PAYEES.EMPTY_DESCRIPTION"
-        actionKey="PAYEES.EMPTY_ACTION"
+        [actionKey]="('Payees.Create' | hasPermission) ? 'PAYEES.EMPTY_ACTION' : ''"
         actionRoute="new"
       />
     } @else {

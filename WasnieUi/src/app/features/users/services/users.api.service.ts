@@ -1,5 +1,5 @@
 ﻿import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
   AcceptInvitationRequest,
@@ -30,9 +30,19 @@ export class UsersApiService {
     return this.http.get<TenantUsersResponse>(this.base);
   }
 
-  /** The payees nobody owns yet. The email is a hint for the server's suggestion, nothing more. */
-  unlinkedPayees(emailHint?: string): Observable<UnlinkedPayeesResponse> {
-    const params = emailHint ? { email: emailHint } : undefined;
+  /**
+   * The payees nobody owns yet — one page of them.
+   *
+   * ★ TWO INDEPENDENT INPUTS. `search` is what the admin is typing into the dropdown; `emailHint` is
+   * the invitee's address, used only to ask the server to point at a likely match. They are sent
+   * separately because the server answers them separately: folding them into one would make the
+   * suggestion disappear the moment somebody starts typing a name.
+   */
+  unlinkedPayees(emailHint?: string, search?: string): Observable<UnlinkedPayeesResponse> {
+    let params = new HttpParams();
+    if (emailHint) params = params.set('email', emailHint);
+    if (search) params = params.set('search', search);
+
     return this.http.get<UnlinkedPayeesResponse>(`${this.base}/unlinked-payees`, { params });
   }
 
@@ -63,6 +73,17 @@ export class UsersApiService {
 
   changeRole(userId: string, role: TenantRole): Observable<void> {
     return this.http.put<void>(`${this.base}/${encodeURIComponent(userId)}/role`, { role });
+  }
+
+  /**
+   * KAN-93. Attaches this login to a payee record, or detaches it when `payeeId` is null.
+   *
+   * ★ ONE METHOD FOR BOTH DIRECTIONS, matching the route. The link is single-valued — a person is one
+   * payee or none — so "set it to nothing" is the honest spelling of unlinking, and a separate
+   * `unlink()` would be a second caller that has to agree with this one about what none means.
+   */
+  linkPayee(userId: string, payeeId: string | null): Observable<void> {
+    return this.http.put<void>(`${this.base}/${encodeURIComponent(userId)}/payee`, { payeeId });
   }
 }
 

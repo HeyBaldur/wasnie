@@ -55,6 +55,9 @@ function linked(overrides: Partial<MyDashboard> = {}): MyDashboard {
       byCurrency: [BALANCE],
     },
     quotas: [MEASURED_QUOTA],
+    // KAN-94. Nothing stuck by default: these specs are about the money figures, and a notice about
+    // unpayable sales sitting over them would be noise in every one of them.
+    salesAwaitingSetup: 0,
     ...overrides,
   };
 }

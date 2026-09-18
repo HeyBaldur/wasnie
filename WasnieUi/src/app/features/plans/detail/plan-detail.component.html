@@ -1,5 +1,8 @@
 ﻿<app-shell>
-  @if (store.loading() && !store.selectedPlan()) {
+  <!-- ★★ THE DETAIL'S OWN STATE, NOT THE STORE'S SHARED ONE (§B3). These read `planLoading` and
+       `planError`; `loading`/`error` belong to the plans LIST, and reading them here meant a failing
+       catalogue painted "Something went wrong" over a plan that had loaded fine. -->
+  @if (store.planLoading() && !store.selectedPlan()) {
     <div class="plan-detail plan-detail--loading">
       <div class="skeleton-header">
         <span class="skeleton skeleton--title"></span>
@@ -11,10 +14,10 @@
         }
       </div>
     </div>
-  } @else if (store.error()) {
+  } @else if (store.planError()) {
     <div class="plan-detail plan-detail--error">
       <app-icon name="alert-circle" [size]="32" />
-      <span>{{ store.error()! | translate }}</span>
+      <span>{{ store.planError()! | translate }}</span>
     </div>
   } @else if (store.selectedPlan(); as plan) {
     <ws-page-layout
@@ -24,30 +27,37 @@
       backLink="/plans"
       [backLabel]="'PLANS.TITLE' | translate"
     >
+      <!-- ★★ EVERY ACTION HERE IS ADMINISTRATION (KAN-93, bug 6). Activate, Archive, Clone and Add
+           rule change how the company pays; a rep is on this page to READ the rules behind their own
+           commission. The whole block is gated once rather than each button, because the rule is
+           about the reader and not about the individual verbs — and because a block that is gated
+           button-by-button acquires an ungated one sooner or later. -->
       <div slot="actions" class="plan-detail__actions">
-        @if (permissions().canActivate) {
-          <ws-button variant="primary" size="sm" (click)="onActivate()">
-            <app-icon name="check-circle" [size]="14" />
-            {{ 'PLANS.ACTION_ACTIVATE' | translate }}
-          </ws-button>
-        }
-        @if (permissions().canArchive) {
-          <ws-button variant="danger" size="sm" (click)="onArchive()">
-            <app-icon name="archive" [size]="14" />
-            {{ 'PLANS.ACTION_ARCHIVE' | translate }}
-          </ws-button>
-        }
-        @if (permissions().canClone) {
-          <ws-button variant="secondary" size="sm" (click)="onClone()">
-            <app-icon name="copy" [size]="14" />
-            {{ 'PLANS.ACTION_CLONE_VERSION' | translate }}
-          </ws-button>
-        }
-        @if (permissions().canAddRule) {
-          <ws-button variant="primary" size="sm" (click)="goToNewRule()">
-            <app-icon name="plus" [size]="14" />
-            {{ 'PLANS.ACTION_ADD_RULE' | translate }}
-          </ws-button>
+        @if (canAdminister()) {
+          @if (permissions().canActivate) {
+            <ws-button variant="primary" size="sm" (click)="onActivate()">
+              <app-icon name="check-circle" [size]="14" />
+              {{ 'PLANS.ACTION_ACTIVATE' | translate }}
+            </ws-button>
+          }
+          @if (permissions().canArchive) {
+            <ws-button variant="danger" size="sm" (click)="onArchive()">
+              <app-icon name="archive" [size]="14" />
+              {{ 'PLANS.ACTION_ARCHIVE' | translate }}
+            </ws-button>
+          }
+          @if (permissions().canClone) {
+            <ws-button variant="secondary" size="sm" (click)="onClone()">
+              <app-icon name="copy" [size]="14" />
+              {{ 'PLANS.ACTION_CLONE_VERSION' | translate }}
+            </ws-button>
+          }
+          @if (permissions().canAddRule) {
+            <ws-button variant="primary" size="sm" (click)="goToNewRule()">
+              <app-icon name="plus" [size]="14" />
+              {{ 'PLANS.ACTION_ADD_RULE' | translate }}
+            </ws-button>
+          }
         }
       </div>
 
@@ -85,30 +95,35 @@
           {{ 'PLANS.TAB_RULES' | translate }}
           <span class="tab-count">{{ plan.rules.length }}</span>
         </button>
-        <button
-          class="tab-btn"
-          [class.tab-btn--active]="activeTab() === 'versions'"
-          (click)="setTab('versions')"
-        >
-          <app-icon name="tag" [size]="15" />
-          {{ 'PLANS.TAB_VERSIONS' | translate }}
-        </button>
-        <button
-          class="tab-btn"
-          [class.tab-btn--active]="activeTab() === 'assignments'"
-          (click)="setTab('assignments')"
-        >
-          <app-icon name="user-check" [size]="15" />
-          {{ 'PLANS.TAB_ASSIGNMENTS' | translate }}
-        </button>
-        <button
-          class="tab-btn"
-          [class.tab-btn--active]="activeTab() === 'clawback'"
-          (click)="setTab('clawback')"
-        >
-          <app-icon name="refresh" [size]="15" />
-          {{ 'PLANS.TAB_CLAWBACK' | translate }}
-        </button>
+        <!-- ★★ THE OTHER THREE TABS ARE NOT FOR A REP, AND ASSIGNMENTS IS THE ONE THAT MATTERS MOST:
+             it lists WHO ELSE is on this plan, which is other people's data. Versions is the plan's
+             administrative history, and Clawback is a policy editor. Hidden, not disabled (§5.8). -->
+        @if (canAdminister()) {
+          <button
+            class="tab-btn"
+            [class.tab-btn--active]="activeTab() === 'versions'"
+            (click)="setTab('versions')"
+          >
+            <app-icon name="tag" [size]="15" />
+            {{ 'PLANS.TAB_VERSIONS' | translate }}
+          </button>
+          <button
+            class="tab-btn"
+            [class.tab-btn--active]="activeTab() === 'assignments'"
+            (click)="setTab('assignments')"
+          >
+            <app-icon name="user-check" [size]="15" />
+            {{ 'PLANS.TAB_ASSIGNMENTS' | translate }}
+          </button>
+          <button
+            class="tab-btn"
+            [class.tab-btn--active]="activeTab() === 'clawback'"
+            (click)="setTab('clawback')"
+          >
+            <app-icon name="refresh" [size]="15" />
+            {{ 'PLANS.TAB_CLAWBACK' | translate }}
+          </button>
+        }
       </div>
 
       <div class="plan-detail__tab-content">

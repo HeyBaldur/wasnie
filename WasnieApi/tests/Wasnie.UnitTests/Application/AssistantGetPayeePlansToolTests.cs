@@ -79,7 +79,7 @@ public sealed class AssistantGetPayeePlansToolTests
                     if (FailPayeeListQuery)
                         return (TResponse)(object)Result<PagedResult<PayeeDto>>.Failure("Unknown sort field.");
 
-                    return (TResponse)(object)await new ListPayeesHandler(db, tenantContext, auth)
+                    return (TResponse)(object)await new ListPayeesHandler(db, tenantContext, auth, guard)
                         .Handle(q, cancellationToken);
 
                 case GetPayeeByIdQuery q:
@@ -294,7 +294,16 @@ public sealed class AssistantGetPayeePlansToolTests
         var payeeId = SeedPayee(h, "Ana García", "EMP-ANA");
         SeedAssignment(h, payeeId, SeedPlan(h, "Q3 2026 — EMEA"), "Ana García", "EMP-ANA");
 
-        var payload = await ByNameAsync(h, "Ana García");
+        // ★★ RESOLVED BY ID, NOT BY NAME, AND THE REASON IS KAN-92. The name lookup goes through
+        // ListPayeesHandler, which that ticket narrowed with PayeeAccessGuard — so under
+        // PayeeVisibility.None the payee cannot be FOUND at all and the tool answers
+        // NotFoundOrNotVisible, a different (and correct) refusal. The branch under test here is the
+        // OTHER one: the payee is resolvable, and only their assignments are hidden. GetPayeeByIdQuery
+        // enforces Payees.Read and the tenant filter WITHOUT the visibility guard — existence is
+        // public to anyone holding the permission, by its own design note — so the id path is where
+        // this case actually lives. Written against the name, the test was asserting a branch
+        // production can no longer reach.
+        var payload = await ByIdAsync(h, payeeId);
 
         payload.GetProperty("outcome").GetString().Should().Be("AssignmentsNotVisible");
         payload.TryGetProperty("assignments", out _).Should().BeFalse(
@@ -351,9 +360,12 @@ public sealed class AssistantGetPayeePlansToolTests
         // screen" an actionable answer rather than a shrug.
         var restricted = Build(nameof(THE_EMPTY_ANSWER_SAYS_WHO_IT_SEARCHED_FOR_code_included) + ".r",
             Guid.NewGuid(), PayeeVisibility.None, AssignmentPermissions);
-        SeedPayee(restricted, "Ana García", "EMP-ANA");
+        var hiddenPayeeId = SeedPayee(restricted, "Ana García", "EMP-ANA");
 
-        var hidden = await ByNameAsync(restricted, "Ana García");
+        // By id, for the reason spelled out in A_PAYEE_WITH_NO_VISIBLE_ASSIGNMENT_IS_NOT_REPORTED_AS_
+        // HAVING_NONE: since KAN-92 the NAME lookup is itself narrowed by the visibility guard, so
+        // PayeeVisibility.None now produces NotFoundOrNotVisible there rather than this branch.
+        var hidden = await ByIdAsync(restricted, hiddenPayeeId);
         hidden.GetProperty("outcome").GetString().Should().Be("AssignmentsNotVisible");
         hidden.GetProperty("payeeEmployeeCode").GetString().Should().Be("EMP-ANA");
     }

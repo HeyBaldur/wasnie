@@ -52,3 +52,22 @@ public sealed record RemoveUserCommand(string UserId) : IRequest<Result<bool>>;
 
 /// <summary>Moves somebody to a different role, replacing the old one rather than adding to it.</summary>
 public sealed record ChangeUserRoleCommand(string UserId, string Role) : IRequest<Result<bool>>;
+
+/// <summary>
+/// Attaches an existing login to a payee record, or detaches it (KAN-93).
+///
+/// ★★ IT EXISTS BECAUSE INVITING WAS THE ONLY WAY TO LINK, AND YOU CANNOT INVITE SOMEBODY TWICE.
+/// KAN-92 put <c>PayeeId</c> on the invitation and wrote the link on acceptance, which covers exactly
+/// one moment in a person's life here. Anybody who already had an account when their payee record was
+/// created — every user of every existing tenant — had no path at all: their personal dashboard told
+/// them to ask an administrator, and the administrator had no button to press. Re-inviting is refused
+/// (<c>INVITATION_EMAIL_ALREADY_MEMBER</c>), so the state was permanent.
+///
+/// ★★ <c>PayeeId</c> NULL MEANS DETACH, and it is a deliberate part of the same command rather than a
+/// second one. Re-pointing a link is detach-then-attach whichever way it is expressed, and splitting
+/// it would let a caller do half of it.
+///
+/// ★ THE USER ID COMES FROM THE ROUTE, NOT THE BODY (§D3). It is an authorisation boundary: a body
+/// that could name a different user would let an administrator's own request be rewritten in flight.
+/// </summary>
+public sealed record LinkUserToPayeeCommand(string UserId, Guid? PayeeId) : IRequest<Result<bool>>;

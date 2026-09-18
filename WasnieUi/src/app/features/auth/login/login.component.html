@@ -70,7 +70,13 @@
             [error]="fieldError('organizationId')"
             placeholder="acme-corp"
           />
-          <p class="login__hint">{{ 'AUTH.ORGANIZATION_ID_HINT' | translate }}</p>
+          <p class="login__hint">
+            {{ 'AUTH.ORGANIZATION_ID_HINT' | translate }}
+            <!-- KAN-93. The recovery link sits under the field it is about, not in the footer beside
+                 "Forgot password". Somebody who cannot remember this is looking AT this input, and a
+                 link two blocks away is a link they do not find. -->
+            <a routerLink="/auth/forgot-organization" class="login__hint-link">{{ 'AUTH.FORGOT_ORGANIZATION_ID' | translate }}</a>
+          </p>
 
           <ws-button
             type="submit"

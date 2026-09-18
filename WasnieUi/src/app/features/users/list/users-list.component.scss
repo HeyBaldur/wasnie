@@ -171,6 +171,16 @@
     &--danger { color: var(--color-danger); }
     &--danger:hover { background: var(--color-danger-bg); }
   }
+
+  // KAN-93. The line that stands in for the actions hidden on your own row. Deliberately not an
+  // `&__item`: it is not pressable, and styling it as one would invite the click it cannot answer.
+  &__note {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-12);
+    color: var(--color-text-tertiary);
+    max-width: 200px;
+  }
 }
 
 @keyframes row-menu-in {
@@ -194,4 +204,31 @@
 .users__role-form-actions {
   @apply flex justify-end;
   gap: var(--space-2);
+}
+
+// ── The payee link (KAN-93) ────────────────────────────────────────────────
+
+// The linked payee's name in the table. Plain text at the row's own weight: it is a fact about the
+// person, not a status, so it must not compete with the badges beside it.
+.users__payee {
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+}
+
+.users__role-form-hint {
+  margin: 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+// The "use this one" affordance beside the server's suggestion. A button, not an anchor: it fills a
+// field, it does not navigate.
+.users__link-button {
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-brand);
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover { color: var(--color-brand-hover); }
 }

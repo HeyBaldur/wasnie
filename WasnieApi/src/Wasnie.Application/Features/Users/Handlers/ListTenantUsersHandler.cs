@@ -63,6 +63,18 @@ public sealed class ListTenantUsersHandler(
 
         var inviterEmails = await ResolveInviterEmailsAsync(access);
 
+        // KAN-93. WHO IS ATTACHED TO WHICH PAYEE, IN ONE QUERY FOR THE WHOLE PAGE. Asked per row it
+        // would be one round trip per member; asked not at all — which is how this screen shipped —
+        // an administrator cannot see who is stranded without a payee, and so never presses the
+        // button that would fix it. The tenant filter scopes it, and the link is a single column, so
+        // a dictionary keyed by user id cannot have two entries for one person.
+        var linkedPayees = await db.Payees
+            .Where(p => p.UserId != null)
+            .Select(p => new { UserId = p.UserId!, p.Id, p.FullName })
+            .ToListAsync(cancellationToken);
+
+        var payeeByUser = linkedPayees.ToDictionary(p => p.UserId, StringComparer.Ordinal);
+
         var users = summaries
             .Select(s =>
             {
@@ -81,7 +93,9 @@ public sealed class ListTenantUsersHandler(
                     s.EmailConfirmed,
                     row?.CreatedAt ?? default,
                     row?.DeactivatedAt,
-                    row?.InvitedBy is { } inviter && inviterEmails.TryGetValue(inviter, out var e) ? e : null);
+                    row?.InvitedBy is { } inviter && inviterEmails.TryGetValue(inviter, out var e) ? e : null,
+                    payeeByUser.TryGetValue(s.UserId, out var linked) ? linked.Id : null,
+                    linked?.FullName);
             })
             .OrderByDescending(u => u.IsActive)
             .ThenBy(u => u.Email, StringComparer.OrdinalIgnoreCase)

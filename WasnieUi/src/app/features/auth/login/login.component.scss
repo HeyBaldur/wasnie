@@ -294,3 +294,15 @@
     padding: 0;
   }
 }
+
+// KAN-93. The Organization identifier recovery link, riding on the end of the field's hint line.
+// Inline rather than on its own row: it is a footnote to the hint, and a separate line would give it
+// the weight of a primary action on a form whose primary action is signing in.
+.login__hint-link {
+  margin-left: var(--space-1);
+  color: var(--color-brand);
+  font-weight: 600;
+  text-decoration: underline;
+
+  &:hover { color: var(--color-brand-hover); }
+}

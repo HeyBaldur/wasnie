@@ -8,12 +8,7 @@
     <!-- ★★ FOUR STATES, NEVER FOLDED INTO ONE. Loading, failed, not-linked and real figures each get
          their own block: three of them would otherwise be drawn as a page of zeros, and a zero on a
          pay screen is read as "you earned nothing". -->
-    @if (store.loading()) {
-      <div class="my-dash__status">
-        <app-icon name="loader" [size]="18" class="my-dash__spin" />
-        <span>{{ 'COMMON.LOADING' | translate }}</span>
-      </div>
-    } @else if (store.error()) {
+    @if (store.error()) {
       <ws-empty-state
         icon="alert-triangle"
         titleKey="MY_DASHBOARD.ERROR_TITLE"
@@ -26,98 +21,177 @@
         titleKey="MY_DASHBOARD.UNLINKED_TITLE"
         descKey="MY_DASHBOARD.UNLINKED_DESC"
       />
-    } @else if (store.linked()) {
+    } @else {
 
-      <!-- ── Money, one block per currency ───────────────────────────────────
-           Currencies are never summed: adding euros to zlotys would invent a number. -->
-      @if (store.hasMoney()) {
-        @for (balance of store.balances(); track balance.currency) {
-          <ws-card padding="md" class="my-dash__block">
-            <div class="my-dash__block-hd">
-              <h2 class="my-dash__block-title">
-                {{ 'MY_DASHBOARD.MONEY_TITLE' | translate }}
-              </h2>
-              <ws-badge variant="neutral" size="sm">{{ balance.currency }}</ws-badge>
+      <!-- ── Sales the system cannot pay on yet (KAN-94) ──────────────────────
+           ★★ IT SITS ABOVE THE MONEY, BECAUSE IT QUALIFIES IT. Every figure below is built from
+           payouts, and a sale that cannot be processed produces no credit and therefore no payout —
+           so the cards are blind to it. Somebody with a €5,000 sale to their name and no plan
+           assignment read this page as "I have earned nothing". Placed underneath, the correction
+           would arrive after the wrong conclusion.
+
+           ★★ NO AMOUNT, NO DATE, NO REASON. A large number on a pay screen is read as "I am owed
+           this", and what they are owed is unknowable until an administrator finishes the setup — it
+           may be nothing. The reason (missing assignment / currency mismatch) is tenant configuration
+           this reader cannot act on. Their one available action is the sentence itself. §C3.
+
+           ★ AND IT IS NOT AN ERROR STATE. The sale is safely recorded; what is missing is setup. The
+           wording says that, and the tone is a warning rather than a failure. -->
+      @if (store.salesAwaitingSetup() > 0) {
+        <ws-card padding="md" class="my-dash__pending-card">
+          <div class="my-dash__pending">
+            <app-icon name="alert-triangle" [size]="20" class="my-dash__pending-icon" />
+            <div class="my-dash__pending-text">
+              <h3 class="my-dash__pending-title">
+                {{ 'MY_DASHBOARD.AWAITING_SETUP_TITLE' | translate: { count: store.salesAwaitingSetup() } }}
+              </h3>
+              <p class="my-dash__pending-desc">{{ 'MY_DASHBOARD.AWAITING_SETUP_DESC' | translate }}</p>
             </div>
+          </div>
+        </ws-card>
+      }
 
-            <div class="my-dash__figures">
-              @for (card of cards(balance); track card.key) {
-                <div class="my-dash__figure" [class]="'my-dash__figure--' + card.tone">
-                  <span class="my-dash__figure-label">{{ card.labelKey | translate }}</span>
-                  <span class="my-dash__figure-value">
-                    {{ card.value | currencyFormat: balance.currency }}
-                  </span>
+      <!-- ── Money ───────────────────────────────────────────────────────────
+           ★★ STRUCTURAL TWINS OF THE COMPANY DASHBOARD'S COMMISSION CARDS. Same ws-card, same
+           metric-card blocks, same figure typography, same compact-plus-exact value row — because the
+           rules live in `styles/_metric-cards.scss` and are had by writing the markup, not by copying
+           CSS. Two screens showing the same kind of figure must be identical, not similar.
+
+           One block per currency, and they are never summed: adding euros to zlotys invents a number. -->
+      @for (balance of store.balances(); track balance.currency) {
+        <div class="my-dash__section-hd">
+          <h2 class="my-dash__section-title">{{ 'MY_DASHBOARD.MONEY_TITLE' | translate }}</h2>
+          <div class="my-dash__section-tags">
+            <ws-badge variant="neutral" size="sm">{{ balance.currency }}</ws-badge>
+            <ws-badge variant="neutral" size="sm">{{ 'MY_DASHBOARD.SCOPE_ALL_TIME' | translate }}</ws-badge>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 w-full max-w-full mb-8">
+          @for (card of cards(balance); track card.key) {
+            <ws-card padding="md">
+              <div class="metric-card">
+                <div class="metric-card__hd">
+                  <h3 class="metric-card__title">{{ card.labelKey | translate }}</h3>
+                  <p class="metric-card__sub">{{ card.descKey | translate }}</p>
                 </div>
-              }
-            </div>
+                <div class="mt-4 flex items-end justify-between gap-4 w-full flex-1">
+                  <div class="flex flex-col gap-1 min-w-0 flex-1">
+                    <!-- Zero is rendered as a figure, never as an em-dash or a blank: "nothing yet"
+                         and "we could not work it out" must not look the same. -->
+                    <div class="metric-card__value commission-card__value">
+                      {{ fmtCompact(card.value, balance.currency) }}
+                    </div>
+                    <span class="metric-card__value--full">
+                      {{ card.value | currencyFormat: balance.currency }}
+                    </span>
+                    <span class="metric-card__ccy">{{ balance.currency }}</span>
+                  </div>
+                </div>
+              </div>
+            </ws-card>
+          }
+        </div>
 
-            <!-- The token decides the sentence; the sentence is never sent by the server. -->
-            <p class="my-dash__state">{{ interpretationKey(balance) | translate }}</p>
+        <!-- The token decides the sentence; the engine never sends prose. This is where the situation
+             is PHRASED, which is why none of the four figures above needs a colour to imply it. -->
+        <p class="commissions-closed-note">
+          <app-icon name="info" [size]="14" />
+          <span>{{ interpretationKey(balance) | translate }}</span>
+        </p>
 
-            @if (balance.disputedInPeriod > 0) {
-              <p class="my-dash__note">
-                {{ 'MY_DASHBOARD.DISPUTED_NOTE' | translate }}
-                <strong>{{ balance.disputedInPeriod | currencyFormat: balance.currency }}</strong>
-              </p>
-            }
-          </ws-card>
+        @if (balance.disputedInPeriod > 0) {
+          <p class="commissions-closed-note">
+            <app-icon name="alert-triangle" [size]="14" />
+            <span>
+              {{ 'MY_DASHBOARD.DISPUTED_NOTE' | translate }}
+              <strong>{{ balance.disputedInPeriod | currencyFormat: balance.currency }}</strong>
+            </span>
+          </p>
         }
-      } @else {
+      }
+
+      @if (store.loading()) {
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 w-full max-w-full mb-8">
+          @for (slot of loadingSlots; track slot) {
+            <ws-card padding="md">
+              <div class="metric-card">
+                <div class="metric-card__hd">
+                  <span class="skeleton skeleton--text"></span>
+                </div>
+                <div class="mt-4"><span class="skeleton skeleton--num"></span></div>
+              </div>
+            </ws-card>
+          }
+        </div>
+      } @else if (store.linked() && !store.hasMoney()) {
         <ws-card padding="md" class="my-dash__block">
           <p class="my-dash__state">{{ 'MY_DASHBOARD.NO_MONEY_YET' | translate }}</p>
         </ws-card>
       }
 
-      <!-- ── Attainment against the live quotas ──────────────────────────── -->
-      <ws-card padding="md" class="my-dash__block">
-        <div class="my-dash__block-hd">
-          <h2 class="my-dash__block-title">{{ 'MY_DASHBOARD.QUOTAS_TITLE' | translate }}</h2>
+      <!-- ── Attainment ──────────────────────────────────────────────────────
+           ★★ THE SAME ROW THE PAYEE PAGE DRAWS, from `styles/_attainment-rows.scss`. It used to live
+           in that page's own stylesheet, where nothing else could reach it. -->
+      @if (!store.loading() && store.linked()) {
+        <div class="my-dash__section-hd">
+          <h2 class="my-dash__section-title">{{ 'MY_DASHBOARD.QUOTAS_TITLE' | translate }}</h2>
         </div>
 
-        @if (!store.quotas().length) {
-          <p class="my-dash__state">{{ 'MY_DASHBOARD.QUOTAS_EMPTY' | translate }}</p>
-        } @else {
-          @for (q of store.quotas(); track q.quotaId) {
-            <div class="my-dash__quota">
-              <!-- ★ A quota with no target gets no gauge. Drawing 0% would accuse the reader of a
-                   result that is really a gap in the configuration, and they cannot fix it. -->
-              @if (hasTarget(q)) {
-                <div class="my-dash__gauge">
-                  <ws-gauge [value]="q.attainmentRatio" />
-                </div>
-              } @else {
-                <div class="my-dash__gauge my-dash__gauge--none">
-                  <app-icon name="help-circle" [size]="24" />
-                </div>
-              }
-
-              <div class="my-dash__quota-info">
-                <span class="my-dash__quota-plan">{{ q.planName }}</span>
-
+        <ws-card padding="md" class="my-dash__block">
+          @if (!store.quotas().length) {
+            <p class="my-dash__state">{{ 'MY_DASHBOARD.QUOTAS_EMPTY' | translate }}</p>
+          } @else {
+            @for (q of store.quotas(); track q.quotaId) {
+              <!-- `--static`: on the payee page this row opens the quota. Here the reader has no
+                   permission to open one, so it must not offer a click that does nothing. -->
+              <div class="bento-gauge-row bento-gauge-row--static">
                 @if (hasTarget(q)) {
-                  <span class="my-dash__quota-figures">
-                    @if (isUnits(q)) {
-                      {{ q.achievedAmount }} / {{ q.targetAmount }}
-                      {{ 'MY_DASHBOARD.UNITS' | translate }}
-                    } @else {
-                      {{ q.achievedAmount | currencyFormat: q.currency }} /
-                      {{ q.targetAmount | currencyFormat: q.currency }}
-                    }
-                  </span>
+                  <div class="bento-gauge-wrap">
+                    <ws-gauge [value]="q.attainmentRatio" />
+                  </div>
                 } @else {
-                  <span class="my-dash__quota-figures">
-                    {{ 'MY_DASHBOARD.NO_TARGET' | translate }}
-                  </span>
+                  <!-- ★ NO GAUGE WITHOUT A TARGET. A 0% dial accuses the reader of a result that is
+                       really a gap in the configuration, and they are the one person who cannot fix it. -->
+                  <div class="bento-gauge-wrap bento-gauge-wrap--none">
+                    <app-icon name="help-circle" [size]="24" />
+                  </div>
                 }
 
-                <span class="my-dash__quota-period">
-                  {{ q.periodStart | dateFormat }} – {{ q.periodEnd | dateFormat }}
-                </span>
+                <div class="bento-gauge-info">
+                  <span class="bento-gauge-info__plan">{{ q.planName }}</span>
+                  <span class="bento-gauge-info__period">
+                    {{ q.periodStart | dateFormat }} – {{ q.periodEnd | dateFormat }}
+                  </span>
+
+                  @if (hasTarget(q)) {
+                    <div class="bento-gauge-info__amounts">
+                      <div class="bento-gauge-info__stat">
+                        <span class="bento-stat-lbl">{{ 'ATTAINMENT.TARGET' | translate }}</span>
+                        @if (isUnits(q)) {
+                          {{ q.targetAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
+                        } @else {
+                          {{ q.targetAmount | currencyFormat: q.currency }}
+                        }
+                      </div>
+                      <div class="bento-gauge-info__stat">
+                        <span class="bento-stat-lbl">{{ 'ATTAINMENT.ACHIEVED' | translate }}</span>
+                        @if (isUnits(q)) {
+                          {{ q.achievedAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
+                        } @else {
+                          {{ q.achievedAmount | currencyFormat: q.currency }}
+                        }
+                      </div>
+                    </div>
+                  } @else {
+                    <p class="bento-gauge-info__note">{{ 'MY_DASHBOARD.NO_TARGET' | translate }}</p>
+                  }
+                </div>
               </div>
-            </div>
+            }
           }
-        }
-      </ws-card>
+        </ws-card>
+      }
 
       <!-- ── Every movement, and why the balance is what it is ───────────────
            ★ THE PANEL THE PAYEE PAGE ALREADY MOUNTS (§5.1). One rendering of the ledger, not two, so

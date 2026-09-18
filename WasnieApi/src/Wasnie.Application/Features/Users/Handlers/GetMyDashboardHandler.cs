@@ -1,8 +1,9 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.Queries.Ledger;
 using Wasnie.Application.Features.Users.Queries;
 using Wasnie.Domain.Authorization;
@@ -69,6 +70,8 @@ public sealed class GetMyDashboardHandler(
 
         var quotas = await LoadQuotasAsync(payee.Id, cancellationToken);
 
+        var awaitingSetup = await CountSalesAwaitingSetupAsync(payee.Id, cancellationToken);
+
         // ★ The id travels back so the screen can mount the ledger panel that already exists, rather
         // than grow a second rendering of the same movements. It is an ANSWER, not an input: nobody
         // can send one in, and the guard behind those endpoints still decides whether they may read
@@ -78,7 +81,41 @@ public sealed class GetMyDashboardHandler(
             payee.Id,
             payee.FullName,
             summary.IsSuccess ? summary.Value : null,
-            quotas));
+            quotas,
+            awaitingSetup));
+    }
+
+    /// <summary>
+    /// How many of this person's sales the engine cannot turn into commission yet (KAN-94).
+    ///
+    /// ★★ IT ASKS <see cref="UnprocessablePendingSpec"/> AND DOES NOT RE-DECIDE ANYTHING. That class is
+    /// the single definition of "Pending and stuck, and why", and the administrator's two surfaces —
+    /// the dashboard's "needs attention" card and the Reconciliation Centre — already read it. A second
+    /// implementation here would be a second opinion about the same rows, and the two would drift: the
+    /// rep would be told there is a problem on a day the admin's screen says there is none, or worse,
+    /// the reverse. It also means closures made from the Centre silence this notice too, because the
+    /// exclusion lives INSIDE the spec.
+    ///
+    /// ★★ TWO OF THE THREE REASONS, AND THE THIRD IS IMPOSSIBLE HERE. <c>NoPayee</c> selects rows whose
+    /// PayeeId is null; this query is anchored on a resolved payee, so it can never match. Counting it
+    /// would be dead code that reads as thoroughness.
+    ///
+    /// ★ THE TWO COUNTS ARE SUMMED BECAUSE THE SPEC GUARANTEES THEY ARE DISJOINT — it splits Pending
+    /// rows "into mutually-exclusive primary reasons", and the conditions prove it: NoActiveAssignment
+    /// requires that NO covering assignment exists, CurrencyMismatch requires that one does. A row
+    /// cannot satisfy both, so nothing is double-counted.
+    /// </summary>
+    private async Task<int> CountSalesAwaitingSetupAsync(Guid payeeId, CancellationToken cancellationToken)
+    {
+        var noAssignment = await UnprocessablePendingSpec
+            .NoActiveAssignment(db)
+            .CountAsync(t => t.PayeeId == payeeId, cancellationToken);
+
+        var currencyMismatch = await UnprocessablePendingSpec
+            .CurrencyMismatch(db)
+            .CountAsync(t => t.PayeeId == payeeId, cancellationToken);
+
+        return noAssignment + currencyMismatch;
     }
 
     /// <summary>

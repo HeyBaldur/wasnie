@@ -27,12 +27,17 @@
        paid and has no payee, and a required picker would force whoever invites them to attach
        somebody at random. -->
   <div class="invite-form__field">
+    <!-- ★★ SEARCHED ON THE SERVER (KAN-93). `[searchable]` filtered a list already loaded in full,
+         which stopped being a picker at a few hundred payees; `searchFn` sends the query instead and
+         the handler caps the answer. `initialOption` is what keeps an accepted suggestion's name on
+         the trigger when it is not in the last page of results. -->
     <ws-select
       formControlName="payeeId"
-      [options]="payeeOptions()"
-      [searchable]="true"
+      [searchFn]="payeeSearchFn"
+      [initialOption]="pickedPayee()"
       [label]="'USERS.INVITE.PAYEE_LABEL' | translate"
       [placeholder]="'USERS.INVITE.PAYEE_PLACEHOLDER' | translate"
+      noResultsLabel="USERS.LINK_PAYEE.NO_MATCH"
     />
     <p class="invite-form__hint">{{ 'USERS.INVITE.PAYEE_HINT' | translate }}</p>
 

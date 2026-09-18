@@ -218,4 +218,28 @@ public static class AuditActions
     /// which is why removal writes one before it deletes anything.
     /// </summary>
     public const string UserRemoved = "USER_REMOVED";
+
+    /// <summary>
+    /// KAN-93. An administrator attached a login to a payee record, or detached one.
+    ///
+    /// ★★ IT IS A MONEY EVENT WEARING AN ADMIN VERB, which is why it is audited at all. The link is
+    /// what decides whose commissions, whose balance and whose ledger a person may read; moving it
+    /// moves who can see somebody's pay. "Who gave this person access to that person's earnings" has
+    /// to be answerable, and this entry is the answer.
+    ///
+    /// ★ ONE ACTION FOR BOTH DIRECTIONS, with the payee in Before/After. Two actions would make
+    /// "was this link ever moved" a query over two tables of entries instead of one.
+    /// </summary>
+    public const string UserPayeeLinkChanged = "USER_PAYEE_LINK_CHANGED";
+
+    /// <summary>
+    /// KAN-93. Somebody asked for a workspace's Organization identifier to be mailed to them.
+    ///
+    /// ★ IT IS RECORDED EVEN THOUGH NOTHING CHANGED. The identifier is half of what gets somebody
+    /// into a workspace, so "who asked for ours, and when" is a question an administrator may need to
+    /// answer after the fact. An entry is written per workspace the message named, and only when a
+    /// message was actually sent — the silent refusals leave a log line, not an audit row, because
+    /// they concern an address that proved nothing.
+    /// </summary>
+    public const string OrganizationIdentifierRequested = "ORGANIZATION_IDENTIFIER_REQUESTED";
 }

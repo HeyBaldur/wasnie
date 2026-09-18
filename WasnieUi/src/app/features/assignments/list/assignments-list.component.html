@@ -114,7 +114,12 @@
                     <div class="payee-identity">
                       <span class="payee-avatar">{{ initialsFor(assignment.payeeFullName) }}</span>
                       <div class="payee-identity__text">
-                        <a class="payee-name" [routerLink]="['/payees', assignment.payeeId]">{{ assignment.payeeFullName }}</a>
+                        <!-- ★ SAME RULE AS THE QUOTA PAGE. Payees is hidden from a Sales Rep entirely
+                             (KAN-93 bug 1), and this list collapses to their own row, so the payee
+                             named here IS them — their record is /profile, not a payee page. Whoever
+                             holds `Payees.Read` keeps the payee page; it is the key the /payees route
+                             guard asks for, so the link cannot offer a page that guard then refuses. -->
+                        <a class="payee-name" [routerLink]="payeeLink(assignment.payeeId)">{{ assignment.payeeFullName }}</a>
                         <span class="payee-code">{{ assignment.payeeEmployeeCode }}</span>
                       </div>
                     </div>

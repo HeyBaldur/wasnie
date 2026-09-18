@@ -33,6 +33,17 @@ export const authRoutes: Routes = [
       ),
   },
   {
+    // KAN-93. The only way back in for somebody who forgot their Organization identifier. Its own
+    // title for the same reason `forgot-password` has one: without it the tab reads "Sign in".
+    path: 'forgot-organization',
+    title: 'FORGOT_ORGANIZATION.TITLE',
+    canActivate: [noAuthGuard],
+    loadComponent: () =>
+      import('./forgot-organization/forgot-organization.component').then(
+        (m) => m.ForgotOrganizationComponent
+      ),
+  },
+  {
     // KAN-32. NO noAuthGuard: somebody already signed in to another tenant may legitimately be
     // holding an invitation for this one, and bouncing them to the dashboard would strand the link
     // with no way to act on it.

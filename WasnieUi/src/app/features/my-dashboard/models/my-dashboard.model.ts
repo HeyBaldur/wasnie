@@ -70,4 +70,18 @@ export interface MyDashboard {
   payeeName: string | null;
   summary: MyLedgerSummary | null;
   quotas: MyQuotaAttainment[];
+
+  /**
+   * KAN-94. How many sales are recorded against this person that cannot become commission yet.
+   *
+   * ★★ A COUNT, NEVER AN AMOUNT, AND THE SCREEN MUST NOT INVENT ONE. A stuck sale produces no credit,
+   * so every figure on this dashboard is blind to it — which is how somebody with a €5,000 sale to
+   * their name read a page of zeros as "I have earned nothing". The fix is to say something is stuck;
+   * showing the €5,000 would put a large number on a pay screen, and a large number on a pay screen is
+   * read as "I am owed this". What they are owed is unknowable until an administrator finishes the
+   * setup, and may be nothing.
+   *
+   * ★ 0 means every sale of theirs has been processed, and no notice is drawn.
+   */
+  salesAwaitingSetup: number;
 }

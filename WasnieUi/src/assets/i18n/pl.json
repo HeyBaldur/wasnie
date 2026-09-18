@@ -40,11 +40,20 @@
     "RESEND_CONFIRMATION": "Wyślij ponownie e-mail potwierdzający",
     "ALREADY_CONFIRMED": "Twoje konto jest już potwierdzone. Zaloguj się poniżej.",
     "FORGOT_PASSWORD": "Nie pamiętasz hasła?",
+    "FORGOT_ORGANIZATION_ID": "Nie pamiętasz?",
     "PASSWORD_RESET_SUCCESS": "Hasło zostało zaktualizowane. Zaloguj się nowym hasłem.",
     "BACK_TO_LOGIN": "Powrót do logowania",
     "ORGANIZATION_ID": "Identyfikator organizacji",
     "ORGANIZATION_ID_HINT": "Potrzebny tylko wtedy, gdy Twój adres jest używany w więcej niż jednej przestrzeni roboczej.",
     "ORGANIZATION_REQUIRED": "Ten adres e-mail jest używany w więcej niż jednej przestrzeni roboczej. Podaj identyfikator organizacji, aby kontynuować."
+  },
+  "FORGOT_ORGANIZATION": {
+    "TITLE": "Nie pamiętasz identyfikatora organizacji?",
+    "DESC": "Podaj swój adres e-mail, a wyślemy identyfikator organizacji przestrzeni roboczej, którą administrujesz. Ze względów bezpieczeństwa nigdy nie pokazujemy go na ekranie, a poprosić o niego mogą tylko administratorzy.",
+    "SUBMIT": "Wyślij mi go",
+    "SENT_TITLE": "Sprawdź skrzynkę",
+    "SENT_DESC": "Jeśli ten adres administruje przestrzenią roboczą, jej identyfikator organizacji został tam wysłany.",
+    "SENT_NON_ADMIN": "Otrzymują go tylko administratorzy. Jeśli nim nie jesteś, poproś swojego administratora — może go odczytać ze swojego konta."
   },
   "FORGOT_PASSWORD": {
     "TITLE": "Zresetuj swoje hasło",
@@ -2251,9 +2260,9 @@
     "CLOSE_FIGURE_CREDITS": "{{count}} kredyt(ów)",
     "CLOSE_FIGURE_BALANCE": "Saldo księgi",
     "CLOSE_RESOLUTION_LABEL": "Co stało się z pieniędzmi?",
-    "CLOSE_RESOLUTION_SETTLED": "Rozliczone poza Wasnie",
+    "CLOSE_RESOLUTION_SETTLED": "Rozliczone poza Incentra",
     "CLOSE_RESOLUTION_WRITTEN_OFF": "Odpisane w straty",
-    "CLOSE_RESOLUTION_SETTLED_HINT": "Zajęły się tym kadry, płace lub finanse — pieniądze trafiły do osoby albo zostały od niej odzyskane w miejscu, którego Wasnie nie widzi.",
+    "CLOSE_RESOLUTION_SETTLED_HINT": "Zajęły się tym kadry, płace lub finanse — pieniądze trafiły do osoby albo zostały od niej odzyskane w miejscu, którego Incentra nie widzi.",
     "CLOSE_RESOLUTION_WRITTEN_OFF_HINT": "Firma bierze to na siebie. Nikt tego nie otrzyma, a kwota zostaje zapisana jako koszt.",
     "CLOSE_NOTE_LABEL": "Dlaczego (wymagane)",
     "CLOSE_NOTE_PLACEHOLDER": "Co zdecydowano i kto.",
@@ -3023,12 +3032,30 @@
   "USERS": {
     "TITLE": "Użytkownicy",
     "SUBTITLE": "Kto ma dostęp do tej przestrzeni i które zaproszenia są wciąż otwarte.",
+    "PAYEE": {
+      "NOT_LINKED": "Niepowiązany"
+    },
+    "LINK_PAYEE": {
+      "NO_MATCH": "Żaden niepowiązany payee nie pasuje.",
+      "TITLE": "Powiąż z payee",
+      "MESSAGE": "Wybierz rekord payee, którym jest {{name}}. Od tej chwili zobaczy własne prowizje, saldo i cele.",
+      "PLACEHOLDER": "Wybierz payee",
+      "SUBMIT": "Powiąż",
+      "SUGGESTION": "Istnieje payee z tym samym adresem e-mail: {{name}}.",
+      "USE_SUGGESTION": "Użyj tego",
+      "NONE_AVAILABLE": "Każdy payee w tej przestrzeni należy już do jakiegoś konta. Najpierw odłącz jeden albo utwórz rekord payee."
+    },
+    "UNLINK_PAYEE": {
+      "TITLE": "Odłącz payee",
+      "MESSAGE": "{{name}} przestanie widzieć prowizje, saldo i cele osoby {{payee}}. Ani konto, ani rekord payee nie zostają usunięte, a powiązanie można utworzyć ponownie."
+    },
     "SECTION": {
       "PEOPLE": "Osoby",
       "PENDING": "Oczekujące zaproszenia",
       "HISTORY": "Zamknięte zaproszenia ({{count}})"
     },
     "TABLE": {
+      "PAYEE": "Rekord payee",
       "NAME": "Imię i nazwisko",
       "EMAIL": "E-mail",
       "ROLE": "Rola",
@@ -3058,6 +3085,9 @@
       "UNKNOWN": "Brak roli"
     },
     "ACTION": {
+      "LINK_PAYEE": "Powiąż z payee",
+      "UNLINK_PAYEE": "Odłącz payee",
+      "SELF_NOTE": "To Ty — własnej roli ani dostępu nie zmienia się tutaj.",
       "DEACTIVATE": "Dezaktywuj",
       "REACTIVATE": "Aktywuj ponownie",
       "RESEND": "Wyślij ponownie",
@@ -3147,6 +3177,8 @@
     }
   },
   "MY_DASHBOARD": {
+    "AWAITING_SETUP_TITLE": "{{count}} Twoich sprzedaży nie może jeszcze wygenerować prowizji",
+    "AWAITING_SETUP_DESC": "Te sprzedaże są zapisane na Ciebie, ale konfiguracja Twojego planu nie jest kompletna, więc nie liczą się jeszcze do prowizji. Poproś administratora, aby ją dokończył — w tym czasie nic nie przepada.",
     "SUBTITLE": "Twoje prowizje, saldo i postępy względem celów.",
     "ERROR_TITLE": "Nie udało się wczytać Twoich danych",
     "ERROR_DESC": "Niczego nie brakuje na Twoim koncie - zapytanie się nie powiodło. Odśwież stronę, a jeśli błąd się powtarza, powiadom administratora.",
@@ -3168,6 +3200,10 @@
     "QUOTAS_TITLE": "Twoje cele",
     "QUOTAS_EMPTY": "Nie masz dziś aktywnego celu.",
     "NO_TARGET": "Dla tego planu nie ustalono celu.",
-    "UNITS": "transakcji"
+    "SCOPE_ALL_TIME": "Cały okres",
+    "EARNED_DESC": "Wszystko, co według reguł planu zostało naliczone.",
+    "PAID_DESC": "Z tego — kwota już wypłacona.",
+    "AWAITING_DESC": "Naliczone i jeszcze niewypłacone.",
+    "DEBT_DESC": "Kwota, którą jesteś winien firmie w tej chwili."
   }
 }

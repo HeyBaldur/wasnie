@@ -13,6 +13,7 @@ using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Exceptions;
 using Wasnie.Infrastructure.Persistence;
+using Wasnie.UnitTests.TestDoubles;
 
 namespace Wasnie.UnitTests.Application;
 
@@ -195,7 +196,7 @@ public sealed class StopRuleHandlerTests : IDisposable
             await Handler().Handle(new StopRuleCommand(planId, id, "wrong"), CancellationToken.None);
         }
 
-        var dto = (await new GetPlanByIdHandler(_db, _auth)
+        var dto = (await new GetPlanByIdHandler(_db, _auth, FakePlanAccessGuard.SeesEverything())
             .Handle(new GetPlanByIdQuery(planId), CancellationToken.None)).Value!;
 
         dto.Status.Should().Be(nameof(PlanStatus.Active));

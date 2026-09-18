@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Common.Results;
 
@@ -21,12 +21,35 @@ public sealed record GetMyDashboardQuery : IRequest<Result<MyDashboardDto>>;
 /// 0.00 to somebody who has actually earned money is the false zero this codebase already has a name
 /// for, and it would arrive here dressed as a working page.
 /// </summary>
+/// <param name="SalesAwaitingSetup">
+/// How many sales are recorded against this person that the engine CANNOT turn into commission yet.
+///
+/// ★★ WITHOUT IT, THEIR OWN SALE IS INVISIBLE TO THEM (KAN-94). A transaction that cannot be processed
+/// produces no credit, no credit produces no payout, and every figure on this screen is built from
+/// payouts — so somebody with a €5,000 sale to their name and no plan assignment saw a dashboard of
+/// zeros and could only conclude one of two wrong things: that the product was broken, or that they
+/// had sold nothing. The administrator could see the row all along (the "needs attention" card and the
+/// Reconciliation Centre both count it); the person it was about could not.
+///
+/// ★★ A COUNT, AND DELIBERATELY NOT AN AMOUNT. Sending €5,000 here would put a large number on a pay
+/// screen, and a large number on a pay screen is read as "I am owed this". What they are owed is
+/// unknowable until a plan exists — it may be nothing — so the honest thing to send is the fact that
+/// something is stuck, not a figure that implies a promise (§C3).
+///
+/// ★★ AND NOT THE REASON EITHER. Whether it is a missing assignment or a currency mismatch is the
+/// tenant's configuration, which this reader cannot act on and should not have to understand. Their
+/// one available action is the same in both cases: tell an administrator.
+///
+/// ★ ZERO IS A REAL ANSWER. It means every sale recorded against them has been processed, and the
+/// screen shows no notice at all.
+/// </param>
 public sealed record MyDashboardDto(
     bool Linked,
     Guid? PayeeId,
     string? PayeeName,
     PayeeLedgerSummaryDto? Summary,
-    IReadOnlyList<MyQuotaAttainmentDto> Quotas);
+    IReadOnlyList<MyQuotaAttainmentDto> Quotas,
+    int SalesAwaitingSetup = 0);
 
 /// <summary>
 /// One quota of the signed-in person and how far along it is.

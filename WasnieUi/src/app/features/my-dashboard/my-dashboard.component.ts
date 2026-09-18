@@ -1,10 +1,12 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
 import { MyDashboardStore } from './state/my-dashboard.store';
 import { MyCurrencyBalance, MyQuotaAttainment } from './models/my-dashboard.model';
 import { AppShellComponent } from '../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
+import { formatCompactMoney } from '../../shared/utils/money-compact';
 import { DateFormatPipe } from '../../shared/pipes/date-format.pipe';
 import { PayeeLedgerPanelComponent } from '../ledger/panel/payee-ledger-panel.component';
 import { RefreshOnEnterDirective } from '../../shared/directives/refresh-on-enter.directive';
@@ -37,6 +39,7 @@ import {
   selector: 'app-my-dashboard',
   standalone: true,
   imports: [
+    DecimalPipe,
     TranslateModule,
     AppShellComponent,
     RefreshOnEnterDirective,
@@ -58,6 +61,12 @@ export class MyDashboardComponent implements OnInit {
 
   private readonly now = signal(new Date());
 
+  /**
+   * Placeholders while the figures are in flight — one per card, so the grid does not reflow when the
+   * real numbers land. The reader sees the shape of the answer before the answer.
+   */
+  readonly loadingSlots = [0, 1, 2, 3];
+
   readonly greetingKey = computed(() => {
     const hour = this.now().getHours();
     if (hour < 12) return 'DASHBOARD.GREETING_MORNING';
@@ -76,24 +85,35 @@ export class MyDashboardComponent implements OnInit {
   }
 
   /**
-   * The four figures of one currency, in reading order.
+   * The four figures of one currency, in reading order, each with the sentence that says what it is.
    *
-   * ★ `awaitingPayment` AND `outstandingDebt` ARE BOTH ALL-TIME and the two period figures are not.
-   * The labels say which is which — a screen that let them sit unlabelled side by side would invite
-   * the subtraction the backend already refuses to do.
+   * ★★ THE FOUR ARE NOT READ AS A SUM, and the descriptions are what stop them being read as one.
+   * "Paid" is a part of "Earned"; "Awaiting" is the rest of it; "You owe" moves in the opposite
+   * direction entirely. A row of four bare numbers invites exactly the arithmetic the backend refuses
+   * to do on the reader's behalf.
+   *
+   * ★ NONE OF THEM IS COLOURED, deliberately — the same rule the company dashboard's three commission
+   * cards follow. Painting the debt red states a judgement the figure does not carry: owing money
+   * against future commission is ordinary, and the screen says what the situation IS in the sentence
+   * underneath, where it can be phrased instead of implied.
    */
   cards(balance: MyCurrencyBalance): ReadonlyArray<{
     key: string;
     labelKey: string;
+    descKey: string;
     value: number;
-    tone: 'neutral' | 'owed' | 'debt';
   }> {
     return [
-      { key: 'earned', labelKey: 'MY_DASHBOARD.EARNED', value: balance.earnedCommissionsInPeriod, tone: 'neutral' },
-      { key: 'paid', labelKey: 'MY_DASHBOARD.PAID', value: balance.paidOutInPeriod, tone: 'neutral' },
-      { key: 'awaiting', labelKey: 'MY_DASHBOARD.AWAITING', value: balance.awaitingPaymentAllTime, tone: 'owed' },
-      { key: 'debt', labelKey: 'MY_DASHBOARD.DEBT', value: balance.outstandingDebt, tone: 'debt' },
+      { key: 'earned', labelKey: 'MY_DASHBOARD.EARNED', descKey: 'MY_DASHBOARD.EARNED_DESC', value: balance.earnedCommissionsInPeriod },
+      { key: 'paid', labelKey: 'MY_DASHBOARD.PAID', descKey: 'MY_DASHBOARD.PAID_DESC', value: balance.paidOutInPeriod },
+      { key: 'awaiting', labelKey: 'MY_DASHBOARD.AWAITING', descKey: 'MY_DASHBOARD.AWAITING_DESC', value: balance.awaitingPaymentAllTime },
+      { key: 'debt', labelKey: 'MY_DASHBOARD.DEBT', descKey: 'MY_DASHBOARD.DEBT_DESC', value: balance.outstandingDebt },
     ];
+  }
+
+  /** Compact notation for the leading figure. The exact amount is printed underneath it, always. */
+  fmtCompact(amount: number, currency: string): string {
+    return formatCompactMoney(amount, currency);
   }
 
   /**

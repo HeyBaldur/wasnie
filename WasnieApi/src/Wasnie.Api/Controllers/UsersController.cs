@@ -32,15 +32,20 @@ public sealed class UsersController(IMediator mediator) : ControllerBase
     }
 
     /// <summary>
-    /// The payees nobody owns yet, for the invite form's picker (KAN-92). The optional email hint
-    /// makes the server point at a likely match — it never selects it.
+    /// The payees nobody owns yet, for the two pickers that attach one (KAN-92, KAN-93).
+    ///
+    /// ★ TWO INDEPENDENT INPUTS, AND THEY MUST NOT BE FOLDED INTO ONE. <c>search</c> is what the
+    /// administrator is typing into the dropdown; <c>email</c> is the invitee's address, used only to
+    /// point at a likely match. Answering the second from the first would make the suggestion vanish
+    /// as soon as somebody starts typing a name.
     /// </summary>
     [HttpGet("unlinked-payees")]
     public async Task<IActionResult> UnlinkedPayees(
         [FromQuery] string? email,
+        [FromQuery] string? search,
         CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new ListUnlinkedPayeesQuery(email), cancellationToken);
+        var result = await mediator.Send(new ListUnlinkedPayeesQuery(email, search), cancellationToken);
         if (!result.IsSuccess)
             return BadRequest(new { message = result.Error });
 
@@ -127,10 +132,36 @@ public sealed class UsersController(IMediator mediator) : ControllerBase
     }
 
     /// <summary>
+    /// Attaches this login to a payee record, or detaches it when <c>payeeId</c> is null (KAN-93).
+    ///
+    /// ★ PUT, NOT POST, AND ONE ROUTE FOR BOTH DIRECTIONS. The link is a single-valued property of
+    /// the user — they are one payee or none — so setting it is idempotent and naming its absence
+    /// null is the honest spelling. A separate DELETE would be a second route that has to agree with
+    /// this one about what "no payee" means.
+    /// </summary>
+    [HttpPut("{userId}/payee")]
+    public async Task<IActionResult> LinkPayee(
+        string userId,
+        [FromBody] LinkUserPayeeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new LinkUserToPayeeCommand(userId, request.PayeeId), cancellationToken);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return NoContent();
+    }
+
+    /// <summary>
     /// Its own request type rather than the command, so the user id comes from the ROUTE and cannot
     /// be overridden by the body — §D3, and here it is also an authorisation boundary.
     /// </summary>
     public sealed record ChangeUserRoleRequest(string Role);
+
+    /// <summary>Same reason as above: the user id is the route's, never the body's.</summary>
+    public sealed record LinkUserPayeeRequest(Guid? PayeeId);
 }
 
 /// <summary>

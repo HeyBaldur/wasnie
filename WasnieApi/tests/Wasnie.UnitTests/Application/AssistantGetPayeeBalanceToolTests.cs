@@ -73,7 +73,7 @@ public sealed class AssistantGetPayeeBalanceToolTests
                     if (FailPayeeListQuery)
                         return (TResponse)(object)Result<PagedResult<PayeeDto>>.Failure("Unknown sort field.");
 
-                    return (TResponse)(object)await new ListPayeesHandler(db, tenantContext, auth)
+                    return (TResponse)(object)await new ListPayeesHandler(db, tenantContext, auth, guard)
                         .Handle(q, cancellationToken);
 
                 case GetPayeeLedgerSummaryQuery q:

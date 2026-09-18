@@ -28,6 +28,16 @@ export interface TenantUser {
   createdAt: string;
   deactivatedAt: string | null;
   invitedByEmail: string | null;
+
+  /**
+   * KAN-93. The payee record this login owns, or null when nobody attached one.
+   *
+   * ★ IT IS WHAT MAKES THE STRANDED USER VISIBLE. A person with no payee sees a personal dashboard
+   * that tells them to ask an administrator; without this field the administrator's own screen gave
+   * no sign that anything was wrong, so nobody ever pressed anything.
+   */
+  linkedPayeeId: string | null;
+  linkedPayeeName: string | null;
 }
 
 export interface Invitation {
@@ -82,14 +92,26 @@ export interface UnlinkedPayee {
 }
 
 /**
- * The pickable payees plus the one whose address matches.
+ * One PAGE of pickable payees plus the one whose address matches.
  *
  * `suggested` is a hint and must never be pre-selected: a wrong match accepted by reflex shows one
  * person another person's pay.
+ *
+ * ★★ `payees` IS A PAGE, NOT THE SET (KAN-93). It holds at most the server's picker limit and reflects
+ * whatever was searched for, so nothing may count it and conclude anything about the workspace.
  */
 export interface UnlinkedPayeesResponse {
   payees: UnlinkedPayee[];
   suggested: UnlinkedPayee | null;
+
+  /**
+   * How many unlinked payees exist in total, ignoring the search.
+   *
+   * ★★ IT SEPARATES TWO OPPOSITE FACTS. Zero rows because every payee already belongs to a login is
+   * fixed by unlinking somebody; zero rows because the admin mistyped a name is fixed by typing
+   * again. Reading `payees.length === 0` would say the first while meaning the second.
+   */
+  totalAvailable: number;
 }
 
 /** What the public accept page is told before anybody signs in. Carries no identifiers. */

@@ -42,6 +42,15 @@ export class MyDashboardStore {
    */
   readonly hasMoney = computed(() => this.balances().length > 0);
 
+  /**
+   * KAN-94. Sales of theirs that cannot become commission until an administrator finishes the setup.
+   *
+   * ★ IT FALLS BACK TO 0, NOT TO "SHOW THE NOTICE". While the answer is unknown — loading, or a failed
+   * request — the honest rendering is nothing at all. Warning somebody that their pay is stuck on the
+   * strength of a request that never arrived would be inventing the alarm.
+   */
+  readonly salesAwaitingSetup = computed(() => this.data()?.salesAwaitingSetup ?? 0);
+
   async load(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);

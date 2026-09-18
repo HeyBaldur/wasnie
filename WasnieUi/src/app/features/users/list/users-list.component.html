@@ -45,6 +45,7 @@
         <tr>
           <th class="col-name">{{ 'USERS.TABLE.NAME' | translate }}</th>
           <th>{{ 'USERS.TABLE.ROLE' | translate }}</th>
+          <th>{{ 'USERS.TABLE.PAYEE' | translate }}</th>
           <th>{{ 'USERS.TABLE.STATUS' | translate }}</th>
           <th class="col-secondary">{{ 'USERS.TABLE.INVITED_BY' | translate }}</th>
           <th class="col-actions"></th>
@@ -61,6 +62,16 @@
                   <span class="user-email">{{ user.email }}</span>
                 </div>
               </div>
+            </td>
+            <!-- KAN-93. NOT LINKED IS SAID OUT LOUD, NOT LEFT BLANK. An empty cell reads as "nothing
+                 to report"; this is the state that silently breaks somebody's personal dashboard, and
+                 it is the only thing on this screen an administrator has to act on. -->
+            <td>
+              @if (user.linkedPayeeName) {
+                <span class="users__payee">{{ user.linkedPayeeName }}</span>
+              } @else {
+                <ws-badge variant="warning">{{ 'USERS.PAYEE.NOT_LINKED' | translate }}</ws-badge>
+              }
             </td>
             <td>{{ roleKey(user.role) | translate }}</td>
             <td>
@@ -90,29 +101,57 @@
                     [style.bottom.px]="menuPosition()!.bottom ?? null"
                     [style.right.px]="menuPosition()!.right"
                   >
-                    @if (user.isActive) {
-                      <button class="row-menu__item" type="button" (click)="openRoleChange(user)">
-                        <app-icon name="shield" [size]="14" />
-                        {{ 'USERS.ACTION.CHANGE_ROLE' | translate }}
-                      </button>
-                      <button class="row-menu__item row-menu__item--danger" type="button"
-                              (click)="askDeactivate(user)">
+                    <!-- KAN-93. THE PAYEE LINK IS OFFERED ON EVERY ROW INCLUDING YOUR OWN, and that is
+                         not an oversight: attaching yourself to your own payee record is the ordinary
+                         case for a founding administrator who also sells. It changes what YOU may
+                         read, not what you may DO, so none of the self-action reasoning below applies
+                         to it. Only the three that touch authority are hidden. -->
+                    @if (user.linkedPayeeId) {
+                      <button class="row-menu__item" type="button" (click)="askUnlinkPayee(user)">
                         <app-icon name="user-minus" [size]="14" />
-                        {{ 'USERS.ACTION.DEACTIVATE' | translate }}
+                        {{ 'USERS.ACTION.UNLINK_PAYEE' | translate }}
                       </button>
                     } @else {
-                      <button class="row-menu__item" type="button" (click)="reactivate(user)">
+                      <button class="row-menu__item" type="button" (click)="openLinkPayee(user)">
                         <app-icon name="user-check" [size]="14" />
-                        {{ 'USERS.ACTION.REACTIVATE' | translate }}
+                        {{ 'USERS.ACTION.LINK_PAYEE' | translate }}
                       </button>
                     }
-                    <!-- Removing is offered whatever the access state: an account switched off months
-                         ago is the likeliest one an admin wants gone for good. -->
-                    <button class="row-menu__item row-menu__item--danger" type="button"
-                            (click)="askRemove(user)">
-                      <app-icon name="trash-2" [size]="14" />
-                      {{ 'USERS.ACTION.REMOVE' | translate }}
-                    </button>
+
+                    <!-- ★★ NOTHING THAT TOUCHES YOUR OWN AUTHORITY (KAN-93, §5.8). The server has
+                         always refused these three on yourself — `USER_CANNOT_ACT_ON_SELF`, and
+                         `LastAdminGuard` behind it — so offering them taught nothing except by
+                         failing. Hiding is the rule; the backend refusal stays as the invariant. -->
+                    @if (!isSelf(user)) {
+                      @if (user.isActive) {
+                        <button class="row-menu__item" type="button" (click)="openRoleChange(user)">
+                          <app-icon name="shield" [size]="14" />
+                          {{ 'USERS.ACTION.CHANGE_ROLE' | translate }}
+                        </button>
+                        <button class="row-menu__item row-menu__item--danger" type="button"
+                                (click)="askDeactivate(user)">
+                          <app-icon name="user-minus" [size]="14" />
+                          {{ 'USERS.ACTION.DEACTIVATE' | translate }}
+                        </button>
+                      } @else {
+                        <button class="row-menu__item" type="button" (click)="reactivate(user)">
+                          <app-icon name="user-check" [size]="14" />
+                          {{ 'USERS.ACTION.REACTIVATE' | translate }}
+                        </button>
+                      }
+                      <!-- Removing is offered whatever the access state: an account switched off months
+                           ago is the likeliest one an admin wants gone for good. -->
+                      <button class="row-menu__item row-menu__item--danger" type="button"
+                              (click)="askRemove(user)">
+                        <app-icon name="trash-2" [size]="14" />
+                        {{ 'USERS.ACTION.REMOVE' | translate }}
+                      </button>
+                    } @else {
+                      <!-- ★ THE ROW IS NOT LEFT WITH AN EMPTY MENU. Saying "this is you" is what turns
+                           an absence into an explanation; a dropdown with nothing in it reads as
+                           broken (§C3). -->
+                      <p class="row-menu__note">{{ 'USERS.ACTION.SELF_NOTE' | translate }}</p>
+                    }
                   </div>
                 }
               </div>
@@ -288,6 +327,96 @@
       </div>
     </form>
   </ws-modal>
+}
+
+<!-- ── Link a payee (KAN-93) ─────────────────────────────────────────────── -->
+<!--
+  ★★ A MODAL WITH A PICKER, NOT AN INLINE DROPDOWN — the same reason the role dialog is one:
+  `ws-select` is a ControlValueAccessor, and one control per row would be rebuilt on every reload and
+  lose focus mid-interaction.
+-->
+@if (linkPayeeFor(); as user) {
+  <ws-modal
+    [isOpen]="true"
+    [title]="'USERS.LINK_PAYEE.TITLE' | translate"
+    size="sm"
+    (closed)="linkPayeeFor.set(null)"
+  >
+    <form [formGroup]="linkPayeeForm" (ngSubmit)="submitLinkPayee()" class="users__role-form">
+      <p class="users__role-form-who">
+        {{ 'USERS.LINK_PAYEE.MESSAGE' | translate:{ name: displayName(user) } }}
+      </p>
+
+      @if (payeesLoading()) {
+        <p class="users__role-form-hint">{{ 'COMMON.LOADING' | translate }}</p>
+      } @else if (noPayeesAvailable()) {
+        <!-- ★★ EMPTY IS EXPLAINED, NOT DRAWN AS AN EMPTY PICKER — and this is the case where EVERY
+             payee already belongs to a login, which is a different problem from a search that matched
+             nothing and has a different fix: detach the other login first. It is driven by the
+             server's total, never by the length of the dropdown; ws-select says "no results" for the
+             other case on its own. -->
+        <div class="users__notice">
+          <app-icon name="alert-triangle" [size]="16" />
+          <span>{{ 'USERS.LINK_PAYEE.NONE_AVAILABLE' | translate }}</span>
+        </div>
+      } @else {
+        @if (suggestedPayee(); as suggestion) {
+          <!-- ★★ THE MATCH IS OFFERED, NEVER PRE-SELECTED. Addresses coincide for boring reasons — a
+               shared mailbox, a replacement in the same seat — and a match accepted by reflex hands
+               somebody another person's pay. The administrator is the one who presses this.
+
+               ★ IT SURVIVES THE SEARCH BOX. The suggestion is answered by its own query on the
+               server, so it stays on screen while the admin types a name into the picker below. -->
+          <p class="users__role-form-hint">
+            {{ 'USERS.LINK_PAYEE.SUGGESTION' | translate:{ name: suggestion.fullName } }}
+            <button type="button" class="users__link-button" (click)="acceptSuggestion()">
+              {{ 'USERS.LINK_PAYEE.USE_SUGGESTION' | translate }}
+            </button>
+          </p>
+        }
+
+        <!-- ★★ SEARCHED ON THE SERVER, NOT SCROLLED. A workspace with a thousand payees cannot be a
+             dropdown; `searchFn` sends what is typed and the handler caps the answer. Same shape as
+             every other payee picker in the product. `initialOption` is what keeps the chosen name on
+             the trigger when it is not in the last page of results — see `pickedPayeeOption`. -->
+        <ws-select
+          formControlName="payeeId"
+          [searchFn]="payeeSearchFn"
+          [initialOption]="pickedPayeeOption()"
+          [label]="'USERS.TABLE.PAYEE' | translate"
+          [placeholder]="'USERS.LINK_PAYEE.PLACEHOLDER' | translate"
+          noResultsLabel="USERS.LINK_PAYEE.NO_MATCH"
+        />
+      }
+
+      <div class="users__role-form-actions">
+        <ws-button variant="ghost" type="button" [disabled]="store.saving()"
+                   (click)="linkPayeeFor.set(null)">
+          {{ 'COMMON.CANCEL' | translate }}
+        </ws-button>
+        <ws-button variant="primary" type="submit"
+                   [disabled]="store.saving() || noPayeesAvailable()">
+          {{ 'USERS.LINK_PAYEE.SUBMIT' | translate }}
+        </ws-button>
+      </div>
+    </form>
+  </ws-modal>
+}
+
+<!-- ★ The message names what STOPS being visible, because that is the whole effect: unlinking does
+     not delete a payee or a login, it closes one person's window onto their own pay (§C3). -->
+@if (confirmUnlink(); as user) {
+  <ws-confirmation-modal
+    [isOpen]="true"
+    [cancelLabel]="'COMMON.CANCEL' | translate"
+    [loading]="store.saving()"
+    [title]="'USERS.UNLINK_PAYEE.TITLE' | translate"
+    [message]="'USERS.UNLINK_PAYEE.MESSAGE' | translate:{ name: displayName(user), payee: user.linkedPayeeName }"
+    [confirmLabel]="'USERS.ACTION.UNLINK_PAYEE' | translate"
+    variant="danger"
+    (confirmed)="confirmUnlinkPayee()"
+    (cancelled)="confirmUnlink.set(null)"
+  />
 }
 
 <!-- ★ The confirmation says what deactivation ACTUALLY does (§C3): the account keeps existing and

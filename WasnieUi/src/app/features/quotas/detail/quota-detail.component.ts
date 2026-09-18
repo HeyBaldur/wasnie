@@ -4,6 +4,8 @@ import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { QuotasStore } from '../state/quotas.store';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
@@ -23,6 +25,7 @@ import {
     AppShellComponent,
     IconComponent,
     RouterLink,
+    HasPermissionDirective,
     TranslateModule,
     CurrencyFormatPipe,
     DateFormatPipe,
@@ -41,6 +44,7 @@ export class QuotaDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   readonly store = inject(QuotasStore);
   private readonly toast = inject(ToastService);
+  private readonly currentUser = inject(CurrentUserService);
 
   readonly quotaId = this.route.snapshot.paramMap.get('quotaId')!;
 
@@ -49,6 +53,26 @@ export class QuotaDetailComponent implements OnInit {
 
   ngOnInit(): void {
     this.store.loadQuota(this.quotaId);
+  }
+
+  /**
+   * Where the payee's name on this screen should lead.
+   *
+   * ★★ A REP HAS NO PAYEE PAGE, AND THE LINK MUST NOT PRETEND OTHERWISE. KAN-93 bug 1 hid the Payees
+   * section from them completely — their own record is their dashboard, not a payee page — so the
+   * unconditional link dropped them on Access Denied from a screen they were entitled to be on.
+   *
+   * ★★ IT IS SAFE TO SEND THEM TO THEIR OWN PROFILE because a rep can only ever open their own quota:
+   * every quota handler applies PayeeAccessGuard, so the payee named here IS them. If that ever stops
+   * being true this becomes wrong, which is why the reasoning is written down rather than assumed.
+   *
+   * ★ KEYED ON `Payees.Read`, THE SAME PERMISSION THE /payees ROUTE GUARD ASKS FOR. Anything else
+   * would eventually disagree with it and offer a page that refuses the reader.
+   */
+  payeeLink(payeeId: string): unknown[] {
+    return this.currentUser.hasPermission('Payees.Read')
+      ? ['/payees', payeeId]
+      : ['/profile'];
   }
 
   async onActivate(): Promise<void> {

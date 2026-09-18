@@ -1,6 +1,7 @@
-import { Component, computed, inject, OnInit, output, signal } from '@angular/core';
+import { Component, computed, inject, output, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
+import { Observable, from, map } from 'rxjs';
 import { UsersStore } from '../state/users.store';
 import { TenantRole, UnlinkedPayee } from '../models/user.model';
 import {
@@ -9,6 +10,22 @@ import {
   WsSelectComponent,
   type SelectOption,
 } from '../../../shared/ui';
+
+/**
+ * How a payee is written in the picker, in ONE place.
+ *
+ * ★ THE EMPLOYEE CODE RIDES IN THE LABEL because two people share a name far more often than two
+ * people share a code, and picking the wrong one is the failure this whole field exists to avoid.
+ *
+ * ★ SHARED BY THE SEARCH RESULTS AND THE ACCEPTED SUGGESTION, so the label on the closed trigger is
+ * character-for-character the one that was in the list.
+ */
+function payeeOption(p: UnlinkedPayee): SelectOption {
+  return {
+    value: p.id,
+    label: p.employeeCode ? `${p.fullName} · ${p.employeeCode}` : p.fullName,
+  };
+}
 
 /**
  * The invite form (KAN-32, extended by KAN-92).
@@ -35,7 +52,7 @@ import {
   templateUrl: './invite-user-form.component.html',
   styleUrl: './invite-user-form.component.scss',
 })
-export class InviteUserFormComponent implements OnInit {
+export class InviteUserFormComponent {
   private readonly fb = inject(FormBuilder);
   readonly store = inject(UsersStore);
 
@@ -44,10 +61,17 @@ export class InviteUserFormComponent implements OnInit {
 
   readonly submitting = signal(false);
 
-  private readonly unlinkedPayees = signal<UnlinkedPayee[]>([]);
-
   /** The payee whose address matches what was typed. Offered, never applied. */
   readonly suggested = signal<UnlinkedPayee | null>(null);
+
+  /**
+   * The option that keeps the accepted suggestion's NAME on the closed trigger.
+   *
+   * ★★ IN ASYNC MODE `ws-select` RESOLVES THE SELECTED LABEL FROM THE LAST SEARCH, and the suggested
+   * payee is usually not in it — without this the control would hold the right id while the trigger
+   * still read the placeholder, which looks exactly like the "Yes" button having done nothing.
+   */
+  readonly pickedPayee = signal<SelectOption | null>(null);
 
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email, Validators.maxLength(256)]],
@@ -65,21 +89,18 @@ export class InviteUserFormComponent implements OnInit {
   ]);
 
   /**
-   * The picker's options. The employee code rides in the label because two people share a name far
-   * more often than two people share a code, and picking the wrong one is the failure this whole
-   * field exists to avoid.
+   * The picker's query, answered by the server.
+   *
+   * ★★ IT WAS A CLIENT-SIDE FILTER OVER EVERY UNLINKED PAYEE, AND THAT DID NOT SCALE (KAN-93). The
+   * form loaded the whole roster on open and `[searchable]` filtered it in the browser: fine at ten
+   * payees, unusable at a thousand, and it shipped every colleague's name, code and email address to
+   * a screen that needed one of them. The server now filters and caps, exactly as every other payee
+   * picker in this product does.
    */
-  readonly payeeOptions = computed<SelectOption[]>(() =>
-    this.unlinkedPayees().map((p) => ({
-      value: p.id,
-      label: p.employeeCode ? `${p.fullName} · ${p.employeeCode}` : p.fullName,
-    })),
-  );
-
-  async ngOnInit(): Promise<void> {
-    const response = await this.store.loadUnlinkedPayees();
-    if (response) this.unlinkedPayees.set(response.payees);
-  }
+  readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
+    from(this.store.loadUnlinkedPayees(undefined, q)).pipe(
+      map(response => (response ? response.payees.map(payeeOption) : [])),
+    );
 
   /**
    * Asks the server whether any unlinked payee uses this address.
@@ -95,14 +116,19 @@ export class InviteUserFormComponent implements OnInit {
     const response = await this.store.loadUnlinkedPayees(email.trim());
     if (!response) return;
 
-    this.unlinkedPayees.set(response.payees);
+    // ★ ONLY the suggestion. The list of names is the picker's own business now, and it asks for it
+    // with whatever the admin types — not with the invitee's address.
     this.suggested.set(response.suggested);
   }
 
   /** The admin accepting the suggestion — the only way it ever reaches the form. */
   acceptSuggestion(): void {
     const payee = this.suggested();
-    if (payee) this.form.controls.payeeId.setValue(payee.id);
+    if (!payee) return;
+
+    this.form.controls.payeeId.setValue(payee.id);
+    // And the label with it — see `pickedPayee`.
+    this.pickedPayee.set(payeeOption(payee));
   }
 
   async submit(): Promise<void> {
@@ -122,6 +148,7 @@ export class InviteUserFormComponent implements OnInit {
       if (ok) {
         this.form.reset({ email: '', role: '', payeeId: '' });
         this.suggested.set(null);
+        this.pickedPayee.set(null);
         this.invited.emit();
       }
     } finally {

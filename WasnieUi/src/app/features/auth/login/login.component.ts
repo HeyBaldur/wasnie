@@ -42,12 +42,27 @@ export class LoginComponent {
     this.route.snapshot.queryParamMap.has('passwordReset')
   );
 
+  /**
+   * KAN-93. Where this browser remembers the last Organization identifier that worked.
+   *
+   * ★ A NAMESPACED localStorage KEY, LIKE THE REST OF THIS APP'S. Not a cookie: it is never sent
+   * anywhere, it is read by exactly one screen, and a cookie would ride on every request for nothing.
+   */
+  private static readonly LAST_ORGANIZATION_KEY = 'wasnie:last-organization';
+
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', Validators.required],
     // KAN-91. Not required: the field only appears after the API says the address is in more than
     // one workspace, so asking for it up front would teach a new step to people who never need it.
-    organizationId: [''],
+    //
+    // KAN-93. PREFILLED WITH THE LAST ONE THAT WORKED IN THIS BROWSER. Forgetting the identifier is
+    // what KAN-93's recovery flow cures; this is what stops it happening, and it is the cheaper half
+    // — people forget it because they type it once at setup and never see it again. Remembering is
+    // automatic rather than a checkbox because the identifier is not a secret: it is printed in every
+    // invitation email and shared with everybody in the workspace. The field stays editable and
+    // clearing it works, so nobody is stuck with a remembered value.
+    organizationId: [LoginComponent.rememberedOrganization()],
   });
 
   private readonly toast = inject(ToastService);
@@ -87,10 +102,21 @@ export class LoginComponent {
 
     this.authService.login(this.form.getRawValue()).subscribe({
       next: (result) => {
+        // ★ REMEMBERED ONLY AFTER THE SERVER ACCEPTED IT. Storing what was typed would remember
+        // typos, and a wrong remembered identifier is worse than none: it makes every later sign-in
+        // fail for a reason the field looks innocent about.
+        //
+        // ★ BEFORE THE 2FA BRANCH, NOT AFTER IT. A challenge means the credentials AND the workspace
+        // were already accepted; the second factor is about the person, not the organization. Putting
+        // this line below the early return would have quietly excluded everybody with 2FA on — which
+        // is disproportionately the administrators this feature is for.
+        LoginComponent.rememberOrganization(this.form.getRawValue().organizationId);
+
         if (result.requiresTwoFactor) {
           void this.router.navigateByUrl('/auth/verify-2fa');
           return;
         }
+
         this.currentUser.refresh().subscribe(() => {
           const returnUrl = sessionStorage.getItem('wasnie:return-url') ?? '/dashboard';
           sessionStorage.removeItem('wasnie:return-url');
@@ -134,6 +160,36 @@ export class LoginComponent {
     // A malformed countdown still means the account is locked. Falling through to the generic
     // branch here would print the raw code on screen, which is the one thing it must never do.
     return { minutes: Number.isFinite(minutes) && minutes > 0 ? minutes : null };
+  }
+
+  /**
+   * The identifier this browser last signed in with, or ''.
+   *
+   * ★ EVERY ACCESS IS WRAPPED. localStorage throws in a private window, with site data blocked, and
+   * in the jsdom runs that mount this component. A sign-in page that cannot render because storage
+   * was unavailable would be the worst possible trade for a convenience.
+   */
+  private static rememberedOrganization(): string {
+    try {
+      return localStorage.getItem(LoginComponent.LAST_ORGANIZATION_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * ★ AN EMPTY IDENTIFIER CLEARS THE MEMORY RATHER THAN BEING IGNORED. Somebody who empties the field
+   * and signs into their only workspace is saying "stop filling this in", and writing nothing would
+   * have left the old value to reappear on the next visit.
+   */
+  private static rememberOrganization(organizationId: string): void {
+    try {
+      const slug = organizationId.trim();
+      if (slug) localStorage.setItem(LoginComponent.LAST_ORGANIZATION_KEY, slug);
+      else localStorage.removeItem(LoginComponent.LAST_ORGANIZATION_KEY);
+    } catch {
+      // No storage, no memory. Signing in worked, which is the part that matters.
+    }
   }
 
   goToConfirmPending(): void {

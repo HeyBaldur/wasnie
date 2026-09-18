@@ -40,11 +40,20 @@
     "RESEND_CONFIRMATION": "Reenviar correo de confirmación",
     "ALREADY_CONFIRMED": "Tu cuenta ya está confirmada. Inicia sesión a continuación.",
     "FORGOT_PASSWORD": "¿Olvidaste tu contraseña?",
+    "FORGOT_ORGANIZATION_ID": "¿Lo ha olvidado?",
     "PASSWORD_RESET_SUCCESS": "Contraseña actualizada. Inicia sesión con tu nueva contraseña.",
     "BACK_TO_LOGIN": "Volver a iniciar sesión",
     "ORGANIZATION_ID": "Identificador de organización",
     "ORGANIZATION_ID_HINT": "Solo hace falta si su correo se usa en más de un espacio de trabajo.",
     "ORGANIZATION_REQUIRED": "Este correo se usa en más de un espacio de trabajo. Introduzca el identificador de organización para continuar."
+  },
+  "FORGOT_ORGANIZATION": {
+    "TITLE": "¿Ha olvidado su Organization identifier?",
+    "DESC": "Escriba su correo electrónico y le enviaremos el Organization identifier del espacio de trabajo que administra. Por seguridad nunca se muestra en pantalla, y solo los administradores pueden solicitarlo.",
+    "SUBMIT": "Envíamelo",
+    "SENT_TITLE": "Revise su bandeja de entrada",
+    "SENT_DESC": "Si esa dirección administra un espacio de trabajo, se le ha enviado allí su Organization identifier.",
+    "SENT_NON_ADMIN": "Solo los administradores lo reciben. Si no lo es, pídaselo a su administrador — él puede consultarlo desde su propia cuenta."
   },
   "FORGOT_PASSWORD": {
     "TITLE": "Restablece tu contraseña",
@@ -2251,9 +2260,9 @@
     "CLOSE_FIGURE_CREDITS": "{{count}} crédito(s)",
     "CLOSE_FIGURE_BALANCE": "Balance del ledger",
     "CLOSE_RESOLUTION_LABEL": "¿Qué pasó con el dinero?",
-    "CLOSE_RESOLUTION_SETTLED": "Saldado fuera de Wasnie",
+    "CLOSE_RESOLUTION_SETTLED": "Saldado fuera de Incentra",
     "CLOSE_RESOLUTION_WRITTEN_OFF": "Dado de baja",
-    "CLOSE_RESOLUTION_SETTLED_HINT": "Lo resolvió nómina, RRHH o finanzas — el dinero llegó a la persona, o se recuperó de ella, en un lugar que Wasnie no ve.",
+    "CLOSE_RESOLUTION_SETTLED_HINT": "Lo resolvió nómina, RRHH o finanzas — el dinero llegó a la persona, o se recuperó de ella, en un lugar que Incentra no ve.",
     "CLOSE_RESOLUTION_WRITTEN_OFF_HINT": "La empresa lo absorbe. Nadie va a cobrar esto, y queda registrado como un costo.",
     "CLOSE_NOTE_LABEL": "Por qué (obligatorio)",
     "CLOSE_NOTE_PLACEHOLDER": "Qué se decidió, y quién.",
@@ -3023,12 +3032,30 @@
   "USERS": {
     "TITLE": "Usuarios",
     "SUBTITLE": "Quién tiene acceso a este espacio y qué invitaciones siguen abiertas.",
+    "PAYEE": {
+      "NOT_LINKED": "Sin vincular"
+    },
+    "LINK_PAYEE": {
+      "NO_MATCH": "Ningún payee sin vincular coincide.",
+      "TITLE": "Vincular a un payee",
+      "MESSAGE": "Elija la ficha de payee que corresponde a {{name}}. A partir de entonces verá sus propias comisiones, su saldo y sus objetivos.",
+      "PLACEHOLDER": "Elija un payee",
+      "SUBMIT": "Vincular",
+      "SUGGESTION": "Existe un payee con el mismo correo: {{name}}.",
+      "USE_SUGGESTION": "Usar este",
+      "NONE_AVAILABLE": "Todos los payees de este espacio ya pertenecen a un usuario. Desvincule uno primero o cree la ficha de payee."
+    },
+    "UNLINK_PAYEE": {
+      "TITLE": "Desvincular payee",
+      "MESSAGE": "{{name}} dejará de ver las comisiones, el saldo y los objetivos de {{payee}}. No se borra ni el usuario ni la ficha de payee, y el vínculo puede rehacerse."
+    },
     "SECTION": {
       "PEOPLE": "Personas",
       "PENDING": "Invitaciones pendientes",
       "HISTORY": "Invitaciones cerradas ({{count}})"
     },
     "TABLE": {
+      "PAYEE": "Ficha de payee",
       "NAME": "Nombre",
       "EMAIL": "Correo",
       "ROLE": "Rol",
@@ -3058,6 +3085,9 @@
       "UNKNOWN": "Sin rol"
     },
     "ACTION": {
+      "LINK_PAYEE": "Vincular a un payee",
+      "UNLINK_PAYEE": "Desvincular payee",
+      "SELF_NOTE": "Es usted — su propio rol y acceso no se cambian desde aquí.",
       "DEACTIVATE": "Desactivar",
       "REACTIVATE": "Reactivar",
       "RESEND": "Reenviar",
@@ -3147,6 +3177,8 @@
     }
   },
   "MY_DASHBOARD": {
+    "AWAITING_SETUP_TITLE": "{{count}} de tus ventas todavía no pueden generar comisión",
+    "AWAITING_SETUP_DESC": "Estas ventas están registradas a tu nombre, pero la configuración de tu plan no está completa, así que todavía no cuentan para tu comisión. Pedí a tu administrador que la termine — mientras tanto no se pierde nada.",
     "SUBTITLE": "Sus comisiones, su saldo y cómo van sus objetivos.",
     "ERROR_TITLE": "No se pudieron cargar sus cifras",
     "ERROR_DESC": "No falta nada en su cuenta: la consulta falló. Recargue la página y avise al administrador si vuelve a ocurrir.",
@@ -3168,6 +3200,10 @@
     "QUOTAS_TITLE": "Sus objetivos",
     "QUOTAS_EMPTY": "Hoy no tiene ningún objetivo vigente.",
     "NO_TARGET": "No se ha fijado objetivo para este plan.",
-    "UNITS": "operaciones"
+    "SCOPE_ALL_TIME": "Histórico",
+    "EARNED_DESC": "Todo lo que las reglas del plan dicen que ha generado.",
+    "PAID_DESC": "De eso, lo que ya ha cobrado.",
+    "AWAITING_DESC": "Generado y todavía sin pagar.",
+    "DEBT_DESC": "Lo que debe a la empresa ahora mismo."
   }
 }

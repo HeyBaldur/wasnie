@@ -40,38 +40,24 @@
     "RESEND_CONFIRMATION": "Resend confirmation email",
     "ALREADY_CONFIRMED": "Your account is already confirmed. Sign in below.",
     "FORGOT_PASSWORD": "Forgot password?",
+    "FORGOT_ORGANIZATION_ID": "Forgot it?",
     "PASSWORD_RESET_SUCCESS": "Password updated. Sign in with your new password.",
     "BACK_TO_LOGIN": "Back to sign in",
     "ORGANIZATION_ID": "Organization identifier",
     "ORGANIZATION_ID_HINT": "Only needed if your email is used in more than one workspace.",
     "ORGANIZATION_REQUIRED": "This email is used in more than one workspace. Enter the organization identifier to continue."
   },
+  "FORGOT_ORGANIZATION": {
+    "TITLE": "Forgot your Organization identifier?",
+    "DESC": "Enter your email address and we will send you the Organization identifier of the workspace you administer. For security it is never shown on screen, and only administrators can request it.",
+    "SUBMIT": "Send it to me",
+    "SENT_TITLE": "Check your inbox",
+    "SENT_DESC": "If that address administers a workspace, its Organization identifier has been sent there.",
+    "SENT_NON_ADMIN": "Only administrators receive it. If you are not one, ask your administrator — they can read it from the sign-in page of their own account."
+  },
   "FORGOT_PASSWORD": {
-    "TITLE": "AI token usage",
-    "CHAT_REMAINING": "{{tokens}} tokens left",
-    "NEAR_LIMIT": "Your workspace is close to its monthly AI token limit.",
-    "CONFIRM_BACK": "Choose another pack",
-    "CONFIRM_ACTION": "Confirm and pay",
-    "CONFIRM_NOTE": "You will confirm the payment with Stripe. Nothing is charged until you do.",
-    "CONFIRM_NO_CARD": "You will be asked for a payment method.",
-    "CONFIRM_CARD": "Charged to {{brand}} ending {{last4}}.",
-    "CONFIRM_LINE": "Add <strong>{{tokens}} tokens</strong> for <strong>{{price}}</strong>.",
-    "ADDON_SELECT_LABEL": "Select {{tokens}} tokens for {{price}}",
-    "ADDON_BEST_VALUE": "Best value",
-    "ADDON_PER_MILLION": "{{price}} per million",
-    "ADDON_ONE_OFF": "one-off",
-    "ADDON_TOKENS": "{{tokens}} tokens",
-    "ADDONS_FAILED": "The purchase could not be started. Please try again.",
-    "ADDONS_UNAVAILABLE": "Token add-ons are not available for this workspace right now.",
-    "ADDONS_DIALOG_DESC": "A one-off purchase. Additional tokens are used only after the tokens included in your plan.",
-    "ADDONS_DIALOG_TITLE": "Add AI tokens",
-    "ADDONS_ACTION": "Add tokens",
-    "ADDONS_DESC": "Add tokens to this billing period. They are used after the tokens included in your plan and carry over to the next period.",
-    "ADDONS_TITLE": "AI token add-ons",
-    "ADDON_EXPIRED": "{{tokens}} additional tokens expired unused.",
-    "ADDON_EXPIRES": "Expires {{date}}.",
-    "ADDON_REMAINING": "+ {{tokens}} additional tokens available.",
-    "DESC": "Tokens Zeke has used for this account — questions and answers together.",
+    "TITLE": "Reset your password",
+    "DESC": "Forgot your password? Enter the email address associated with your account. We will send you a secure link to reset your password and get back to managing your incentive compensation.",
     "SUBMIT": "Send reset link",
     "SENT_TITLE": "Check your inbox",
     "SENT_DESC": "If an account exists for that email, a reset link has been sent."
@@ -2274,9 +2260,9 @@
     "CLOSE_FIGURE_CREDITS": "{{count}} credit(s)",
     "CLOSE_FIGURE_BALANCE": "Ledger balance",
     "CLOSE_RESOLUTION_LABEL": "What happened to the money?",
-    "CLOSE_RESOLUTION_SETTLED": "Settled outside Wasnie",
+    "CLOSE_RESOLUTION_SETTLED": "Settled outside Incentra",
     "CLOSE_RESOLUTION_WRITTEN_OFF": "Written off",
-    "CLOSE_RESOLUTION_SETTLED_HINT": "Payroll, HR or finance handled it — the money reached the person, or was recovered from them, somewhere Wasnie cannot see.",
+    "CLOSE_RESOLUTION_SETTLED_HINT": "Payroll, HR or finance handled it — the money reached the person, or was recovered from them, somewhere Incentra cannot see.",
     "CLOSE_RESOLUTION_WRITTEN_OFF_HINT": "The company absorbs it. Nobody will be paid this, and it is recorded as a cost.",
     "CLOSE_NOTE_LABEL": "Why (required)",
     "CLOSE_NOTE_PLACEHOLDER": "What was decided, and by whom.",
@@ -3046,12 +3032,30 @@
   "USERS": {
     "TITLE": "Users",
     "SUBTITLE": "Who has access to this workspace, and the invitations still open.",
+    "PAYEE": {
+      "NOT_LINKED": "Not linked"
+    },
+    "LINK_PAYEE": {
+      "NO_MATCH": "No unlinked payee matches that.",
+      "TITLE": "Link to a payee",
+      "MESSAGE": "Choose the payee record that {{name}} is. They will then see their own commissions, balance and targets.",
+      "PLACEHOLDER": "Choose a payee",
+      "SUBMIT": "Link",
+      "SUGGESTION": "A payee with the same email address exists: {{name}}.",
+      "USE_SUGGESTION": "Use this one",
+      "NONE_AVAILABLE": "Every payee in this workspace already belongs to a login. Unlink one first, or create the payee record."
+    },
+    "UNLINK_PAYEE": {
+      "TITLE": "Unlink payee",
+      "MESSAGE": "{{name}} will stop seeing the commissions, balance and targets of {{payee}}. Neither the login nor the payee record is deleted, and the link can be made again."
+    },
     "SECTION": {
       "PEOPLE": "People",
       "PENDING": "Pending invitations",
       "HISTORY": "Closed invitations ({{count}})"
     },
     "TABLE": {
+      "PAYEE": "Payee record",
       "NAME": "Name",
       "EMAIL": "Email",
       "ROLE": "Role",
@@ -3081,6 +3085,9 @@
       "UNKNOWN": "No role"
     },
     "ACTION": {
+      "LINK_PAYEE": "Link to a payee",
+      "UNLINK_PAYEE": "Unlink payee",
+      "SELF_NOTE": "This is you — your own role and access cannot be changed here.",
       "DEACTIVATE": "Deactivate",
       "REACTIVATE": "Reactivate",
       "RESEND": "Resend",
@@ -3170,6 +3177,8 @@
     }
   },
   "MY_DASHBOARD": {
+    "AWAITING_SETUP_TITLE": "{{count}} of your sales cannot be paid on yet",
+    "AWAITING_SETUP_DESC": "These sales are recorded against you, but your plan setup is not complete, so they do not count towards your commission yet. Ask your administrator to finish it — nothing is lost in the meantime.",
     "SUBTITLE": "Your commissions, your balance and how your targets are going.",
     "ERROR_TITLE": "We could not load your figures",
     "ERROR_DESC": "Nothing is missing from your account - the request failed. Reload the page, and tell your administrator if it keeps happening.",
@@ -3191,6 +3200,10 @@
     "QUOTAS_TITLE": "Your targets",
     "QUOTAS_EMPTY": "You have no target running today.",
     "NO_TARGET": "No target has been set for this plan.",
-    "UNITS": "deals"
+    "SCOPE_ALL_TIME": "All time",
+    "EARNED_DESC": "Everything the plan rules say you have made.",
+    "PAID_DESC": "Of that, what has already reached you.",
+    "AWAITING_DESC": "Earned and not paid out yet.",
+    "DEBT_DESC": "What you owe the company right now."
   }
 }
