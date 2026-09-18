@@ -1,0 +1,406 @@
+// The access panel — what one person can and cannot do, in a panel that fits on a screen.
+//
+// ★★ THE WHOLE POINT OF THIS FILE IS DENSITY. The first version stacked 31 capability lines and came
+//    to roughly 1,300px: a list to scroll, not a summary to read. Eight rows with meters, one hero
+//    band instead of three stacked blocks, and the named lines behind a disclosure.
+//
+// ★ TOKENS ONLY. No hex, no rgba, no Tailwind palette. `--shadow-card` does NOT exist in this project
+//   despite being named in DESIGN_SYSTEM; the elevation comes from `ws-card` itself.
+
+.access-panel {
+  display: block;
+}
+
+// ── Who ──────────────────────────────────────────────────────────────────
+
+.access-panel__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.access-panel__avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand-subtle);
+  color: var(--color-brand);
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.access-panel__who {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.access-panel__name {
+  margin: 0;
+  font-size: var(--font-size-15);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  // The panel is narrow by design; a long name wraps rather than pushing the close button off.
+  overflow-wrap: anywhere;
+}
+
+.access-panel__email {
+  display: block;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.access-panel__close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover { background: var(--color-bg-surface-hover); color: var(--color-text-primary); }
+
+  // The design system's focus is a token, not a Tailwind ring.
+  &:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
+}
+
+// ── The hero band ────────────────────────────────────────────────────────
+//
+// Ring, role and status on ONE line. They were three stacked blocks, which spent most of a screen
+// saying who somebody is before the panel got to what they can do.
+
+.access-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  // Sunken relative to the card it sits in — the surface rule for an inset block.
+  background: var(--color-bg-surface-sunken);
+}
+
+.access-hero__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.access-hero__role {
+  font-size: var(--font-size-15);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+}
+
+.access-hero__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.access-hero__payee {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.access-hero__payee-warn {
+  color: var(--color-warning);
+}
+
+// ── The ring ─────────────────────────────────────────────────────────────
+//
+// ★★ IT DRAWS ITSELF FROM EMPTY, and the sweep is the reason it is here: a static arc is a chart
+//    nobody reads, while an arc that moves into position separates two roles before either list
+//    below is looked at. A dash offset in CSS — no animation library.
+
+// ★ THE FIGURE IS LAID OVER THE SVG WITH `grid-area`, NOT WITH `position: absolute`. Absolute took it
+//   out of the grid's flow, so `place-items: center` stopped centring it and the number sat left of
+//   the ring's middle — visible on screen as a figure that looks nudged.
+.access-ring {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 84px;
+  height: 84px;
+
+  > * { grid-area: 1 / 1; }
+}
+
+.access-ring__svg {
+  width: 100%;
+  height: 100%;
+  // 12 o'clock is where a ring is read from; the SVG's own zero is 3 o'clock.
+  transform: rotate(-90deg);
+}
+
+.access-ring__track,
+.access-ring__value {
+  fill: none;
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+
+// Always full, so an empty ring still reads as a ring rather than as a failed render.
+.access-ring__track { stroke: var(--color-bg-surface); }
+
+.access-ring__value {
+  stroke: var(--color-brand);
+  animation: access-ring-sweep 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transition: stroke-dashoffset var(--transition-slow);
+}
+
+// ★ A BAND, NOT A VERDICT. Wide authority is not "bad" and a narrow role is not "good"; the colours
+//   separate an administrator from a rep at a glance, in the product's own language for scope.
+.access-ring--wide   .access-ring__value { stroke: var(--color-brand); }
+.access-ring--mid    .access-ring__value { stroke: var(--color-accent-blue); }
+.access-ring--narrow .access-ring__value { stroke: var(--color-accent-violet); }
+
+// Stacked, not side by side: a 20px figure next to an 11px "/31" on a shared baseline reads as one
+// number that has been damaged.
+.access-ring__label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+
+.access-ring__figure {
+  font-size: var(--font-size-20);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.access-ring__figure--unknown { color: var(--color-text-tertiary); }
+
+.access-ring__of {
+  margin-top: 2px;
+  font-size: var(--font-size-11);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+}
+
+@keyframes access-ring-sweep {
+  // The real offset is bound inline; this animates the whole circumference away and lets the bound
+  // value take over at the end. `to` is deliberately absent so it inherits the element's own value.
+  from { stroke-dashoffset: 327; }
+}
+
+// ── Actions ──────────────────────────────────────────────────────────────
+
+.access-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.access-panel__self-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+
+  app-icon { flex-shrink: 0; margin-top: 1px; }
+}
+
+.access-panel__unknown {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+
+  app-icon { flex-shrink: 0; margin-top: 1px; color: var(--color-warning); }
+}
+
+// ── The eight rows ───────────────────────────────────────────────────────
+
+.access-groups {
+  margin-top: var(--space-5);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.access-row + .access-row {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+// The whole row is the disclosure control — a real button, so it is reachable and announces its
+// state. A div with a click handler is how a panel like this stops working for half its readers.
+.access-row__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+
+  &:hover .access-row__title { color: var(--color-text-primary); }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: -2px;
+    border-radius: var(--radius-sm);
+  }
+}
+
+.access-row__icon {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+// ★ IT TRUNCATES RATHER THAN PUSHING THE METER. With the title free to grow, "Sales and commissions"
+//   started its meter further right than "Targets" did, so the eight meters never formed a column and
+//   the one thing they are for — being compared down the list — did not work.
+.access-row__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: color var(--transition-fast);
+}
+
+// ── The meter ────────────────────────────────────────────────────────────
+//
+// ★★ ONE SEGMENT PER CAPABILITY, so "1 of 5" and "5 of 5" are told apart without reading either
+//    number. It is the detail, not decoration — the count beside it is the same fact in words.
+
+// ★ A FIXED WIDTH, SIZED TO THE LARGEST AREA (Payments, 7). Every meter then starts and ends on the
+//   same two columns, whatever its area is called, and the shortest one is still read against the
+//   longest. `flex-end` keeps them right-aligned against the count.
+.access-row__meter {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  width: 54px;
+  gap: 2px;
+}
+
+.access-seg {
+  width: 6px;
+  height: 14px;
+  border-radius: var(--radius-xs);
+  // An empty segment has to be legible as a segment, or an area at 0 of 4 looks like an area with no
+  // meter at all. The surface here is the card's, not the sunken one the meter used to borrow.
+  background: var(--color-bg-surface-hover);
+  box-shadow: inset 0 0 0 1px var(--color-border-default);
+  // Grows from the bottom with a per-segment delay, which is what makes the panel read as alive
+  // rather than printed. The delay is bound inline: row index first, then segment.
+  transform-origin: bottom;
+  animation: access-seg-rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.access-seg--on {
+  background: var(--color-brand);
+  box-shadow: none;
+}
+
+.access-row__count {
+  flex-shrink: 0;
+  min-width: 30px;
+  margin-left: var(--space-2);
+  text-align: right;
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+}
+
+.access-row__chevron {
+  flex-shrink: 0;
+  color: var(--color-text-placeholder);
+  transition: transform var(--transition-fast);
+}
+
+.access-row__chevron--open { transform: rotate(180deg); }
+
+// A whole area they hold nothing in fades back, so the eye lands on what they DO hold first. It
+// still renders: "what they cannot do" was half the question.
+.access-row--empty .access-row__title { color: var(--color-text-tertiary); }
+
+@keyframes access-seg-rise {
+  from { transform: scaleY(0.25); opacity: 0; }
+  to   { transform: scaleY(1);    opacity: 1; }
+}
+
+// ── The named lines, on demand ───────────────────────────────────────────
+
+.access-row__detail {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 var(--space-3) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  animation: access-detail-open 200ms ease-out both;
+}
+
+.access-cap {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+  color: var(--color-text-primary);
+}
+
+.access-cap__mark {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-success);
+}
+
+// ★ DENIED IS MUTED, NOT RED. Not holding something is the ordinary case, not an error; a column of
+//   red crosses reads as a list of problems to fix.
+.access-cap--denied {
+  color: var(--color-text-tertiary);
+
+  .access-cap__mark { color: var(--color-text-placeholder); }
+}
+
+@keyframes access-detail-open {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .access-ring__value,
+  .access-seg,
+  .access-row__detail {
+    animation: none;
+    transition: none;
+  }
+}

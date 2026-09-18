@@ -36,3 +36,16 @@ public sealed record GetInvitationByTokenQuery(string Token) : IRequest<Result<I
 /// </param>
 public sealed record ListUnlinkedPayeesQuery(string? EmailHint = null, string? Search = null)
     : IRequest<Result<UnlinkedPayeesResponse>>;
+
+/// <summary>
+/// What every assignable role can do. See <see cref="Handlers.ListRolePermissionsHandler"/> for why
+/// this is served rather than mirrored in the browser.
+/// </summary>
+public sealed record ListRolePermissionsQuery : IRequest<Result<IReadOnlyList<RolePermissionsDto>>>;
+
+/// <param name="Permissions">
+/// Permission KEYS, never sentences — the screen chooses the words, in the reader's language, from an
+/// explicit whitelist (§C1/§C2). A key this screen does not recognise is simply not shown: printing an
+/// unknown one would put an internal identifier in front of an administrator.
+/// </param>
+public sealed record RolePermissionsDto(string Role, IReadOnlyList<string> Permissions);

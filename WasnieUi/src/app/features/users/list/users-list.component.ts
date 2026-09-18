@@ -10,8 +10,9 @@ import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
 import { createRowMenu } from '../../../shared/utils/row-menu';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { UsersStore } from '../state/users.store';
-import { Invitation, InvitationStatus, TenantRole, TenantUser, UnlinkedPayee } from '../models/user.model';
+import { Invitation, InvitationStatus, TenantRole, TenantUser, UnlinkedPayee, roleTranslationKey } from '../models/user.model';
 import { InviteUserFormComponent } from '../invite/invite-user-form.component';
+import { UserAccessPanelComponent } from '../access/user-access-panel.component';
 import {
   WsButtonComponent,
   WsBadgeComponent,
@@ -72,6 +73,7 @@ function payeeOption(p: UnlinkedPayee): SelectOption {
     AppShellComponent, TranslateModule, ReactiveFormsModule, IconComponent, DateFormatPipe,
     HasPermissionDirective, HasPermissionPipe,
     InviteUserFormComponent,
+    UserAccessPanelComponent,
     WsButtonComponent, WsBadgeComponent, WsPageLayoutComponent,
     WsTableComponent, WsTableEmptyComponent, WsModalComponent,
     WsConfirmationModalComponent, WsSelectComponent,
@@ -88,6 +90,34 @@ export class UsersListComponent implements OnInit {
   // ★ The shared row-menu controller, not a local signal. It anchors the dropdown to the row on
   // scroll by listening on `window` IN CAPTURE — the page does not scroll the window and scroll does
   // not bubble, which is the detail every hand-rolled copy of this has got wrong.
+  /**
+   * Whose access panel is open, or null.
+   *
+   * ★★ AN ID, NOT THE OBJECT. Every mutation on this screen reloads the whole response from the
+   * server, which replaces every row; holding the object would leave the panel describing a person as
+   * they were before the role change that was just made from inside it. The id re-resolves against
+   * the fresh list, and a person who was REMOVED resolves to nothing and closes the panel by itself —
+   * no second place to remember to clear.
+   */
+  readonly selectedUserId = signal<string | null>(null);
+
+  readonly selectedUser = computed<TenantUser | undefined>(() => {
+    const id = this.selectedUserId();
+    return id ? this.store.users().find((u) => u.userId === id) : undefined;
+  });
+
+  /**
+   * ★ THE PANEL OPENS FOR ANYBODY WHO CAN SEE THE SCREEN. Without Users.Manage it is a read-only
+   * explanation of what a role means, which is worth reading on its own — the actions are what the
+   * permission gates, not the understanding.
+   */
+  readonly canManage = computed(() => this.currentUser.hasPermission('Users.Manage'));
+
+  /** Clicking the open row again closes it, which is how a reader dismisses it without aiming at ×. */
+  selectUser(user: TenantUser): void {
+    this.selectedUserId.update((id) => (id === user.userId ? null : user.userId));
+  }
+
   private readonly rowMenu = createRowMenu();
   readonly openMenuId = this.rowMenu.openMenuId;
   readonly menuPosition = this.rowMenu.menuPosition;
@@ -251,14 +281,9 @@ export class UsersListComponent implements OnInit {
   }
 
   /** The i18n key for a role name, so the table never prints "CompManager" at a human. */
+  /** Delegates to the shared whitelist, so the table and the access panel cannot drift apart. */
   roleKey(role: TenantRole | null): string {
-    switch (role) {
-      case 'TenantAdmin': return 'USERS.ROLES.TENANT_ADMIN';
-      case 'CompManager': return 'USERS.ROLES.COMP_MANAGER';
-      case 'Manager': return 'USERS.ROLES.MANAGER';
-      case 'Rep': return 'USERS.ROLES.REP';
-      default: return 'USERS.ROLES.UNKNOWN';
-    }
+    return roleTranslationKey(role);
   }
 
   toggleMenu(id: string, event: MouseEvent): void {

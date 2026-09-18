@@ -5,6 +5,7 @@ import { extractApiError, extractApiErrorCode } from '../../../shared/utils/api-
 import { UsersApiService } from '../services/users.api.service';
 import {
   Invitation,
+  RolePermissions,
   SeatUsage,
   TenantRole,
   TenantUser,
@@ -55,6 +56,31 @@ export class UsersStore {
     ),
   );
 
+  /**
+   * What each role may do, from the server.
+   *
+   * ★★ THE ACCESS PANEL'S ONLY SOURCE. The alternative was a permission map written in TypeScript,
+   * which would go stale silently — on the one screen whose job is telling an administrator who can do
+   * what. See `users.api.service.rolePermissions()`.
+   *
+   * ★ AN EMPTY MAP IS "NOT LOADED", NOT "NO PERMISSIONS". The panel shows a loading state for it
+   * rather than a page of red crosses: telling an administrator that somebody can do nothing, because
+   * a request has not landed, is the false zero wearing a different hat.
+   */
+  private readonly roles = signal<RolePermissions[]>([]);
+
+  readonly rolesLoaded = computed(() => this.roles().length > 0);
+
+  /**
+   * The permission keys a role holds. Unknown role, or nothing loaded yet → an empty set, which the
+   * panel renders as "unknown" rather than as "denied" (see `rolesLoaded`).
+   */
+  permissionsFor(role: TenantRole | null): ReadonlySet<string> {
+    if (!role) return new Set<string>();
+    const found = this.roles().find((r) => r.role === role);
+    return new Set(found?.permissions ?? []);
+  }
+
   readonly activeUsers = computed(() => this.users().filter((u) => u.isActive));
   readonly deactivatedUsers = computed(() => this.users().filter((u) => !u.isActive));
 
@@ -73,6 +99,27 @@ export class UsersStore {
       this.error.set('USERS_LOAD_FAILED');
     } finally {
       this.loading.set(false);
+    }
+
+    void this.loadRoles();
+  }
+
+  /**
+   * ★★ FETCHED SEPARATELY AND NOT AWAITED WITH THE LIST, on purpose. The table is what the screen is
+   * for; making its first paint wait on a map that only the side panel reads would slow down every
+   * visit for a panel most of them never open.
+   *
+   * ★ AND ONCE PER PAGE. It is a constant of the product — it cannot change while somebody is looking
+   * at the screen — so re-fetching it after every mutation would be a request that can only ever
+   * return the same bytes. A failure leaves it empty, which the panel reads as "unknown".
+   */
+  private async loadRoles(): Promise<void> {
+    if (this.roles().length > 0) return;
+
+    try {
+      this.roles.set(await firstValueFrom(this.api.rolePermissions()));
+    } catch {
+      // Left empty on purpose: the panel says it does not know, rather than saying "nothing".
     }
   }
 

@@ -17,6 +17,40 @@ export const ASSIGNABLE_ROLES: readonly TenantRole[] = [
   'Rep',
 ];
 
+/**
+ * What one role may do, as the server spells it.
+ *
+ * PERMISSION KEYS, NOT SENTENCES. The words live in the translation files and the mapping in
+ * `access/access-map.ts`; this is the authority, and it is the ONLY one. A copy of the role/permission
+ * map written in TypeScript would be right the day it was written and wrong the first time a
+ * permission moved in C# - on the one screen whose job is telling an administrator who can do what.
+ */
+/**
+ * The translation key for a role name.
+ *
+ * ★★ A WHITELIST, NEVER `'USERS.ROLES.' + role` (§C2). The keys are SCREAMING_SNAKE and the role
+ * names are PascalCase, so a concatenated key does not even collide with a real one — it prints
+ * `USERS.ROLE.TenantAdmin` on screen, which is what happened the first time this panel was written.
+ * An unknown role falls to a generic label instead of leaking an identifier.
+ *
+ * ★ ONE DEFINITION FOR BOTH THE TABLE AND THE ACCESS PANEL. It was a private method on the list
+ * component; the panel needed the same answer, and a second copy is a second thing to keep in step.
+ */
+export function roleTranslationKey(role: TenantRole | null): string {
+  switch (role) {
+    case 'TenantAdmin': return 'USERS.ROLES.TENANT_ADMIN';
+    case 'CompManager': return 'USERS.ROLES.COMP_MANAGER';
+    case 'Manager': return 'USERS.ROLES.MANAGER';
+    case 'Rep': return 'USERS.ROLES.REP';
+    default: return 'USERS.ROLES.UNKNOWN';
+  }
+}
+
+export interface RolePermissions {
+  role: TenantRole;
+  permissions: string[];
+}
+
 export interface TenantUser {
   userId: string;
   email: string;

@@ -6,6 +6,7 @@ import {
   Invitation,
   InvitationPreview,
   InviteUserRequest,
+  RolePermissions,
   TenantRole,
   TenantUsersResponse,
   UnlinkedPayeesResponse,
@@ -28,6 +29,20 @@ export class UsersApiService {
    */
   getUsers(): Observable<TenantUsersResponse> {
     return this.http.get<TenantUsersResponse>(this.base);
+  }
+
+  /**
+   * What each assignable role can do.
+   *
+   * ★★ IT IS FETCHED, NOT MIRRORED. `/auth/me` answers only about the caller, so without this the
+   * access panel would need its own copy of `RolePermissions.cs` in the browser — correct the day it
+   * was written and wrong the first time a permission moved in C#.
+   *
+   * ★ Loaded once by the store: the map is a constant of the product and cannot change while somebody
+   * is looking at it.
+   */
+  rolePermissions(): Observable<RolePermissions[]> {
+    return this.http.get<RolePermissions[]>(`${this.base}/roles`);
   }
 
   /**

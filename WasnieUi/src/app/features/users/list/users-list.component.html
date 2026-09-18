@@ -38,131 +38,115 @@
       </div>
     }
 
-    <!-- ── People ──────────────────────────────────────────────────────────── -->
-    <ws-table>
-      <table>
-      <thead>
-        <tr>
-          <th class="col-name">{{ 'USERS.TABLE.NAME' | translate }}</th>
-          <th>{{ 'USERS.TABLE.ROLE' | translate }}</th>
-          <th>{{ 'USERS.TABLE.PAYEE' | translate }}</th>
-          <th>{{ 'USERS.TABLE.STATUS' | translate }}</th>
-          <th class="col-secondary">{{ 'USERS.TABLE.INVITED_BY' | translate }}</th>
-          <th class="col-actions"></th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (user of store.users(); track user.userId) {
-          <tr [class.users__row--inactive]="!user.isActive">
-            <td class="col-name">
-              <div class="user-identity">
-                <span class="user-avatar">{{ initialsFor(user) }}</span>
-                <div class="user-identity__text">
-                  <span class="user-name">{{ displayName(user) }}</span>
-                  <span class="user-email">{{ user.email }}</span>
-                </div>
-              </div>
-            </td>
-            <!-- KAN-93. NOT LINKED IS SAID OUT LOUD, NOT LEFT BLANK. An empty cell reads as "nothing
-                 to report"; this is the state that silently breaks somebody's personal dashboard, and
-                 it is the only thing on this screen an administrator has to act on. -->
-            <td>
-              @if (user.linkedPayeeName) {
-                <span class="users__payee">{{ user.linkedPayeeName }}</span>
-              } @else {
-                <ws-badge variant="warning">{{ 'USERS.PAYEE.NOT_LINKED' | translate }}</ws-badge>
-              }
-            </td>
-            <td>{{ roleKey(user.role) | translate }}</td>
-            <td>
-              @if (user.isActive) {
-                <ws-badge variant="success" [dot]="true">{{ 'USERS.STATUS.ACTIVE' | translate }}</ws-badge>
-              } @else {
-                <ws-badge variant="neutral">{{ 'USERS.STATUS.DEACTIVATED' | translate }}</ws-badge>
-              }
-              @if (!user.emailConfirmed) {
-                &nbsp;<ws-badge variant="warning">{{ 'USERS.STATUS.UNCONFIRMED' | translate }}</ws-badge>
-              }
-            </td>
-            <td class="col-secondary">{{ user.invitedByEmail ?? ('USERS.TABLE.FOUNDER' | translate) }}</td>
-            <td class="col-actions" (click)="$event.stopPropagation()">
-              <div *hasPermission="'Users.Manage'" class="row-menu">
-                <button
-                  class="row-menu__trigger"
-                  [class.row-menu__trigger--open]="openMenuId() === user.userId"
-                  type="button"
-                  (click)="toggleMenu(user.userId, $event)"
-                >
-                  <app-icon name="more-vertical" [size]="16" />
-                </button>
-                @if (openMenuId() === user.userId) {
-                  <div class="row-menu__dropdown"
-                    [style.top.px]="menuPosition()!.top ?? null"
-                    [style.bottom.px]="menuPosition()!.bottom ?? null"
-                    [style.right.px]="menuPosition()!.right"
-                  >
-                    <!-- KAN-93. THE PAYEE LINK IS OFFERED ON EVERY ROW INCLUDING YOUR OWN, and that is
-                         not an oversight: attaching yourself to your own payee record is the ordinary
-                         case for a founding administrator who also sells. It changes what YOU may
-                         read, not what you may DO, so none of the self-action reasoning below applies
-                         to it. Only the three that touch authority are hidden. -->
-                    @if (user.linkedPayeeId) {
-                      <button class="row-menu__item" type="button" (click)="askUnlinkPayee(user)">
-                        <app-icon name="user-minus" [size]="14" />
-                        {{ 'USERS.ACTION.UNLINK_PAYEE' | translate }}
-                      </button>
-                    } @else {
-                      <button class="row-menu__item" type="button" (click)="openLinkPayee(user)">
-                        <app-icon name="user-check" [size]="14" />
-                        {{ 'USERS.ACTION.LINK_PAYEE' | translate }}
-                      </button>
-                    }
+    <!-- ── People, and who they are ───────────────────────────────────────
+         ★★ MASTER AND DETAIL, BECAUSE THE TABLE ALONE COULD NOT ANSWER THE PAGE'S OWN QUESTION. It
+         showed a role NAME and nothing else, so "should this person hold this role?" had to be decided
+         from a word; and the four things an administrator could do about it lived behind a ⋮ that had
+         to be opened before it could be read. The decision and the means to make it were never on
+         screen at the same time. Now the row selects and the panel beside it says what the role means.
 
-                    <!-- ★★ NOTHING THAT TOUCHES YOUR OWN AUTHORITY (KAN-93, §5.8). The server has
-                         always refused these three on yourself — `USER_CANNOT_ACT_ON_SELF`, and
-                         `LastAdminGuard` behind it — so offering them taught nothing except by
-                         failing. Hiding is the rule; the backend refusal stays as the invariant. -->
-                    @if (!isSelf(user)) {
-                      @if (user.isActive) {
-                        <button class="row-menu__item" type="button" (click)="openRoleChange(user)">
-                          <app-icon name="shield" [size]="14" />
-                          {{ 'USERS.ACTION.CHANGE_ROLE' | translate }}
-                        </button>
-                        <button class="row-menu__item row-menu__item--danger" type="button"
-                                (click)="askDeactivate(user)">
-                          <app-icon name="user-minus" [size]="14" />
-                          {{ 'USERS.ACTION.DEACTIVATE' | translate }}
-                        </button>
-                      } @else {
-                        <button class="row-menu__item" type="button" (click)="reactivate(user)">
-                          <app-icon name="user-check" [size]="14" />
-                          {{ 'USERS.ACTION.REACTIVATE' | translate }}
-                        </button>
-                      }
-                      <!-- Removing is offered whatever the access state: an account switched off months
-                           ago is the likeliest one an admin wants gone for good. -->
-                      <button class="row-menu__item row-menu__item--danger" type="button"
-                              (click)="askRemove(user)">
-                        <app-icon name="trash-2" [size]="14" />
-                        {{ 'USERS.ACTION.REMOVE' | translate }}
-                      </button>
-                    } @else {
-                      <!-- ★ THE ROW IS NOT LEFT WITH AN EMPTY MENU. Saying "this is you" is what turns
-                           an absence into an explanation; a dropdown with nothing in it reads as
-                           broken (§C3). -->
-                      <p class="row-menu__note">{{ 'USERS.ACTION.SELF_NOTE' | translate }}</p>
-                    }
+         ★ A LAYOUT, NOT A NEW PRIMITIVE. There is no WsDrawer in this design system and adding one is
+         a separate decision (DESIGN_SYSTEM §10.3), so the panel is a `ws-card` in the second column of
+         a grid — the same master/detail shape the plan and payee screens already use. -->
+    <div class="users__split" [class.users__split--open]="selectedUserId() !== null">
+
+      <div class="users__list-col">
+        <ws-table>
+          <table>
+          <thead>
+            <tr>
+              <!-- ★ THE HEADER NOW MATCHES THE BODY. It read NAME · ROLE · PAYEE while the cells below
+                   rendered name · payee · role, so every payee name in this workspace has been sitting
+                   under a column headed "Role". Two orders, one table, and nothing to catch it. -->
+              <th class="col-name">{{ 'USERS.TABLE.NAME' | translate }}</th>
+              <th>{{ 'USERS.TABLE.PAYEE' | translate }}</th>
+              <th>{{ 'USERS.TABLE.ROLE' | translate }}</th>
+              <th>{{ 'USERS.TABLE.STATUS' | translate }}</th>
+              <th class="col-secondary">{{ 'USERS.TABLE.INVITED_BY' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (user of store.users(); track user.userId) {
+              <!-- ★★ THE WHOLE ROW IS THE CONTROL, and it is a real one: `tabindex` and Enter/Space, so
+                   somebody arriving by keyboard can open the panel the same way. A div that only
+                   answers to a mouse is the commonest way a table like this stops being usable. -->
+              <tr
+                class="users__row"
+                [class.users__row--inactive]="!user.isActive"
+                [class.users__row--selected]="selectedUserId() === user.userId"
+                tabindex="0"
+                role="button"
+                [attr.aria-pressed]="selectedUserId() === user.userId"
+                (click)="selectUser(user)"
+                (keydown.enter)="selectUser(user)"
+                (keydown.space)="selectUser(user); $event.preventDefault()"
+              >
+                <td class="col-name">
+                  <div class="user-identity">
+                    <span class="user-avatar">{{ initialsFor(user) }}</span>
+                    <div class="user-identity__text">
+                      <span class="user-name">{{ displayName(user) }}</span>
+                      <span class="user-email">{{ user.email }}</span>
+                    </div>
                   </div>
-                }
-              </div>
-            </td>
-          </tr>
-        } @empty {
-          <ws-table-empty icon="users" messageKey="USERS.EMPTY.MESSAGE" />
-        }
-      </tbody>
-      </table>
-    </ws-table>
+                </td>
+
+                <!-- KAN-93. NOT LINKED IS SAID OUT LOUD, NOT LEFT BLANK. An empty cell reads as
+                     "nothing to report"; this is the state that silently breaks somebody's personal
+                     dashboard, and it is the only thing on this screen an administrator has to act on. -->
+                <td>
+                  @if (user.linkedPayeeName) {
+                    <span class="users__payee">{{ user.linkedPayeeName }}</span>
+                  } @else {
+                    <ws-badge variant="warning">{{ 'USERS.PAYEE.NOT_LINKED' | translate }}</ws-badge>
+                  }
+                </td>
+
+                <td>{{ roleKey(user.role) | translate }}</td>
+
+                <td>
+                  @if (user.isActive) {
+                    <ws-badge variant="success" [dot]="true">{{ 'USERS.STATUS.ACTIVE' | translate }}</ws-badge>
+                  } @else {
+                    <ws-badge variant="neutral">{{ 'USERS.STATUS.DEACTIVATED' | translate }}</ws-badge>
+                  }
+                  @if (!user.emailConfirmed) {
+                    &nbsp;<ws-badge variant="warning">{{ 'USERS.STATUS.UNCONFIRMED' | translate }}</ws-badge>
+                  }
+                </td>
+
+                <td class="col-secondary">{{ user.invitedByEmail ?? ('USERS.TABLE.FOUNDER' | translate) }}</td>
+              </tr>
+            } @empty {
+              <ws-table-empty icon="users" messageKey="USERS.EMPTY.MESSAGE" />
+            }
+          </tbody>
+          </table>
+        </ws-table>
+      </div>
+
+      <!-- ★ THE COLUMN IS ONLY IN THE DOM WHEN SOMEBODY IS SELECTED, so the table has the full width
+           until it is asked for. An always-present empty panel would spend the page's whole width on
+           an invitation to click something. -->
+      @if (selectedUser(); as user) {
+        <aside class="users__panel-col">
+          <app-user-access-panel
+            [user]="user"
+            [permissions]="store.permissionsFor(user.role)"
+            [rolesLoaded]="store.rolesLoaded()"
+            [isSelf]="isSelf(user)"
+            [canManage]="canManage()"
+            (closed)="selectedUserId.set(null)"
+            (linkPayee)="openLinkPayee($event)"
+            (unlinkPayee)="askUnlinkPayee($event)"
+            (changeRole)="openRoleChange($event)"
+            (deactivate)="askDeactivate($event)"
+            (reactivate)="reactivate($event)"
+            (remove)="askRemove($event)"
+          />
+        </aside>
+      }
+    </div>
 
     <!-- ── Outstanding invitations ─────────────────────────────────────────── -->
     @if (store.pendingInvitations().length > 0) {

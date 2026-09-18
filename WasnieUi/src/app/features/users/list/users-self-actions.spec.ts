@@ -38,14 +38,19 @@ function user(userId: string, over: Partial<TenantUser> = {}): TenantUser {
  * button and read a toast. A test on `isSelf()` would pass just as happily with the template still
  * rendering all three items — which is the exact failure this repo keeps meeting.
  *
- * ★★ OPENING THE MENU NEEDS THE REAL TRIGGER ELEMENT, AND TWO TRAPS SIT ON THE WAY THERE.
- * `RowMenuController.toggle` measures where to pin the dropdown from `event.currentTarget`, which the
- * browser only populates while an event is being dispatched — a hand-built `MouseEvent` leaves it
- * null and the template then throws on `menuPosition()!.top`. But dispatching a real `.click()` is
- * not the answer either: the component also closes the menu from a `document:click` host listener,
- * and in the test harness that listener won the race often enough to make the suite flap between
- * runs. So the event is dispatched at the trigger with `currentTarget` supplied explicitly: the
- * controller reads exactly what a browser would give it, and nothing else is listening.
+ * ★★ THE ACTIONS MOVED FROM THE ⋮ INTO THE ACCESS PANEL, AND THESE TESTS MOVED WITH THEM. The rules
+ * are unchanged — all three authority actions hidden on your own row, the payee link offered on every
+ * row — but they are now enforced in `user-access-panel`, reached by selecting the row.
+ *
+ * ★★ THE OLD HARNESS IS GONE, AND SO ARE ITS TWO TRAPS. Opening the ⋮ needed a hand-built event with
+ * `currentTarget` defined (the controller measured the dropdown from it) and the fixture pinned to the
+ * top of the viewport (`RowMenuController` closes a menu whose trigger has scrolled out of sight, and
+ * Karma leaves earlier fixtures in the document). Selecting a row needs neither: it sets a signal.
+ *
+ * ★ RETARGETED RATHER THAN DELETED. Left pointing at `.row-menu__item`, every one of these would have
+ * gone green the moment the menu was removed — finding no forbidden buttons because it found no
+ * buttons at all. That is the dead green this repo has a rule about, and the `withContext` guard below
+ * is what stops it: the panel has to be on screen before anything is asserted about its absence.
  */
 describe('UsersListComponent — what a row offers', () => {
   let fixture: ComponentFixture<UsersListComponent>;
@@ -58,42 +63,38 @@ describe('UsersListComponent — what a row offers', () => {
     rendered = users;
     (store.users as unknown as jasmine.Spy).and.returnValue(users);
     fixture = TestBed.createComponent(UsersListComponent);
-
-    // ★★ PINNED TO THE TOP OF THE VIEWPORT, AND WITHOUT THIS THE SUITE FLAPS. `RowMenuController`
-    // CLOSES a menu whose trigger has scrolled out of sight (`rect.top > window.innerHeight`) — right,
-    // in the product, and fatal here: Karma leaves every earlier spec's fixture in the document, so
-    // this table renders further down the page the later this file happens to run. The menu then
-    // closed the instant it opened, the dropdown query came back empty, and WHICH tests failed changed
-    // with the randomised order. The component is not at fault; the harness is, so the harness is what
-    // is fixed.
-    const host = fixture.nativeElement as HTMLElement;
-    host.style.position = 'fixed';
-    host.style.top = '0';
-    host.style.left = '0';
-
     fixture.detectChanges();
   }
 
-  /** Opens a row's ⋮ menu — see the note above for why it is done this way. */
-  function openMenuFor(userId: string): void {
+  /**
+   * Selects a row, which is what opens the panel.
+   *
+   * ★ THE GUARD IS THE WHOLE POINT. Without it, a panel that failed to render would make every
+   * "does not offer X" assertion below pass for the wrong reason.
+   */
+  function openPanelFor(userId: string): HTMLElement {
     const row = rendered.findIndex(u => u.userId === userId);
-    const trigger = (fixture.nativeElement as HTMLElement)
-      .querySelectorAll<HTMLButtonElement>('tbody .row-menu__trigger')[row];
+    const tr = (fixture.nativeElement as HTMLElement)
+      .querySelectorAll<HTMLTableRowElement>('tbody tr.users__row')[row];
 
-    expect(trigger).withContext(`no ⋮ trigger rendered for ${userId}`).toBeTruthy();
+    expect(tr).withContext(`no row rendered for ${userId}`).toBeTruthy();
 
-    const event = new MouseEvent('click');
-    Object.defineProperty(event, 'currentTarget', { value: trigger });
-    fixture.componentInstance.toggleMenu(userId, event);
+    tr.click();
     fixture.detectChanges();
+
+    const panel = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLElement>('app-user-access-panel');
+
+    expect(panel).withContext(`no access panel opened for ${userId}`).toBeTruthy();
+
+    return panel!;
   }
 
-  /** The labels the open menu offers. */
+  /** The labels the panel's action strip offers. */
   function menuLabelsFor(userId: string): string[] {
-    openMenuFor(userId);
+    const panel = openPanelFor(userId);
 
-    const el = fixture.nativeElement as HTMLElement;
-    return Array.from(el.querySelectorAll('.row-menu__dropdown .row-menu__item'))
+    return Array.from(panel.querySelectorAll('.access-panel__actions ws-button'))
       .map(b => (b.textContent ?? '').trim());
   }
 
@@ -107,6 +108,12 @@ describe('UsersListComponent — what a row offers', () => {
       showsSeatCounter: jasmine.createSpy('showsSeatCounter').and.returnValue(false),
       saving: jasmine.createSpy('saving').and.returnValue(false),
       load: jasmine.createSpy('load').and.returnValue(Promise.resolve()),
+      // The access panel reads both. `rolesLoaded` true with a populated set, so the capability list
+      // renders — these tests are about the ACTION strip, and a panel stuck on "unknown" would still
+      // draw it, but a double that lies about the shape is how a spec stops resembling the product.
+      rolesLoaded: jasmine.createSpy('rolesLoaded').and.returnValue(true),
+      permissionsFor: jasmine.createSpy('permissionsFor')
+        .and.returnValue(new Set(['Users.Manage', 'LedgerSummary.Read'])),
     } as unknown as Partial<UsersStore>;
 
     const currentUser = {
@@ -140,15 +147,13 @@ describe('UsersListComponent — what a row offers', () => {
     expect(labels).not.toContain('USERS.ACTION.REMOVE');
   });
 
-  it('explains the absence instead of showing an empty menu', () => {
+  it('explains the absence instead of leaving a gap where the actions were', () => {
     mountWith([user(ME)]);
 
-    openMenuFor(ME);
+    const panel = openPanelFor(ME);
 
-    const note = (fixture.nativeElement as HTMLElement)
-      .querySelector('.row-menu__dropdown .row-menu__note');
-
-    expect(note?.textContent).toContain('USERS.ACTION.SELF_NOTE');
+    expect(panel.querySelector('.access-panel__self-note')?.textContent)
+      .toContain('USERS.ACTION.SELF_NOTE');
   });
 
   it('still offers all three on somebody else', () => {

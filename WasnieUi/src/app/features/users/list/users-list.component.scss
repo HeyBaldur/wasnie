@@ -232,3 +232,59 @@
 
   &:hover { color: var(--color-brand-hover); }
 }
+
+// ── Master / detail ──────────────────────────────────────────────────────────
+//
+// ★★ A LAYOUT, NOT A NEW PRIMITIVE. There is no WsDrawer in this design system and adding one is a
+//    separate decision (DESIGN_SYSTEM §10.3), so this is a two-column grid whose second column holds
+//    a `ws-card` — the same master/detail shape the plan and payee screens already use.
+
+.users__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+// ★ THE SECOND COLUMN ONLY EXISTS ONCE SOMETHING IS SELECTED. `minmax(0, 1fr)` on the first is what
+//   lets the table shrink instead of forcing the grid wider than the page — a plain `1fr` takes the
+//   table's intrinsic width as a floor and the panel goes off the right edge.
+.users__split--open {
+  @media (min-width: 1100px) {
+    grid-template-columns: minmax(0, 1fr) 380px;
+  }
+}
+
+// It follows the reader down a long list rather than scrolling away from the row they picked.
+.users__panel-col {
+  position: sticky;
+  top: var(--space-5);
+}
+
+// ── Rows as controls ─────────────────────────────────────────────────────────
+
+.users__row {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--color-bg-surface-hover);
+  }
+
+  // Keyboard users get the same affordance; the row carries tabindex and answers Enter/Space.
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: -2px;
+  }
+}
+
+// ★ THE SELECTED ROW IS MARKED ON ITS LEADING EDGE, not by a fill. A tinted row competes with the
+//   status badges inside it, and on the light theme a tint light enough not to fight them is one
+//   nobody can see. `inset` keeps the rule inside the cell, so no layout moves when it appears.
+.users__row--selected {
+  background: var(--color-bg-surface-hover);
+
+  > td:first-child {
+    box-shadow: inset 3px 0 0 0 var(--color-brand);
+  }
+}

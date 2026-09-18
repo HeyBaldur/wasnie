@@ -3209,5 +3209,51 @@
     "DEBT_DESC": "Lo que debe a la empresa ahora mismo.",
     "SCOPE_RANGE": "Fechas seleccionadas",
     "SCOPE_TODAY": "A día de hoy"
+  },
+  "ACCESS": {
+    "UNKNOWN": "No se pudo cargar lo que este rol puede hacer. La lista no se muestra, en vez de mostrarse mal.",
+    "AREA": {
+      "SELF": "Lo suyo",
+      "PEOPLE": "Personas",
+      "PLANS": "Planes y reglas",
+      "TARGETS": "Objetivos",
+      "ASSIGNMENTS": "Asignaciones",
+      "SALES": "Ventas y comisiones",
+      "PAY": "Pagos",
+      "ADMIN": "Administración"
+    },
+    "CAP": {
+      "OWN_PAY": "Ver su propio saldo y sus comisiones",
+      "PAYEES_READ": "Ver las fichas de todas las personas",
+      "PAYEES_CREATE": "Dar de alta a un payee",
+      "PAYEES_UPDATE": "Editar un payee",
+      "PAYEES_TERMINATE": "Dar de baja a un payee",
+      "PLANS_READ": "Ver todos los planes de compensación",
+      "PLANS_READ_OWN": "Ver los planes bajo los que cobra",
+      "PLANS_CREATE": "Crear un plan",
+      "PLANS_ACTIVATE": "Activar un plan",
+      "PLANS_STOP_RULE": "Detener una regla a mitad de período",
+      "QUOTAS_READ": "Ver objetivos",
+      "QUOTAS_SET": "Fijar y cerrar objetivos",
+      "ASSIGNMENTS_READ": "Ver quién está en qué plan",
+      "ASSIGNMENTS_CREATE": "Asignar a alguien a un plan",
+      "ASSIGNMENTS_DELETE": "Quitar a alguien de un plan",
+      "TRANSACTIONS_READ": "Ver las ventas registradas",
+      "TRANSACTIONS_CREATE": "Registrar una venta",
+      "TRANSACTIONS_VOID": "Anular una venta",
+      "CREDITS_READ": "Ver las comisiones calculadas",
+      "PAYOUTS_READ": "Ver pay runs y pagos",
+      "PAYOUTS_CALCULATE": "Ejecutar un pay run",
+      "PAYOUTS_APPROVE": "Aprobar un pago",
+      "PAYOUTS_MARK_PAID": "Marcar un pago como pagado",
+      "LEDGER_READ": "Ver saldos y deuda",
+      "LEDGER_ADJUST": "Ajustar un saldo a mano",
+      "RECONCILIATION_CLOSE": "Cerrar una partida en Reconciliación",
+      "REPORTS_VIEW_ALL": "Ver el dashboard de toda la empresa",
+      "USERS_MANAGE": "Invitar y gestionar usuarios",
+      "SETTINGS_UPDATE": "Cambiar la configuración del espacio",
+      "SUBSCRIPTION_MANAGE": "Gestionar la facturación",
+      "AUDIT_READ": "Leer el registro de auditoría"
+    }
   }
 }

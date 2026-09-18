@@ -32,6 +32,28 @@ public sealed class UsersController(IMediator mediator) : ControllerBase
     }
 
     /// <summary>
+    /// What each assignable role can do — the data behind the access panel on the users screen.
+    ///
+    /// ★★ IT IS SERVED SO THE BROWSER DOES NOT KEEP ITS OWN COPY OF THE PERMISSION MAP. There was no
+    /// way for this screen to say what anybody could do, because /auth/me answers only about the
+    /// caller; the alternative was a second map in TypeScript, correct the day it was written and
+    /// wrong the first time a permission moved in C# — on the one screen whose job is telling an
+    /// administrator who can do what.
+    ///
+    /// ★ The map is a constant of the product, identical in every workspace, so the answer carries
+    /// nothing tenant-specific. Keys, never sentences: the screen owns the words.
+    /// </summary>
+    [HttpGet("roles")]
+    public async Task<IActionResult> Roles(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ListRolePermissionsQuery(), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// The payees nobody owns yet, for the two pickers that attach one (KAN-92, KAN-93).
     ///
     /// ★ TWO INDEPENDENT INPUTS, AND THEY MUST NOT BE FOLDED INTO ONE. <c>search</c> is what the

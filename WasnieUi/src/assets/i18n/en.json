@@ -3209,5 +3209,51 @@
     "DEBT_DESC": "What you owe the company right now.",
     "SCOPE_RANGE": "Selected dates",
     "SCOPE_TODAY": "As of today"
+  },
+  "ACCESS": {
+    "UNKNOWN": "Could not load what this role can do. The list below is not shown rather than shown wrong.",
+    "AREA": {
+      "SELF": "Their own pay",
+      "PEOPLE": "People",
+      "PLANS": "Plans and rules",
+      "TARGETS": "Targets",
+      "ASSIGNMENTS": "Assignments",
+      "SALES": "Sales and commissions",
+      "PAY": "Payments",
+      "ADMIN": "Administration"
+    },
+    "CAP": {
+      "OWN_PAY": "See their own balance and commissions",
+      "PAYEES_READ": "See everyone's payee records",
+      "PAYEES_CREATE": "Add a payee",
+      "PAYEES_UPDATE": "Edit a payee",
+      "PAYEES_TERMINATE": "Terminate a payee",
+      "PLANS_READ": "See every compensation plan",
+      "PLANS_READ_OWN": "See the plans they are paid under",
+      "PLANS_CREATE": "Create a plan",
+      "PLANS_ACTIVATE": "Activate a plan",
+      "PLANS_STOP_RULE": "Stop a rule mid-period",
+      "QUOTAS_READ": "See targets",
+      "QUOTAS_SET": "Set and close targets",
+      "ASSIGNMENTS_READ": "See who is on which plan",
+      "ASSIGNMENTS_CREATE": "Put somebody on a plan",
+      "ASSIGNMENTS_DELETE": "Take somebody off a plan",
+      "TRANSACTIONS_READ": "See recorded sales",
+      "TRANSACTIONS_CREATE": "Record a sale",
+      "TRANSACTIONS_VOID": "Void a sale",
+      "CREDITS_READ": "See calculated commissions",
+      "PAYOUTS_READ": "See pay runs and payouts",
+      "PAYOUTS_CALCULATE": "Run a pay run",
+      "PAYOUTS_APPROVE": "Approve a payout",
+      "PAYOUTS_MARK_PAID": "Mark a payout as paid",
+      "LEDGER_READ": "See balances and debt",
+      "LEDGER_ADJUST": "Adjust a balance by hand",
+      "RECONCILIATION_CLOSE": "Close an item in Reconciliation",
+      "REPORTS_VIEW_ALL": "See the whole company's dashboard",
+      "USERS_MANAGE": "Invite and manage users",
+      "SETTINGS_UPDATE": "Change workspace settings",
+      "SUBSCRIPTION_MANAGE": "Manage billing",
+      "AUDIT_READ": "Read the audit trail"
+    }
   }
 }

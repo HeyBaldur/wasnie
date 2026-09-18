@@ -3209,5 +3209,51 @@
     "DEBT_DESC": "Kwota, którą jesteś winien firmie w tej chwili.",
     "SCOPE_RANGE": "Wybrane daty",
     "SCOPE_TODAY": "Na dziś"
+  },
+  "ACCESS": {
+    "UNKNOWN": "Nie udało się wczytać uprawnień tej roli. Lista nie jest pokazywana, zamiast pokazać błędną.",
+    "AREA": {
+      "SELF": "Jej własne wynagrodzenie",
+      "PEOPLE": "Osoby",
+      "PLANS": "Plany i reguły",
+      "TARGETS": "Cele",
+      "ASSIGNMENTS": "Przypisania",
+      "SALES": "Sprzedaż i prowizje",
+      "PAY": "Płatności",
+      "ADMIN": "Administracja"
+    },
+    "CAP": {
+      "OWN_PAY": "Widzi własne saldo i prowizje",
+      "PAYEES_READ": "Widzi kartoteki wszystkich osób",
+      "PAYEES_CREATE": "Dodaje osobę",
+      "PAYEES_UPDATE": "Edytuje osobę",
+      "PAYEES_TERMINATE": "Kończy współpracę z osobą",
+      "PLANS_READ": "Widzi wszystkie plany prowizyjne",
+      "PLANS_READ_OWN": "Widzi plany, według których jest rozliczana",
+      "PLANS_CREATE": "Tworzy plan",
+      "PLANS_ACTIVATE": "Aktywuje plan",
+      "PLANS_STOP_RULE": "Zatrzymuje regułę w trakcie okresu",
+      "QUOTAS_READ": "Widzi cele",
+      "QUOTAS_SET": "Ustala i zamyka cele",
+      "ASSIGNMENTS_READ": "Widzi, kto jest w którym planie",
+      "ASSIGNMENTS_CREATE": "Przypisuje kogoś do planu",
+      "ASSIGNMENTS_DELETE": "Usuwa kogoś z planu",
+      "TRANSACTIONS_READ": "Widzi zarejestrowaną sprzedaż",
+      "TRANSACTIONS_CREATE": "Rejestruje sprzedaż",
+      "TRANSACTIONS_VOID": "Anuluje sprzedaż",
+      "CREDITS_READ": "Widzi wyliczone prowizje",
+      "PAYOUTS_READ": "Widzi przebiegi wypłat i wypłaty",
+      "PAYOUTS_CALCULATE": "Uruchamia przebieg wypłat",
+      "PAYOUTS_APPROVE": "Zatwierdza wypłatę",
+      "PAYOUTS_MARK_PAID": "Oznacza wypłatę jako opłaconą",
+      "LEDGER_READ": "Widzi salda i zadłużenie",
+      "LEDGER_ADJUST": "Ręcznie koryguje saldo",
+      "RECONCILIATION_CLOSE": "Zamyka pozycję w Uzgodnieniach",
+      "REPORTS_VIEW_ALL": "Widzi pulpit całej firmy",
+      "USERS_MANAGE": "Zaprasza użytkowników i nimi zarządza",
+      "SETTINGS_UPDATE": "Zmienia ustawienia obszaru roboczego",
+      "SUBSCRIPTION_MANAGE": "Zarządza rozliczeniami",
+      "AUDIT_READ": "Czyta dziennik audytu"
+    }
   }
 }

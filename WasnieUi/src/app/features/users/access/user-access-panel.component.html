@@ -1,0 +1,204 @@
+<ws-card padding="md" class="access-panel">
+
+  <!-- ── Who ──────────────────────────────────────────────────────────────
+       The close control is a real button, not an × in a span: reachable by keyboard, which is how
+       anybody who opened this panel with Enter is going to want to leave it. -->
+  <header class="access-panel__head">
+    <span class="access-panel__avatar">{{ initials(user()) }}</span>
+
+    <div class="access-panel__who">
+      <h2 class="access-panel__name">{{ displayName(user()) }}</h2>
+      <span class="access-panel__email">{{ user().email }}</span>
+    </div>
+
+    <button
+      type="button"
+      class="access-panel__close"
+      [attr.aria-label]="'COMMON.CLOSE' | translate"
+      (click)="closed.emit()"
+    >
+      <app-icon name="x" [size]="16" />
+    </button>
+  </header>
+
+  <!-- ── The hero strip ───────────────────────────────────────────────────
+       ★★ THE RING, THE ROLE AND THE STATUS ON ONE LINE. They were three stacked blocks — a 132px ring,
+       a row of badges and a sentence — which is most of a screen spent saying who somebody is before
+       the panel gets to what they can do. Side by side it is one band, and the ring earns its place
+       by being the thing that separates an administrator from a rep at a glance.
+
+       ★★ IT DRAWS ITSELF FROM EMPTY. The sweep is a CSS dash offset, so there is no animation library
+       and nothing to keep in step with the figure inside it.
+
+       ★ NO PERCENTAGE, ANYWHERE. "6 of 31" is countable against the rows below; "19%" is a score, and
+       a score invites reading a Rep as a worse administrator rather than a different job. -->
+  <div class="access-hero">
+    <div class="access-ring" [class]="ringClass()">
+      <svg viewBox="0 0 120 120" class="access-ring__svg" aria-hidden="true">
+        <circle class="access-ring__track" cx="60" cy="60" r="52" />
+        <circle
+          class="access-ring__value"
+          cx="60" cy="60" r="52"
+          [style.stroke-dasharray]="ringDash()"
+          [style.stroke-dashoffset]="ringOffset()"
+        />
+      </svg>
+
+      <div class="access-ring__label">
+        @if (rolesLoaded()) {
+          <span class="access-ring__figure">{{ grantedCount() }}</span>
+          <span class="access-ring__of">/ {{ totalCapabilities }}</span>
+        } @else {
+          <span class="access-ring__figure access-ring__figure--unknown">—</span>
+        }
+      </div>
+    </div>
+
+    <div class="access-hero__text">
+      <span class="access-hero__role">{{ roleKey() | translate }}</span>
+
+      <div class="access-hero__tags">
+        @if (user().isActive) {
+          <ws-badge variant="success" size="sm" [dot]="true">{{ 'USERS.STATUS.ACTIVE' | translate }}</ws-badge>
+        } @else {
+          <ws-badge variant="neutral" size="sm">{{ 'USERS.STATUS.DEACTIVATED' | translate }}</ws-badge>
+        }
+        @if (!user().emailConfirmed) {
+          <ws-badge variant="warning" size="sm">{{ 'USERS.STATUS.UNCONFIRMED' | translate }}</ws-badge>
+        }
+      </div>
+
+      <!-- ★★ NOT LINKED IS SAID OUT LOUD (§C3). It is the one thing on this screen that silently breaks
+           somebody ELSE's: their personal dashboard tells them to ask an administrator, and the
+           administrator had no sign anything was wrong. An empty field reads as "nothing to report". -->
+      <span class="access-hero__payee">
+        @if (user().linkedPayeeName) {
+          <app-icon name="user-check" [size]="12" />
+          <span>{{ user().linkedPayeeName }}</span>
+        } @else {
+          <app-icon name="alert-triangle" [size]="12" class="access-hero__payee-warn" />
+          <span>{{ 'USERS.PAYEE.NOT_LINKED' | translate }}</span>
+        }
+      </span>
+    </div>
+  </div>
+
+  <!-- ── What an administrator can do about it ────────────────────────────
+       ★★ THE FOUR ACTIONS MOVED OUT OF THE ⋮ AND INTO HERE. In a row menu they had to be opened to be
+       read, three characters wide, next to a role name that meant nothing — so the decision and the
+       means to act on it were never on screen together.
+
+       ★ THE RULES ARE UNCHANGED, only their location. Linking a payee is offered on every row
+       including your own, because it changes what you may READ and not what you may DO; the three
+       that touch authority are hidden on your own row, where the server has always refused them
+       (USER_CANNOT_ACT_ON_SELF, and LastAdminGuard behind it). -->
+  @if (canManage()) {
+    <div class="access-panel__actions">
+      @if (user().linkedPayeeId) {
+        <ws-button variant="secondary" size="sm" (click)="unlinkPayee.emit(user())">
+          <app-icon name="user" [size]="14" />
+          {{ 'USERS.ACTION.UNLINK_PAYEE' | translate }}
+        </ws-button>
+      } @else {
+        <ws-button variant="secondary" size="sm" (click)="linkPayee.emit(user())">
+          <app-icon name="user-check" [size]="14" />
+          {{ 'USERS.ACTION.LINK_PAYEE' | translate }}
+        </ws-button>
+      }
+
+      @if (!isSelf()) {
+        @if (user().isActive) {
+          <ws-button variant="secondary" size="sm" (click)="changeRole.emit(user())">
+            <app-icon name="shield" [size]="14" />
+            {{ 'USERS.ACTION.CHANGE_ROLE' | translate }}
+          </ws-button>
+          <ws-button variant="secondary" size="sm" (click)="deactivate.emit(user())">
+            <app-icon name="ban" [size]="14" />
+            {{ 'USERS.ACTION.DEACTIVATE' | translate }}
+          </ws-button>
+        } @else {
+          <ws-button variant="secondary" size="sm" (click)="reactivate.emit(user())">
+            <app-icon name="check-circle" [size]="14" />
+            {{ 'USERS.ACTION.REACTIVATE' | translate }}
+          </ws-button>
+        }
+
+        <ws-button variant="danger" size="sm" (click)="remove.emit(user())">
+          <app-icon name="trash" [size]="14" />
+          {{ 'USERS.ACTION.REMOVE' | translate }}
+        </ws-button>
+      } @else {
+        <p class="access-panel__self-note">
+          <app-icon name="info" [size]="14" />
+          <span>{{ 'USERS.ACTION.SELF_NOTE' | translate }}</span>
+        </p>
+      }
+    </div>
+  }
+
+  <!-- ── What they can and cannot do ──────────────────────────────────────
+       ★★ EIGHT ROWS, NOT THIRTY-ONE. The first version listed every capability of every area and came
+       to about 1,300px of panel — something to scroll rather than something to read. Each area is one
+       row with a meter, and the named lines open only for the area being asked about.
+
+       ★★ THE METER IS THE DETAIL. One segment per capability, filled or not, so "1 of 5" and "5 of 5"
+       are told apart without reading either number. The segments fill left to right with a stagger,
+       which is what makes the panel read as alive rather than printed — and the stagger is per row, so
+       the eye is led down the list in the order it should be read. -->
+  @if (rolesLoaded()) {
+    <div class="access-groups">
+      @for (area of areas(); track area.key; let row = $index) {
+        <div class="access-row" [class.access-row--empty]="area.granted === 0">
+          <button
+            type="button"
+            class="access-row__head"
+            [attr.aria-expanded]="expandedArea() === area.key"
+            (click)="toggleArea(area.key)"
+          >
+            <app-icon [name]="area.icon" [size]="14" class="access-row__icon" />
+            <span class="access-row__title">{{ area.titleKey | translate }}</span>
+
+            <span class="access-row__meter" aria-hidden="true">
+              @for (cap of area.capabilities; track $index; let i = $index) {
+                <span
+                  class="access-seg"
+                  [class.access-seg--on]="cap.allowed"
+                  [style.animation-delay.ms]="row * 60 + i * 45"
+                ></span>
+              }
+            </span>
+
+            <span class="access-row__count">{{ area.granted }}/{{ area.total }}</span>
+
+            <app-icon
+              name="chevron-down"
+              [size]="14"
+              class="access-row__chevron"
+              [class.access-row__chevron--open]="expandedArea() === area.key"
+            />
+          </button>
+
+          @if (expandedArea() === area.key) {
+            <ul class="access-row__detail">
+              @for (cap of area.capabilities; track cap.labelKey) {
+                <li class="access-cap" [class.access-cap--denied]="!cap.allowed">
+                  <app-icon [name]="cap.allowed ? 'check' : 'x'" [size]="12" class="access-cap__mark" />
+                  <span>{{ cap.labelKey | translate }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
+    </div>
+  } @else {
+    <!-- ★★ "WE DO NOT KNOW YET" IS NOT "THEY CAN DO NOTHING". Rendering the rows against an empty map
+         would draw eight empty meters and state, with total confidence, something false about
+         somebody's access. -->
+    <p class="access-panel__unknown">
+      <app-icon name="alert-triangle" [size]="14" />
+      <span>{{ 'ACCESS.UNKNOWN' | translate }}</span>
+    </p>
+  }
+
+</ws-card>
