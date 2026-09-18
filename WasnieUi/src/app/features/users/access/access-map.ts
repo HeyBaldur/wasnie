@@ -19,8 +19,17 @@
 export interface AccessCapability {
   /** Translation key for the sentence. Whitelisted — see the note above. */
   readonly labelKey: string;
-  /** The permission that grants it, exactly as the server spells it. */
-  readonly permission: string;
+
+  /**
+   * The permissions that grant it — ANY of them is enough.
+   *
+   * ★★ IT IS A LIST BECAUSE SOME KEYS IMPLY OTHERS, and a one-to-one mapping got that wrong on screen.
+   * An administrator holds `Plans.Read` and not `Plans.ReadOwn`, so "see the plans they are paid under"
+   * rendered as a red cross on the account that can read every plan in the workspace. The server was
+   * right all along — `PlanAccessGuard` returns true for `Plans.Read` before it ever looks at
+   * `ReadOwn` — and only this screen was wrong, which is the worst place for it to be wrong.
+   */
+  readonly permissions: readonly string[];
 }
 
 export interface AccessArea {
@@ -42,7 +51,7 @@ export const ACCESS_AREAS: readonly AccessArea[] = [
     titleKey: 'ACCESS.AREA.SELF',
     icon: 'user',
     capabilities: [
-      { labelKey: 'ACCESS.CAP.OWN_PAY', permission: 'LedgerSummary.Read' },
+      { labelKey: 'ACCESS.CAP.OWN_PAY', permissions: ['LedgerSummary.Read'] },
     ],
   },
   {
@@ -50,10 +59,10 @@ export const ACCESS_AREAS: readonly AccessArea[] = [
     titleKey: 'ACCESS.AREA.PEOPLE',
     icon: 'users',
     capabilities: [
-      { labelKey: 'ACCESS.CAP.PAYEES_READ', permission: 'Payees.Read' },
-      { labelKey: 'ACCESS.CAP.PAYEES_CREATE', permission: 'Payees.Create' },
-      { labelKey: 'ACCESS.CAP.PAYEES_UPDATE', permission: 'Payees.Update' },
-      { labelKey: 'ACCESS.CAP.PAYEES_TERMINATE', permission: 'Payees.Terminate' },
+      { labelKey: 'ACCESS.CAP.PAYEES_READ', permissions: ['Payees.Read'] },
+      { labelKey: 'ACCESS.CAP.PAYEES_CREATE', permissions: ['Payees.Create'] },
+      { labelKey: 'ACCESS.CAP.PAYEES_UPDATE', permissions: ['Payees.Update'] },
+      { labelKey: 'ACCESS.CAP.PAYEES_TERMINATE', permissions: ['Payees.Terminate'] },
     ],
   },
   {
@@ -61,14 +70,16 @@ export const ACCESS_AREAS: readonly AccessArea[] = [
     titleKey: 'ACCESS.AREA.PLANS',
     icon: 'file-text',
     capabilities: [
-      { labelKey: 'ACCESS.CAP.PLANS_READ', permission: 'Plans.Read' },
-      // ★ BOTH PLAN KEYS ARE LISTED, and that is the point of listing them. They are not a ladder:
-      // an administrator holds Plans.Read and NOT Plans.ReadOwn, a rep the reverse. Showing only one
-      // would make a rep's plan access look like nothing at all.
-      { labelKey: 'ACCESS.CAP.PLANS_READ_OWN', permission: 'Plans.ReadOwn' },
-      { labelKey: 'ACCESS.CAP.PLANS_CREATE', permission: 'Plans.Create' },
-      { labelKey: 'ACCESS.CAP.PLANS_ACTIVATE', permission: 'Plans.Activate' },
-      { labelKey: 'ACCESS.CAP.PLANS_STOP_RULE', permission: 'Plans.StopRule' },
+      { labelKey: 'ACCESS.CAP.PLANS_READ', permissions: ['Plans.Read'] },
+      // ★★ GRANTED BY EITHER KEY, AND THE FIRST VERSION OF THIS LINE WAS WRONG. It listed only
+      // `Plans.ReadOwn` on the reasoning that the two are "not a ladder" — which is false for reading:
+      // `PlanAccessGuard` returns true for `Plans.Read` before it ever tests `ReadOwn`, and
+      // `GetTriggerFieldsHandler` falls through to `Plans.Read` the same way. So an administrator CAN
+      // see the plans they are paid under, and the panel was telling them they could not.
+      { labelKey: 'ACCESS.CAP.PLANS_READ_OWN', permissions: ['Plans.Read', 'Plans.ReadOwn'] },
+      { labelKey: 'ACCESS.CAP.PLANS_CREATE', permissions: ['Plans.Create'] },
+      { labelKey: 'ACCESS.CAP.PLANS_ACTIVATE', permissions: ['Plans.Activate'] },
+      { labelKey: 'ACCESS.CAP.PLANS_STOP_RULE', permissions: ['Plans.StopRule'] },
     ],
   },
   {
@@ -76,8 +87,8 @@ export const ACCESS_AREAS: readonly AccessArea[] = [
     titleKey: 'ACCESS.AREA.TARGETS',
     icon: 'target',
     capabilities: [
-      { labelKey: 'ACCESS.CAP.QUOTAS_READ', permission: 'Quotas.Read' },
-      { labelKey: 'ACCESS.CAP.QUOTAS_SET', permission: 'Quotas.Set' },
+      { labelKey: 'ACCESS.CAP.QUOTAS_READ', permissions: ['Quotas.Read'] },
+      { labelKey: 'ACCESS.CAP.QUOTAS_SET', permissions: ['Quotas.Set'] },
     ],
   },
   {
@@ -85,9 +96,9 @@ export const ACCESS_AREAS: readonly AccessArea[] = [
     titleKey: 'ACCESS.AREA.ASSIGNMENTS',
     icon: 'link-2',
     capabilities: [
-      { labelKey: 'ACCESS.CAP.ASSIGNMENTS_READ', permission: 'Assignments.Read' },
-      { labelKey: 'ACCESS.CAP.ASSIGNMENTS_CREATE', permission: 'Assignments.Create' },
-      { labelKey: 'ACCESS.CAP.ASSIGNMENTS_DELETE', permission: 'Assignments.Delete' },
+      { labelKey: 'ACCESS.CAP.ASSIGNMENTS_READ', permissions: ['Assignments.Read'] },
+      { labelKey: 'ACCESS.CAP.ASSIGNMENTS_CREATE', permissions: ['Assignments.Create'] },
+      { labelKey: 'ACCESS.CAP.ASSIGNMENTS_DELETE', permissions: ['Assignments.Delete'] },
     ],
   },
   {
@@ -95,10 +106,10 @@ export const ACCESS_AREAS: readonly AccessArea[] = [
     titleKey: 'ACCESS.AREA.SALES',
     icon: 'trend-up',
     capabilities: [
-      { labelKey: 'ACCESS.CAP.TRANSACTIONS_READ', permission: 'Transactions.Read' },
-      { labelKey: 'ACCESS.CAP.TRANSACTIONS_CREATE', permission: 'Transactions.Create' },
-      { labelKey: 'ACCESS.CAP.TRANSACTIONS_VOID', permission: 'Transactions.Void' },
-      { labelKey: 'ACCESS.CAP.CREDITS_READ', permission: 'Credits.Read' },
+      { labelKey: 'ACCESS.CAP.TRANSACTIONS_READ', permissions: ['Transactions.Read'] },
+      { labelKey: 'ACCESS.CAP.TRANSACTIONS_CREATE', permissions: ['Transactions.Create'] },
+      { labelKey: 'ACCESS.CAP.TRANSACTIONS_VOID', permissions: ['Transactions.Void'] },
+      { labelKey: 'ACCESS.CAP.CREDITS_READ', permissions: ['Credits.Read'] },
     ],
   },
   {
@@ -106,13 +117,13 @@ export const ACCESS_AREAS: readonly AccessArea[] = [
     titleKey: 'ACCESS.AREA.PAY',
     icon: 'dollar-sign',
     capabilities: [
-      { labelKey: 'ACCESS.CAP.PAYOUTS_READ', permission: 'Payouts.Read' },
-      { labelKey: 'ACCESS.CAP.PAYOUTS_CALCULATE', permission: 'Payouts.Calculate' },
-      { labelKey: 'ACCESS.CAP.PAYOUTS_APPROVE', permission: 'Payouts.Approve' },
-      { labelKey: 'ACCESS.CAP.PAYOUTS_MARK_PAID', permission: 'Payouts.MarkPaid' },
-      { labelKey: 'ACCESS.CAP.LEDGER_READ', permission: 'Ledger.Read' },
-      { labelKey: 'ACCESS.CAP.LEDGER_ADJUST', permission: 'Ledger.Adjust' },
-      { labelKey: 'ACCESS.CAP.RECONCILIATION_CLOSE', permission: 'Reconciliation.Close' },
+      { labelKey: 'ACCESS.CAP.PAYOUTS_READ', permissions: ['Payouts.Read'] },
+      { labelKey: 'ACCESS.CAP.PAYOUTS_CALCULATE', permissions: ['Payouts.Calculate'] },
+      { labelKey: 'ACCESS.CAP.PAYOUTS_APPROVE', permissions: ['Payouts.Approve'] },
+      { labelKey: 'ACCESS.CAP.PAYOUTS_MARK_PAID', permissions: ['Payouts.MarkPaid'] },
+      { labelKey: 'ACCESS.CAP.LEDGER_READ', permissions: ['Ledger.Read'] },
+      { labelKey: 'ACCESS.CAP.LEDGER_ADJUST', permissions: ['Ledger.Adjust'] },
+      { labelKey: 'ACCESS.CAP.RECONCILIATION_CLOSE', permissions: ['Reconciliation.Close'] },
     ],
   },
   {
@@ -120,11 +131,11 @@ export const ACCESS_AREAS: readonly AccessArea[] = [
     titleKey: 'ACCESS.AREA.ADMIN',
     icon: 'settings',
     capabilities: [
-      { labelKey: 'ACCESS.CAP.REPORTS_VIEW_ALL', permission: 'Reports.ViewAll' },
-      { labelKey: 'ACCESS.CAP.USERS_MANAGE', permission: 'Users.Manage' },
-      { labelKey: 'ACCESS.CAP.SETTINGS_UPDATE', permission: 'Settings.Update' },
-      { labelKey: 'ACCESS.CAP.SUBSCRIPTION_MANAGE', permission: 'Subscription.Manage' },
-      { labelKey: 'ACCESS.CAP.AUDIT_READ', permission: 'Audit.Read' },
+      { labelKey: 'ACCESS.CAP.REPORTS_VIEW_ALL', permissions: ['Reports.ViewAll'] },
+      { labelKey: 'ACCESS.CAP.USERS_MANAGE', permissions: ['Users.Manage'] },
+      { labelKey: 'ACCESS.CAP.SETTINGS_UPDATE', permissions: ['Settings.Update'] },
+      { labelKey: 'ACCESS.CAP.SUBSCRIPTION_MANAGE', permissions: ['Subscription.Manage'] },
+      { labelKey: 'ACCESS.CAP.AUDIT_READ', permissions: ['Audit.Read'] },
     ],
   },
 ];

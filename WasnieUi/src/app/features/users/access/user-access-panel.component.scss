@@ -59,8 +59,10 @@
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  // 28, not 26: WCAG 2.2 Target Size (Minimum) is 24 CSS px for web, and 26 cleared it by two
+  // pixels — a margin that any future padding change would spend without anybody noticing.
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -110,12 +112,16 @@
   gap: var(--space-1);
 }
 
+// ★★ SECONDARY, NOT TERTIARY, AND THE REASON IS MEASURED. Tertiary text clears 4.5:1 on the card
+//    (4.55) but only reaches 4.18 on this band, because the band is a sunken surface and the two
+//    tokens were never paired against each other. Same token, different background, different answer —
+//    which is why contrast is checked where the text actually sits and not where it usually sits.
 .access-hero__payee {
   display: flex;
   align-items: center;
   gap: var(--space-1);
   font-size: var(--font-size-12);
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
   overflow-wrap: anywhere;
 }
 
@@ -125,83 +131,17 @@
 
 // ── The ring ─────────────────────────────────────────────────────────────
 //
-// ★★ IT DRAWS ITSELF FROM EMPTY, and the sweep is the reason it is here: a static arc is a chart
-//    nobody reads, while an arc that moves into position separates two roles before either list
-//    below is looked at. A dash offset in CSS — no animation library.
+// ★★ EVERY RULE THAT WAS HERE IS GONE, and that is the fix. It was a hand-rolled `<circle>` pair with
+//    its own dash-offset keyframe, its own three colour classes and its own reduced-motion guard —
+//    an ad-hoc element (§5.4) reimplementing a primitive that already existed, and drawing its own
+//    sweep beside charts that get theirs from Chart.js. `ws-gauge` owns all of it now: the arc, the
+//    animation, the centre figure and the tokens, read through `chart-theme.ts`.
+//
+// ★ ALL THAT IS LEFT IS THE SIZE, which is this screen's business and not the primitive's.
 
-// ★ THE FIGURE IS LAID OVER THE SVG WITH `grid-area`, NOT WITH `position: absolute`. Absolute took it
-//   out of the grid's flow, so `place-items: center` stopped centring it and the number sat left of
-//   the ring's middle — visible on screen as a figure that looks nudged.
-.access-ring {
-  display: grid;
-  place-items: center;
+.access-hero__gauge {
   flex-shrink: 0;
   width: 84px;
-  height: 84px;
-
-  > * { grid-area: 1 / 1; }
-}
-
-.access-ring__svg {
-  width: 100%;
-  height: 100%;
-  // 12 o'clock is where a ring is read from; the SVG's own zero is 3 o'clock.
-  transform: rotate(-90deg);
-}
-
-.access-ring__track,
-.access-ring__value {
-  fill: none;
-  stroke-width: 9;
-  stroke-linecap: round;
-}
-
-// Always full, so an empty ring still reads as a ring rather than as a failed render.
-.access-ring__track { stroke: var(--color-bg-surface); }
-
-.access-ring__value {
-  stroke: var(--color-brand);
-  animation: access-ring-sweep 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  transition: stroke-dashoffset var(--transition-slow);
-}
-
-// ★ A BAND, NOT A VERDICT. Wide authority is not "bad" and a narrow role is not "good"; the colours
-//   separate an administrator from a rep at a glance, in the product's own language for scope.
-.access-ring--wide   .access-ring__value { stroke: var(--color-brand); }
-.access-ring--mid    .access-ring__value { stroke: var(--color-accent-blue); }
-.access-ring--narrow .access-ring__value { stroke: var(--color-accent-violet); }
-
-// Stacked, not side by side: a 20px figure next to an 11px "/31" on a shared baseline reads as one
-// number that has been damaged.
-.access-ring__label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1;
-}
-
-.access-ring__figure {
-  font-size: var(--font-size-20);
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-primary);
-}
-
-.access-ring__figure--unknown { color: var(--color-text-tertiary); }
-
-.access-ring__of {
-  margin-top: 2px;
-  font-size: var(--font-size-11);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-tertiary);
-}
-
-@keyframes access-ring-sweep {
-  // The real offset is bound inline; this animates the whole circumference away and lets the bound
-  // value take over at the end. `to` is deliberately absent so it inherits the element's own value.
-  from { stroke-dashoffset: 327; }
 }
 
 // ── Actions ──────────────────────────────────────────────────────────────

@@ -1,7 +1,8 @@
 import { Component, computed, effect, input, output, signal, untracked } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
-import { WsBadgeComponent, WsButtonComponent, WsCardComponent } from '../../../shared/ui';
+import { WsBadgeComponent, WsButtonComponent, WsCardComponent, WsGaugeComponent } from '../../../shared/ui';
+import type { GaugeAccent } from '../../../shared/ui/ws-gauge/ws-gauge.component';
 import { TenantUser, roleTranslationKey } from '../models/user.model';
 import { ACCESS_AREAS, AccessArea, TOTAL_CAPABILITIES } from './access-map';
 
@@ -56,6 +57,7 @@ export interface ResolvedArea {
     WsBadgeComponent,
     WsButtonComponent,
     WsCardComponent,
+    WsGaugeComponent,
   ],
   templateUrl: './user-access-panel.component.html',
   styleUrl: './user-access-panel.component.scss',
@@ -83,9 +85,10 @@ export class UserAccessPanelComponent {
     const held = this.permissions();
 
     return ACCESS_AREAS.map((area: AccessArea) => {
+      // ANY of the listed keys grants it — see AccessCapability for why it is a list.
       const capabilities = area.capabilities.map((c) => ({
         labelKey: c.labelKey,
-        allowed: held.has(c.permission),
+        allowed: c.permissions.some((key) => held.has(key)),
       }));
 
       return {
@@ -114,23 +117,24 @@ export class UserAccessPanelComponent {
     this.totalCapabilities === 0 ? 0 : this.grantedCount() / this.totalCapabilities,
   );
 
-  /** Circumference of the r=52 ring, for the dash offset. */
-  private readonly circumference = 2 * Math.PI * 52;
-
-  readonly ringDash = computed(() => this.circumference);
-  readonly ringOffset = computed(() => this.circumference * (1 - this.coverage()));
-
   /**
-   * ★ THE RING'S COLOUR IS A BAND, NOT A VERDICT. Wide authority is not "bad" and a narrow role is not
-   * "good" — the colours separate an administrator from a rep at a glance, in the same language the
-   * rest of the product uses for scope.
+   * ★★ A BAND, NOT A VERDICT — which is why this never passes `attainment` to the gauge. That ladder
+   * climbs danger → warning → success and is right for a quota; here it would paint a rep at 5 of 31
+   * RED, which reads as "this role is broken" about a role that is doing its job. Wide authority is
+   * not good and narrow authority is not bad; the three colours only separate them at a glance.
    */
-  readonly ringClass = computed(() => {
+  readonly ringAccent = computed<GaugeAccent>(() => {
     const c = this.coverage();
-    if (c > 0.66) return 'access-ring--wide';
-    if (c > 0.25) return 'access-ring--mid';
-    return 'access-ring--narrow';
+    if (c > 0.66) return 'brand';
+    if (c > 0.25) return 'blue';
+    return 'violet';
   });
+
+  /** What a screen reader hears instead of the ring: the count, in words it can use. */
+  readonly ringAriaLabel = computed(() =>
+    this.rolesLoaded()
+      ? `${this.grantedCount()} / ${this.totalCapabilities}`
+      : '');
 
   readonly roleKey = computed(() => roleTranslationKey(this.user().role));
 

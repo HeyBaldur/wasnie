@@ -27,32 +27,29 @@
        the panel gets to what they can do. Side by side it is one band, and the ring earns its place
        by being the thing that separates an administrator from a rep at a glance.
 
-       ★★ IT DRAWS ITSELF FROM EMPTY. The sweep is a CSS dash offset, so there is no animation library
-       and nothing to keep in step with the figure inside it.
-
-       ★ NO PERCENTAGE, ANYWHERE. "6 of 31" is countable against the rows below; "19%" is a score, and
-       a score invites reading a Rep as a worse administrator rather than a different job. -->
+       ★ The ring itself is `ws-gauge` — see the note on it below. -->
   <div class="access-hero">
-    <div class="access-ring" [class]="ringClass()">
-      <svg viewBox="0 0 120 120" class="access-ring__svg" aria-hidden="true">
-        <circle class="access-ring__track" cx="60" cy="60" r="52" />
-        <circle
-          class="access-ring__value"
-          cx="60" cy="60" r="52"
-          [style.stroke-dasharray]="ringDash()"
-          [style.stroke-dashoffset]="ringOffset()"
-        />
-      </svg>
+    <!-- ★★ THE PRIMITIVE, NOT A HAND-ROLLED SVG. This was a `<circle>` pair with a CSS dash-offset
+         keyframe — an ad-hoc element where the design system already has one (§5.4), drawing its own
+         sweep beside charts that get theirs from Chart.js. `ws-gauge` was sitting unused with four
+         hardcoded hex values; it reads tokens through `chart-theme.ts` now and can draw a full ring.
 
-      <div class="access-ring__label">
-        @if (rolesLoaded()) {
-          <span class="access-ring__figure">{{ grantedCount() }}</span>
-          <span class="access-ring__of">/ {{ totalCapabilities }}</span>
-        } @else {
-          <span class="access-ring__figure access-ring__figure--unknown">—</span>
-        }
-      </div>
-    </div>
+         ★★ `accent` IS NOT `attainment` HERE, AND THAT IS THE POINT OF THE INPUT. The gauge's default
+         ladder climbs danger → warning → success, which is right for a quota and a lie for a scope: a
+         rep at 5 of 31 would be painted RED, telling an administrator to go and fix a role that is
+         working exactly as designed.
+
+         ★ A COUNT, NOT A PERCENTAGE. "6 / 31" can be checked against the rows underneath; "19%" is a
+         score, and a score invites reading a Rep as a worse administrator rather than a different job. -->
+    <ws-gauge
+      class="access-hero__gauge"
+      [value]="coverage()"
+      [circumference]="360"
+      [accent]="ringAccent()"
+      [label]="rolesLoaded() ? grantedCount().toString() : '—'"
+      [sublabel]="rolesLoaded() ? '/ ' + totalCapabilities : null"
+      [ariaLabel]="ringAriaLabel()"
+    />
 
     <div class="access-hero__text">
       <span class="access-hero__role">{{ roleKey() | translate }}</span>
