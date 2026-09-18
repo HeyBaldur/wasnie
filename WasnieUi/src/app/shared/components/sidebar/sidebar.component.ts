@@ -247,6 +247,50 @@ export class SidebarComponent implements OnInit {
    * instead. One "home" entry, always the one that will actually open — a menu that lists both would
    * offer most people a page that refuses them, which is the trap the comment below already names.
    */
+  /**
+   * The sections that actually have something in them for THIS reader.
+   *
+   * ★★ A HEADING WITH NOTHING UNDER IT IS A PROMISE THE RAIL DOES NOT KEEP. Every item rides on
+   * `*hasPermission`, so a role holding none of a section's permissions still got the section LABEL:
+   * a Manager saw "OPERATIONS" and "SETTINGS" as headings over empty space, which reads as a menu
+   * that failed to load rather than one that has nothing to offer them.
+   *
+   * ★ THE FILTER IS THE SAME QUESTION `*hasPermission` ASKS, one level up. It has to be — two rules
+   * deciding the same visibility is how a section hides while its items would have shown.
+   *
+   * ★ A GROUP COUNTS WHEN ANY OF ITS CHILDREN DOES, which is what `children.some` is for: a collapsed
+   * Financials group with one reachable child still earns its section.
+   */
+  readonly visibleSections = computed<NavSection[]>(() =>
+    this.navSections().filter((section) => section.items.some((e) => this.canSeeEntry(e))),
+  );
+
+  /**
+   * Whether this reader has anything at all behind a rail entry.
+   *
+   * ★★ A GROUP IS VISIBLE WHEN ANY CHILD IS — NOT WHEN ITS OWN KEY MATCHES, and the difference was
+   * hiding a screen somebody was entitled to. The Financials group carried `Reports.ViewAll` while one
+   * of its children, `/terminated-accounts`, asks for `Ledger.Read`. A Manager holds Ledger.Read and
+   * not Reports.ViewAll, so the group vanished and took the one page they could open with it: a
+   * permission granted in `RolePermissions.cs` that no menu entry anywhere exposed.
+   *
+   * ★ ONE RULE, ASKED IN THREE PLACES — the section filter, the expanded group and the collapsed
+   * flyout. Two copies of this question is how a group hides while its children would have shown.
+   */
+  canSeeEntry(entry: NavEntry): boolean {
+    return this.isNavGroup(entry)
+      ? entry.children.some((child) => this.currentUser.hasPermission(child.permission))
+      : this.currentUser.hasPermission(entry.permission);
+  }
+
+  /**
+   * ★ THE SETTINGS BLOCK IS NOT PART OF `navSections`, so the filter above cannot reach it — it is
+   * written out by hand at the foot of the rail. Same question, asked where it lives.
+   */
+  readonly showsSettingsSection = computed(() =>
+    [this.integrationsItem, this.settingsItem].some((i) => this.currentUser.hasPermission(i.permission)),
+  );
+
   readonly navSections = computed<NavSection[]>(() => [
     {
       sectionKey: 'NAV.SECTION_OVERVIEW',

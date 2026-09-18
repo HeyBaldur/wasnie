@@ -2439,7 +2439,8 @@
     "TOKENS_EXHAUSTED_BUY": "Add tokens",
     "ERROR_TRIAL_LIMIT_REACHED": "You have used all the assistant tokens included in your free trial. Subscribe to keep using Zeke without limits.",
     "WELCOME_EYEBROW": "Zeke · your Incentra assistant",
-    "WELCOME_TRY_ASKING": "Try asking"
+    "WELCOME_TRY_ASKING": "Try asking",
+    "LOCKED_CTA": "See the plans"
   },
   "RECONCILIATION": {
     "TITLE": "Reconciliation Centre",

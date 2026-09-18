@@ -2439,7 +2439,8 @@
     "TOKENS_EXHAUSTED_BUY": "Dodaj tokeny",
     "ERROR_TRIAL_LIMIT_REACHED": "Wykorzystano wszystkie tokeny asystenta dostępne w bezpłatnym okresie próbnym. Wykup subskrypcję, aby korzystać z Zeke bez ograniczeń.",
     "WELCOME_EYEBROW": "Zeke · Twój asystent Incentra",
-    "WELCOME_TRY_ASKING": "Zapytaj na przykład"
+    "WELCOME_TRY_ASKING": "Zapytaj na przykład",
+    "LOCKED_CTA": "Zobacz plany"
   },
   "RECONCILIATION": {
     "TITLE": "Centrum uzgodnień",
