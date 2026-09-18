@@ -376,23 +376,10 @@
   letter-spacing: -0.01em;
 }
 
-.attainment-bar {
-  width: 100%;
-  height: 6px;
-  background: var(--color-bg-surface-sunken);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.attainment-bar__fill {
-  height: 100%;
-  background: var(--color-brand);
-  border-radius: var(--radius-full);
-  transition: width var(--transition-base);
-
-  &--warn { background: var(--color-warning); }
-  &--ok   { background: var(--color-success); }
-}
+// ★ The attainment bar now lives in `styles/_attainment-rows.scss`, shared with the quota rows on
+// /payees/:id and /my-dashboard. Nothing is needed here: the shared rule carries `width: 100%`, which
+// is what this card's flex COLUMN wants. Do not paste it back — and in particular do not give it
+// `flex: 1`, which in a column grows the bar vertically (it rendered 76px tall once).
 
 // ── Currency list — mini-table: code left, amount right ───────────────────────
 
@@ -607,84 +594,11 @@
   }
 }
 
-// ── Trend cards — TailAdmin "Average Daily Sales" pattern ─────────────────────
-// Layout: [small label + big value LEFT | delta pill RIGHT] → bleed chart → prior row
-
-.trend-card {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.trend-card__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
-}
-
-.trend-card__label {
-  display: block;
-  font-size: var(--font-size-13);
-  font-weight: 500;
-  color: var(--color-text-tertiary);
-  margin-bottom: var(--space-1);
-}
-
-.trend-card__value {
-  font-size: var(--font-size-24);
-  font-weight: 700;
-  color: var(--color-text-primary);
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;  // compact notation never wraps
-}
-
-.trend-card__delta-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-  padding: 3px 10px 3px 8px;
-  border-radius: var(--radius-full);
-  font-size: var(--font-size-12);
-  font-weight: 800;
-  background: var(--color-bg-surface-sunken);
-  color: var(--color-text-tertiary);
-  white-space: nowrap;
-
-  &--up   { background: var(--color-success-bg); color: var(--color-success); }
-  &--down { background: var(--color-danger-bg);  color: var(--color-danger);  }
-}
-
-.trend-icon--down { transform: rotate(180deg); }
-
-// Dedicated chart area with explicit height so Chart.js canvas can size itself.
-// No bleed margins needed — the horizontal bar chart is self-contained.
-.trend-card__chart {
-  height: 100px;   // enough for 2 bars at barThickness:24 + padding
-  width: 100%;
-  margin-top: var(--space-3);
-  margin-bottom: var(--space-3);
-  overflow: hidden;
-}
-
-// The sentence that says what this card's figure actually is. Keeps the rule and the position of the
-// footer it replaces, so the card's geometry is unchanged — only the content is now an explanation
-// rather than a second bare number.
+// ── Trend cards ───────────────────────────────────────────────────────────────
 //
-// It WRAPS, unlike the label it replaces: that one was one line with an ellipsis, which is right for a
-// period name and wrong for a sentence — a truncated explanation explains nothing.
-.trend-card__note {
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border-subtle);
-  margin-top: var(--space-2);
-  font-size: var(--font-size-11);
-  line-height: 1.5;
-  color: var(--color-text-tertiary);
-}
+// ★★ MOVED to `styles/_trend-card.scss`. The quota attainment block on /payees/:id and
+// /my-dashboard renders this same card now, and it could not while these rules were sealed in
+// this component. Do not paste them back.
 
 // ── Skeleton ───────────────────────────────────────────────────────────────────
 

@@ -11,7 +11,23 @@ namespace Wasnie.Application.Features.Users.Queries;
 /// would be a caller who could read anybody's pay; the only input is who they are, which they cannot
 /// choose. The link comes from <c>Payee.UserId</c>, set deliberately when they were invited (batch 2).
 /// </summary>
-public sealed record GetMyDashboardQuery : IRequest<Result<MyDashboardDto>>;
+/// <param name="From">
+/// KAN-98 — the window the reader is asking about, inclusive. Null means "no window": every figure that
+/// CAN be period-scoped is then all-time, which is what this screen did before the range existed.
+///
+/// A PERSON NEEDS TO LOOK BACKWARDS AT THEIR OWN PAY. "How much was I paid two months ago" had no
+/// answer here: the screen was pinned to all-time money and to the quotas in effect today, so a closed
+/// period was unreachable — the one place where somebody would go to check a payment they remember
+/// receiving. The administrator's dashboard has had a date range since KAN-62; this is the same
+/// question asked about oneself.
+///
+/// IT IS STILL NOT AN IDENTIFIER. The window says WHICH DAYS, never WHOSE — the payee is resolved from
+/// the token and from nothing else, and no combination of these two values reaches another person's
+/// figures.
+/// </param>
+/// <param name="To">The inclusive upper bound. Half-open is allowed and means "from here on".</param>
+public sealed record GetMyDashboardQuery(DateOnly? From = null, DateOnly? To = null)
+    : IRequest<Result<MyDashboardDto>>;
 
 /// <summary>
 /// What a non-admin sees when they sign in.
@@ -43,13 +59,26 @@ public sealed record GetMyDashboardQuery : IRequest<Result<MyDashboardDto>>;
 /// ★ ZERO IS A REAL ANSWER. It means every sale recorded against them has been processed, and the
 /// screen shows no notice at all.
 /// </param>
+/// <param name="From">
+/// KAN-98 — the window these figures were actually built over, echoed back.
+///
+/// IT IS ECHOED SO THE SCREEN CAN STATE IT RATHER THAN ASSUME IT. The client sends what it asked for;
+/// only the server knows what was applied, and the two are not always the same value. A pay figure
+/// whose period the reader has to infer from a control they may have moved since is a figure they will
+/// eventually read against the wrong month.
+///
+/// Null on both ends means no window was applied and the period figures are all-time.
+/// </param>
+/// <param name="To">The upper bound actually applied, inclusive.</param>
 public sealed record MyDashboardDto(
     bool Linked,
     Guid? PayeeId,
     string? PayeeName,
     PayeeLedgerSummaryDto? Summary,
     IReadOnlyList<MyQuotaAttainmentDto> Quotas,
-    int SalesAwaitingSetup = 0);
+    int SalesAwaitingSetup = 0,
+    DateOnly? From = null,
+    DateOnly? To = null);
 
 /// <summary>
 /// One quota of the signed-in person and how far along it is.

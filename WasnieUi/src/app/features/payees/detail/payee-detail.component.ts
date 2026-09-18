@@ -4,7 +4,7 @@ import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -18,7 +18,7 @@ import { currentMonthRange, type DashboardRange } from '../../dashboard/store/da
 import { CurrencyTotal } from '../../dashboard/models/dashboard.models';
 import { PayeeUnreachableCommission } from '../models/payee-dashboard.model';
 import { PayeesApiService } from '../services/payees.api.service';
-import { QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
+import { QuotaAttainment, QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
 import { PayeeDashboard, SalesTrendPoint } from '../models/payee-dashboard.model';
 import { Payee, PayeeStatus } from '../models/payee.model';
 import { PayeeFormComponent } from '../form/payee-form.component';
@@ -35,7 +35,7 @@ import {
   WsModalComponent,
   WsConfirmationModalComponent,
   WsTableEmptyComponent,
-  WsGaugeComponent,
+  WsHBarChartComponent,
   WsBarChartComponent,
   WsDateRangePickerComponent,
   WsTooltipDirective,
@@ -74,7 +74,7 @@ type Block = 'attainment' | 'trend' | 'quotas' | 'assignments' | 'credits';
     WsModalComponent,
     WsConfirmationModalComponent,
     WsTableEmptyComponent,
-    WsGaugeComponent,
+    WsHBarChartComponent,
     WsBarChartComponent,
     WsDateRangePickerComponent,
     WsTooltipDirective,
@@ -91,6 +91,7 @@ export class PayeeDetailComponent implements OnInit {
   private readonly payeesApi = inject(PayeesApiService);
   readonly store = inject(PayeesStore);
   private readonly toast = inject(ToastService);
+  private readonly translate = inject(TranslateService);
 
   readonly PayeeStatus = PayeeStatus;
   readonly QuotaMeasurementType = QuotaMeasurementType;
@@ -521,6 +522,45 @@ export class PayeeDetailComponent implements OnInit {
         isCurrent: p.year === currentYear && p.month === currentMonth,
       }));
   }
+
+  /**
+   * The two bars behind a quota: what was asked for, and what has happened.
+   *
+   * ★★ `isCurrent` IS NOT COSMETIC — it is how `ws-hbar-chart` decides which bar is the live one. It
+   * picks exactly one "prior" and one "current", so ACHIEVED carries the flag and gets the gradient
+   * that glows while TARGET sits behind it in neutral. Flip the flags and the chart says the opposite.
+   *
+   * ★ NO CURRENCY ON A UNITS QUOTA (§C4): the chart formats a point with a currency symbol whenever
+   * one is present, so passing one would print "€40" over a target of 40 sales.
+   *
+   * ★ IDENTICAL TO /my-dashboard's. The two screens draw the same card from the same partial; if this
+   * ever needs to change, it changes in both or they stop being the same thing.
+   */
+  attainmentPoints(a: QuotaAttainment): BarChartPoint[] {
+    const currency = a.measurementType === QuotaMeasurementType.Units ? undefined : a.currency;
+
+    return [
+      { label: this.translate.instant('ATTAINMENT.TARGET'), value: a.targetAmount, currency },
+      { label: this.translate.instant('ATTAINMENT.ACHIEVED'), value: a.achievedAmount, currency, isCurrent: true },
+    ];
+  }
+
+  attainmentPct(ratio: number): number {
+    return Math.round(ratio * 100);
+  }
+
+  /**
+   * ★ THE PILL'S COLOUR IS A VERDICT, SO IT ONLY SPEAKS WHEN IT IS SURE. Green at or above target,
+   * red below half, neutral in between — where "behind" depends on how much of the period is gone,
+   * which this card does not know.
+   */
+  attainmentPillClass(ratio: number): string {
+    const pct = this.attainmentPct(ratio);
+    if (pct >= 100) return 'trend-card__delta-pill--up';
+    if (pct < 50) return 'trend-card__delta-pill--down';
+    return '';
+  }
+
 
   /** Compute pacing fraction for a currently-active quota period. */
   computePacing(periodStart: string, periodEnd: string): number | null {

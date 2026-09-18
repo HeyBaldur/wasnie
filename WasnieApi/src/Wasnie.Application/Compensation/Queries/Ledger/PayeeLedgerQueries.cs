@@ -26,7 +26,28 @@ public sealed record ListPayeeLedgerEntriesQuery(Guid PayeeId)
 /// degrade to no date filter, which is PeriodHelper's own contract — a bad token must not throw on a
 /// read this cheap.
 /// </param>
-public sealed record GetPayeeLedgerSummaryQuery(Guid PayeeId, string Period = "all-time")
+/// <param name="From">
+/// KAN-98 — an explicit lower bound, inclusive. When either bound is given the token above is IGNORED
+/// and the answer labels itself "custom".
+///
+/// THE TOKENS COULD NOT EXPRESS "1 FEBRUARY TO 15 APRIL", and that is the shape of the question a
+/// person asks about their own pay: "how much did I get two months ago". The company dashboard dropped
+/// its presets for the same reason; this is the ledger summary catching up, so the personal screen can
+/// be driven by the same range picker instead of growing a second, smaller idea of a period.
+///
+/// THE FIGURES THAT ARE NOT PERIOD-SCOPED REMAIN SO. Debt and awaiting-payment stay as of now whatever
+/// window arrives - see PayeeLedgerSummaryDto for why the ledger cannot answer "what did they owe in
+/// March" at all.
+/// </param>
+/// <param name="To">
+/// An explicit upper bound, inclusive. Half-open is allowed: one end without the other means "from here
+/// on" or "up to here".
+/// </param>
+public sealed record GetPayeeLedgerSummaryQuery(
+    Guid PayeeId,
+    string Period = "all-time",
+    DateOnly? From = null,
+    DateOnly? To = null)
     : IRequest<Result<PayeeLedgerSummaryDto>>;
 
 /// <summary>

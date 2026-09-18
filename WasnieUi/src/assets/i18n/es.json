@@ -938,6 +938,8 @@
     }
   },
   "ATTAINMENT": {
+    "PCT_OF_TARGET": "{{pct}}% del objetivo",
+    "NOTE": "La barra compara lo conseguido en este período con el objetivo fijado para él. Lo conseguido es lo que el motor ha medido hasta ahora; el objetivo es lo que pide la cuota.",
     "TARGET": "Objetivo",
     "ACHIEVED": "Logrado",
     "MEASURE_REVENUE": "Ingresos",
@@ -3198,12 +3200,14 @@
     "STATE_DEBT_EXCEEDS": "Su deuda supera todo lo pendiente, así que la diferencia se arrastra.",
     "STATE_UNKNOWN": "Su saldo se muestra arriba.",
     "QUOTAS_TITLE": "Sus objetivos",
-    "QUOTAS_EMPTY": "Hoy no tiene ningún objetivo vigente.",
+    "QUOTAS_EMPTY": "No tiene ningún objetivo que cubra estas fechas.",
     "NO_TARGET": "No se ha fijado objetivo para este plan.",
     "SCOPE_ALL_TIME": "Histórico",
     "EARNED_DESC": "Todo lo que las reglas del plan dicen que ha generado.",
     "PAID_DESC": "De eso, lo que ya ha cobrado.",
     "AWAITING_DESC": "Generado y todavía sin pagar.",
-    "DEBT_DESC": "Lo que debe a la empresa ahora mismo."
+    "DEBT_DESC": "Lo que debe a la empresa ahora mismo.",
+    "SCOPE_RANGE": "Fechas seleccionadas",
+    "SCOPE_TODAY": "A día de hoy"
   }
 }

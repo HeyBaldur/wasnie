@@ -5,6 +5,22 @@
     [title]="greetingKey() | translate: { name: greetingNamePart() }"
     [subtitle]="'MY_DASHBOARD.SUBTITLE' | translate"
   >
+    <!-- KAN-98. The window that governs THIS WHOLE SCREEN, not one block of it.
+         A person could not look at their own pay for a closed month: the money was all-time and the
+         quotas were whatever was running today, so "how much was I paid two months ago" - the single
+         most ordinary question somebody has about their own commission - had nowhere to be asked. The
+         administrator's dashboard has had this control since KAN-62; this is the same control, the same
+         primitive and the same default (the whole current month), because the two screens answering the
+         same question differently is how they start to disagree. -->
+    <ws-date-range-picker
+      slot="actions"
+      class="range-picker"
+      align="end"
+      labelPosition="inline"
+      [formControl]="rangeControl"
+      [label]="'DASHBOARD.RANGE_LABEL' | translate"
+    />
+
     <!-- ★★ FOUR STATES, NEVER FOLDED INTO ONE. Loading, failed, not-linked and real figures each get
          their own block: three of them would otherwise be drawn as a page of zeros, and a zero on a
          pay screen is read as "you earned nothing". -->
@@ -61,9 +77,17 @@
       @for (balance of store.balances(); track balance.currency) {
         <div class="my-dash__section-hd">
           <h2 class="my-dash__section-title">{{ 'MY_DASHBOARD.MONEY_TITLE' | translate }}</h2>
+          <!-- THE SECTION CHIP USED TO SAY "all time" FOR ALL FOUR CARDS, and with a window in play
+               that is now true of two of them and false of the other two. It states the window instead,
+               and each card declares its own scope below - because Earned and Paid move with the dates
+               while Awaiting and You owe cannot (the ledger has no period dimension at all: "what did
+               they owe in March" is not a question the data can answer). One label covering both kinds
+               would be one field meaning two things on a pay screen. -->
           <div class="my-dash__section-tags">
             <ws-badge variant="neutral" size="sm">{{ balance.currency }}</ws-badge>
-            <ws-badge variant="neutral" size="sm">{{ 'MY_DASHBOARD.SCOPE_ALL_TIME' | translate }}</ws-badge>
+            @if (appliedRangeLabel(); as label) {
+              <ws-badge variant="neutral" size="sm">{{ label }}</ws-badge>
+            }
           </div>
         </div>
 
@@ -74,6 +98,11 @@
                 <div class="metric-card__hd">
                   <h3 class="metric-card__title">{{ card.labelKey | translate }}</h3>
                   <p class="metric-card__sub">{{ card.descKey | translate }}</p>
+                  <!-- Each figure says which days it covers. Two of the four move with the picker and
+                       two of them cannot, and nothing else on the card distinguishes them. -->
+                  <p class="metric-card__sub">
+                    <ws-badge variant="neutral" size="sm">{{ card.scopeKey | translate }}</ws-badge>
+                  </p>
                 </div>
                 <div class="mt-4 flex items-end justify-between gap-4 w-full flex-1">
                   <div class="flex flex-col gap-1 min-w-0 flex-1">
@@ -138,59 +167,64 @@
           <h2 class="my-dash__section-title">{{ 'MY_DASHBOARD.QUOTAS_TITLE' | translate }}</h2>
         </div>
 
-        <ws-card padding="md" class="my-dash__block">
-          @if (!store.quotas().length) {
+        @if (!store.quotas().length) {
+          <ws-card padding="md" class="my-dash__block">
             <p class="my-dash__state">{{ 'MY_DASHBOARD.QUOTAS_EMPTY' | translate }}</p>
-          } @else {
-            @for (q of store.quotas(); track q.quotaId) {
-              <!-- `--static`: on the payee page this row opens the quota. Here the reader has no
-                   permission to open one, so it must not offer a click that does nothing. -->
-              <div class="bento-gauge-row bento-gauge-row--static">
-                @if (hasTarget(q)) {
-                  <div class="bento-gauge-wrap">
-                    <ws-gauge [value]="q.attainmentRatio" />
-                  </div>
-                } @else {
-                  <!-- ★ NO GAUGE WITHOUT A TARGET. A 0% dial accuses the reader of a result that is
-                       really a gap in the configuration, and they are the one person who cannot fix it. -->
-                  <div class="bento-gauge-wrap bento-gauge-wrap--none">
-                    <app-icon name="help-circle" [size]="24" />
-                  </div>
-                }
+          </ws-card>
+        } @else {
+          <!-- ★★ THE SAME CARD THE COMPANY DASHBOARD DRAWS FOR ITS TRENDS, and now literally the same
+               rules: label, headline figure, delta pill, chart, explanation. It used to be a gauge
+               dial and a 4px bar, which read as a widget rather than a figure — and it could not look
+               like this, because every `.trend-card` rule was sealed inside the dashboard component
+               until they moved to `styles/_trend-card.scss`.
 
-                <div class="bento-gauge-info">
-                  <span class="bento-gauge-info__plan">{{ q.planName }}</span>
-                  <span class="bento-gauge-info__period">
-                    {{ q.periodStart | dateFormat }} – {{ q.periodEnd | dateFormat }}
-                  </span>
+               ★★ TWO BARS, TARGET AND ACHIEVED, which is exactly what `ws-hbar-chart` draws: it
+               compares a "prior" bar against a "current" one. The achieved bar is the current one, so
+               it gets the blue→violet gradient that glows; the target sits behind it in neutral. The
+               chart reads as "how far along that line am I", which is the only question this block
+               answers.
+
+               ★ THE COLOURS COME FROM TOKENS (chart-theme.ts), unlike the gauge it replaces, whose
+               four states were hardcoded hex and never matched the bar beside them. -->
+          @for (q of store.quotas(); track q.quotaId) {
+            <ws-card padding="md" class="trend-card-item">
+              <div class="trend-card">
+                <div class="trend-card__head">
+                  <div class="min-w-0 flex-1">
+                    <span class="trend-card__label">
+                      {{ q.planName }} · {{ q.periodStart | dateFormat }} – {{ q.periodEnd | dateFormat }}
+                    </span>
+                    <div class="trend-card__value">
+                      @if (isUnits(q)) {
+                        {{ q.achievedAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
+                      } @else {
+                        {{ q.achievedAmount | currencyFormat: q.currency }}
+                      }
+                    </div>
+                  </div>
 
                   @if (hasTarget(q)) {
-                    <div class="bento-gauge-info__amounts">
-                      <div class="bento-gauge-info__stat">
-                        <span class="bento-stat-lbl">{{ 'ATTAINMENT.TARGET' | translate }}</span>
-                        @if (isUnits(q)) {
-                          {{ q.targetAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
-                        } @else {
-                          {{ q.targetAmount | currencyFormat: q.currency }}
-                        }
-                      </div>
-                      <div class="bento-gauge-info__stat">
-                        <span class="bento-stat-lbl">{{ 'ATTAINMENT.ACHIEVED' | translate }}</span>
-                        @if (isUnits(q)) {
-                          {{ q.achievedAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
-                        } @else {
-                          {{ q.achievedAmount | currencyFormat: q.currency }}
-                        }
-                      </div>
-                    </div>
-                  } @else {
-                    <p class="bento-gauge-info__note">{{ 'MY_DASHBOARD.NO_TARGET' | translate }}</p>
+                    <span class="trend-card__delta-pill flex-shrink-0" [class]="pillClass(q)">
+                      {{ 'ATTAINMENT.PCT_OF_TARGET' | translate: { pct: pctOfTarget(q) } }}
+                    </span>
                   }
                 </div>
+
+                @if (hasTarget(q)) {
+                  <div class="trend-card__chart">
+                    <ws-hbar-chart [points]="attainmentPoints(q)" />
+                  </div>
+                  <p class="trend-card__note">{{ 'ATTAINMENT.NOTE' | translate }}</p>
+                } @else {
+                  <!-- ★ NO CHART WITHOUT A TARGET. A bar at zero accuses the reader of a result that
+                       is really a gap in the configuration, and they are the one person who cannot
+                       fix it. -->
+                  <p class="trend-card__note">{{ 'MY_DASHBOARD.NO_TARGET' | translate }}</p>
+                }
               </div>
-            }
+            </ws-card>
           }
-        </ws-card>
+        }
       }
 
       <!-- ── Every movement, and why the balance is what it is ───────────────

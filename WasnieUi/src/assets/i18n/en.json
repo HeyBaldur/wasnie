@@ -938,6 +938,8 @@
     }
   },
   "ATTAINMENT": {
+    "PCT_OF_TARGET": "{{pct}}% of target",
+    "NOTE": "The bar compares what has been achieved in this period against the target set for it. Achieved counts what the engine has measured so far; the target is what the quota asks for.",
     "TARGET": "Target",
     "ACHIEVED": "Achieved",
     "MEASURE_REVENUE": "Revenue",
@@ -3198,12 +3200,14 @@
     "STATE_DEBT_EXCEEDS": "Your debt is larger than everything pending, so the difference carries over.",
     "STATE_UNKNOWN": "Your balance is shown above.",
     "QUOTAS_TITLE": "Your targets",
-    "QUOTAS_EMPTY": "You have no target running today.",
+    "QUOTAS_EMPTY": "You have no target covering these dates.",
     "NO_TARGET": "No target has been set for this plan.",
     "SCOPE_ALL_TIME": "All time",
     "EARNED_DESC": "Everything the plan rules say you have made.",
     "PAID_DESC": "Of that, what has already reached you.",
     "AWAITING_DESC": "Earned and not paid out yet.",
-    "DEBT_DESC": "What you owe the company right now."
+    "DEBT_DESC": "What you owe the company right now.",
+    "SCOPE_RANGE": "Selected dates",
+    "SCOPE_TODAY": "As of today"
   }
 }

@@ -84,7 +84,19 @@ public sealed class GetPayeeLedgerSummaryHandler(
             return Result<PayeeLedgerSummaryDto>.Failure(PayeeAccessDenied.Message);
 
         var today = DateOnly.FromDateTime(clock.UtcNow);
-        var (from, to) = PeriodHelper.ComputeDateRange(request.Period, today);
+
+        // AN EXPLICIT WINDOW WINS OVER THE TOKEN, AND SAYS SO (KAN-98). The presets could not express
+        // "1 February to 15 April", which is exactly the shape of "how much was I paid two months ago".
+        // When a caller sends one, the label travels back as "custom" rather than as the token that was
+        // ignored: a summary stamped "all-time" over a window of March is one field meaning two things,
+        // and the reader has no second source to catch it with.
+        var hasExplicitWindow = request.From.HasValue || request.To.HasValue;
+
+        var (from, to) = hasExplicitWindow
+            ? (request.From, request.To)
+            : PeriodHelper.ComputeDateRange(request.Period, today);
+
+        var periodLabel = hasExplicitWindow ? "custom" : request.Period;
 
         // ── Earned in the window: accrual, by period INTERSECTION ────────────
         // Same predicate as the payouts screen's period filter (ListPayoutsHandler), so the assistant
@@ -190,7 +202,7 @@ public sealed class GetPayeeLedgerSummaryHandler(
         return Result<PayeeLedgerSummaryDto>.Success(new PayeeLedgerSummaryDto(
             payee.Id,
             payee.FullName,
-            PeriodLabel: request.Period,
+            PeriodLabel: periodLabel,
             PeriodStart: from,
             PeriodEnd: to,
             ByCurrency: rows));

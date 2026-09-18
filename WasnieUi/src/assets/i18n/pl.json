@@ -938,6 +938,8 @@
     }
   },
   "ATTAINMENT": {
+    "PCT_OF_TARGET": "{{pct}}% celu",
+    "NOTE": "Słupek porównuje to, co osiągnięto w tym okresie, z wyznaczonym celem. Osiągnięcie to wartość zmierzona dotychczas przez silnik; cel to wartość wymagana przez kwotę.",
     "TARGET": "Cel",
     "ACHIEVED": "Osiągnięto",
     "MEASURE_REVENUE": "Przychód",
@@ -3198,12 +3200,14 @@
     "STATE_DEBT_EXCEEDS": "Zadłużenie przewyższa wszystkie oczekujące kwoty, więc różnica przechodzi dalej.",
     "STATE_UNKNOWN": "Twoje saldo pokazano powyżej.",
     "QUOTAS_TITLE": "Twoje cele",
-    "QUOTAS_EMPTY": "Nie masz dziś aktywnego celu.",
+    "QUOTAS_EMPTY": "Nie masz celu obejmującego te daty.",
     "NO_TARGET": "Dla tego planu nie ustalono celu.",
     "SCOPE_ALL_TIME": "Cały okres",
     "EARNED_DESC": "Wszystko, co według reguł planu zostało naliczone.",
     "PAID_DESC": "Z tego — kwota już wypłacona.",
     "AWAITING_DESC": "Naliczone i jeszcze niewypłacone.",
-    "DEBT_DESC": "Kwota, którą jesteś winien firmie w tej chwili."
+    "DEBT_DESC": "Kwota, którą jesteś winien firmie w tej chwili.",
+    "SCOPE_RANGE": "Wybrane daty",
+    "SCOPE_TODAY": "Na dziś"
   }
 }

@@ -105,7 +105,14 @@ public static class RolePermissions
             Permission.AssignmentsRead,
             Permission.QuotasRead,
             // KAN-93 bug 6. THE RULES OF THE PLANS THEY ARE ON, READ-ONLY — and NOT Plans.Read, which
-            // would hand them the tenant's whole catalogue, the version history and the simulator.
+            // would hand them the tenant's whole catalogue and the version history.
+            //
+            // ★ THE SIMULATOR IS ON THIS SIDE OF THE LINE, and it was not at first. This comment used to
+            // list it among the things Plans.Read would wrongly hand over; then a rep opened a rule,
+            // typed an amount, and the panel fired one 403 per keystroke because nothing had told the
+            // screen. Simulating a rule you are paid under reads no data and touches nobody — it is the
+            // same question the ledger already answers, asked forwards — so PlanAccessGuard now admits
+            // it. What Plans.Read still buys is simulating ANY plan, which is administration.
             // Clicking their own plan from the Assignments screen used to end in Access Denied, which
             // made "see why you were paid that" a promise the product could not keep.
             Permission.PlansReadOwn,

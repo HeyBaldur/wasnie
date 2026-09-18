@@ -77,16 +77,25 @@ public sealed class FavoritesEndpointsTests : IAsyncLifetime
         (await otherTenant.PutAsync($"/api/favorites/payee/{payee.Id}", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    /// <summary>
+    /// KAN-93 MOVED THIS FROM 404 TO 403, AND THE NEW ANSWER IS THE BETTER ONE. It used to be the
+    /// PayeeAccessGuard talking: a Rep could read payees, saw only their own, and a colleague's id came
+    /// back as "no such payee". Payees.Read was then removed from the Rep role entirely, so the
+    /// permission check now answers first and the guard is never reached — the same shape as the plan
+    /// case directly below, which a Rep has never been able to star.
+    ///
+    /// Distinguishing the two matters: 404 says "not yours", 403 says "this whole surface is not for
+    /// you". The second is what is true now.
+    /// </summary>
     [Fact]
-    public async Task ARepWithoutALinkedPayee_CannotStarAColleague()
+    public async Task ARep_HasNoPayeesRead_SoStarringAColleagueIsForbidden()
     {
         var payee = await CreatePayeeAsync(_adminA, "Colleague", "EMP777");
         var rep = _fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, TestConstants.UserBId, "Rep");
 
         var response = await rep.PutAsync($"/api/favorites/payee/{payee.Id}", null);
 
-        // The real PayeeAccessGuard: a Rep sees only their own payee, and this user has none.
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]

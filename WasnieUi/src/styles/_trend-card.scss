@@ -1,0 +1,134 @@
+/* ── The trend-card language ─────────────────────────────────────────────────── */
+/* */
+/* ★★ GLOBAL, FOR THE THIRD TIME AND THE SAME REASON. These rules lived in dashboard.component.scss */
+/* and dashboard-visual.scss, sealed to that one screen by Angular's view encapsulation. The quota */
+/* attainment block wanted to look like this card and could not, because nothing outside the */
+/* dashboard could reach a single one of these rules — so it grew its own smaller, plainer version */
+/* instead. That is the same story as the metric cards and the attainment bar before it. */
+/* */
+/* One definition: /dashboard, /payees/:id and /my-dashboard. A fourth screen gets this card by */
+/* writing the markup, not by copying rules. */
+/* */
+/* ★ THIS FILE IS PROCESSED BY POSTCSS, NOT SASS. Single-line // comments break the build (an */
+/* apostrophe inside reads as an unterminated string) and the @import must sit flush with the others */
+/* in styles.scss, with no comment between them. Block comments only. */
+
+/* Layout: [small label + big value LEFT | delta pill RIGHT] -> chart -> note */
+
+.trend-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.trend-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.trend-card__label {
+  display: block;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-1);
+}
+
+.trend-card__value {
+  font-size: var(--font-size-24);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;   /* compact notation never wraps */
+  animation: trend-card-figure 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.trend-card__delta-pill {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 3px 10px 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-12);
+  font-weight: 800;
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.trend-card__delta-pill--up   { background: var(--color-success-bg); color: var(--color-success); }
+.trend-card__delta-pill--down { background: var(--color-danger-bg);  color: var(--color-danger);  }
+
+/* A soft shine passes over the pill. It is the one piece of movement on an otherwise still card, and
+   it is what makes the figure read as live rather than printed. */
+.trend-card__delta-pill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--color-bg-surface) 55%, transparent) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: trend-card-shine 3.2s ease-in-out 1s infinite;
+}
+
+.trend-icon--down { transform: rotate(180deg); }
+
+/* Dedicated chart area with an explicit height so the Chart.js canvas can size itself: enough for
+   two bars at barThickness 24 plus padding. */
+.trend-card__chart {
+  height: 100px;
+  width: 100%;
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+}
+
+/* The sentence that says what this card's figure actually is. It WRAPS, unlike a label: a truncated
+   explanation explains nothing. */
+.trend-card__note {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-11);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+}
+
+/* ── A stack of these cards ──────────────────────────────────────────────────── */
+/* */
+/* WHEN THERE IS MORE THAN ONE QUOTA THEY MUST NOT TOUCH. A trend card is a surface with its own */
+/* border and shadow; two of them flush against each other read as one broken card rather than two */
+/* separate figures. This lived nowhere: the payee page carried a class that was never given a single */
+/* rule, so N attainment cards rendered edge to edge. */
+/* */
+/* IT IS HERE AND NOT IN EITHER PAGE so the gap is the same on both. A margin defined twice is a gap */
+/* that differs by 4px on one screen a month from now. */
+
+.trend-card-item {
+  display: block;
+  margin-bottom: var(--space-5);
+}
+
+@keyframes trend-card-figure {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes trend-card-shine {
+  0%        { transform: translateX(-120%); }
+  60%, 100% { transform: translateX(120%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trend-card__value,
+  .trend-card__delta-pill::after {
+    animation: none;
+  }
+}

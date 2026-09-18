@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Wasnie.Application.Authorization;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Compensation.Assignments;
@@ -90,7 +91,12 @@ public sealed class PlanAccessGuardTests
         auth.HasAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(ci => Task.FromResult(permissions.Contains(ci.Arg<string>())));
 
-        return new PlanAccessGuard(h.Db, currentUser, auth);
+        // Not in the sandbox: these tests are about the two permission rules, and the practice schema
+        // short-circuits both. The sandbox case has its own test below.
+        var sandbox = Substitute.For<ISandboxScope>();
+        sandbox.IsSandbox.Returns(false);
+
+        return new PlanAccessGuard(h.Db, currentUser, auth, sandbox);
     }
 
     /// <summary>★★ The case the ticket is about: the rep's own plan opens.</summary>

@@ -66,6 +66,18 @@ export interface MyQuotaAttainment {
  */
 export interface MyDashboard {
   linked: boolean;
+
+  /**
+   * KAN-98 - the window the server ACTUALLY built these figures over, ISO yyyy-MM-dd, or null when no
+   * window was applied and the period figures are all-time.
+   *
+   * IT IS READ BACK RATHER THAN ASSUMED. The picker holds what was asked for; only this says what was
+   * answered, and a reader who has moved the control since would otherwise be reading July's pay under
+   * an August heading.
+   */
+  from: string | null;
+  to: string | null;
+
   payeeId: string | null;
   payeeName: string | null;
   summary: MyLedgerSummary | null;

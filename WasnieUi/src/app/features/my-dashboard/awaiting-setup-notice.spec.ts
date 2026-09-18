@@ -10,6 +10,8 @@ import { MyDashboard } from './models/my-dashboard.model';
 function dashboard(over: Partial<MyDashboard> = {}): MyDashboard {
   return {
     linked: true,
+    from: '2026-09-01',
+    to: '2026-09-30',
     payeeId: 'payee-1',
     payeeName: 'Ana García',
     summary: null,
@@ -37,6 +39,9 @@ describe('MyDashboardComponent — sales awaiting setup', () => {
     balances: jasmine.Spy; quotas: jasmine.Spy; payeeName: jasmine.Spy;
     payeeId: jasmine.Spy; hasMoney: jasmine.Spy; salesAwaitingSetup: jasmine.Spy;
     dashboard: jasmine.Spy; refresh: jasmine.Spy; load: jasmine.Spy;
+    // KAN-98 - the component seeds its range picker from `range()` and labels the figures from
+    // `appliedRange()`. A double without them throws before a single assertion in this file runs.
+    range: jasmine.Spy; appliedRange: jasmine.Spy; setRange: jasmine.Spy;
   };
 
   function mountWith(data: MyDashboard | null, error: string | null = null): void {
@@ -48,6 +53,8 @@ describe('MyDashboardComponent — sales awaiting setup', () => {
     store.payeeId.and.returnValue(data?.payeeId ?? null);
     store.hasMoney.and.returnValue(false);
     store.dashboard.and.returnValue(data);
+    store.appliedRange.and.returnValue(
+      data?.from && data?.to ? { from: data.from, to: data.to } : null);
     // The store clamps an unknown answer to 0 — mirrored here so the spec exercises the same rule.
     store.salesAwaitingSetup.and.returnValue(data?.salesAwaitingSetup ?? 0);
 
@@ -74,6 +81,11 @@ describe('MyDashboardComponent — sales awaiting setup', () => {
       dashboard: jasmine.createSpy('dashboard').and.returnValue(null),
       refresh: jasmine.createSpy('refresh'),
       load: jasmine.createSpy('load').and.returnValue(Promise.resolve()),
+      range: jasmine.createSpy('range')
+        .and.returnValue({ from: '2026-09-01', to: '2026-09-30' }),
+      appliedRange: jasmine.createSpy('appliedRange')
+        .and.returnValue({ from: '2026-09-01', to: '2026-09-30' }),
+      setRange: jasmine.createSpy('setRange'),
     };
 
     await TestBed.configureTestingModule({

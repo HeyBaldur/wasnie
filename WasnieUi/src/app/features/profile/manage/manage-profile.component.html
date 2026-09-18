@@ -44,45 +44,63 @@
         <section class="profile-section">
           <h2 class="profile-section__title">{{ 'PROFILE.SECTION_YOUR_PROFILE' | translate }}</h2>
 
-          <!-- Name card -->
-          <ws-card class="profile-card">
-            <h3 class="profile-card__heading">{{ 'PROFILE.NAME_HEADING' | translate }}</h3>
-            @if (nameIsMissing()) {
-              <p class="profile-name-notice">{{ 'PROFILE.NAME_MISSING_NOTICE' | translate }}</p>
-            }
-            <div class="ws-form-grid">
-              <div class="form-field">
-                <ws-input
-                  [label]="'AUTH.FIRST_NAME' | translate"
-                  type="text"
-                  inputId="firstName"
-                  autocomplete="given-name"
-                  [ngModel]="firstName()"
-                  (valueChange)="firstName.set($event)"
-                />
+          <!-- ★★ THE NAME AND THE SIGN-IN ADDRESS BELONG TO WHOEVER MAINTAINS THEM. When an
+               administrator has attached this login to a payee record, that name is the name on a
+               payslip and that address is how the workspace reaches the person — so editing them here
+               would put a second version of each next to the one the administrator keeps, with no rule
+               afterwards about which is right. They change in Users, by the person who owns the record.
+
+               ★★ THE SERVER REFUSES TOO. `PUT /api/profile/name` and the email-change request carry no
+               permission — they are self-service by design — so hiding these two cards without the
+               handler guard would be a screen saying no in front of an endpoint saying yes.
+
+               ★ AND IT IS NOT A ROLE CHECK. A Manager who is also paid has the same problem, and an
+               administrator with no payee record has none: the payee link is the fact, the role is a
+               correlation. See AdministeredIdentity on the server.
+
+               ★ PASSWORD AND TWO-FACTOR STAY. Those are the person's own credentials, not their
+               identity — nobody else maintains them and nobody else should. -->
+          @if (!profile()!.identityManagedByAdministrator) {
+            <!-- Name card -->
+            <ws-card class="profile-card">
+              <h3 class="profile-card__heading">{{ 'PROFILE.NAME_HEADING' | translate }}</h3>
+              @if (nameIsMissing()) {
+                <p class="profile-name-notice">{{ 'PROFILE.NAME_MISSING_NOTICE' | translate }}</p>
+              }
+              <div class="ws-form-grid">
+                <div class="form-field">
+                  <ws-input
+                    [label]="'AUTH.FIRST_NAME' | translate"
+                    type="text"
+                    inputId="firstName"
+                    autocomplete="given-name"
+                    [ngModel]="firstName()"
+                    (valueChange)="firstName.set($event)"
+                  />
+                </div>
+                <div class="form-field">
+                  <ws-input
+                    [label]="'AUTH.LAST_NAME' | translate"
+                    type="text"
+                    inputId="lastName"
+                    autocomplete="family-name"
+                    [ngModel]="lastName()"
+                    (valueChange)="lastName.set($event)"
+                  />
+                </div>
               </div>
-              <div class="form-field">
-                <ws-input
-                  [label]="'AUTH.LAST_NAME' | translate"
-                  type="text"
-                  inputId="lastName"
-                  autocomplete="family-name"
-                  [ngModel]="lastName()"
-                  (valueChange)="lastName.set($event)"
-                />
+              <div class="profile-card__actions">
+                <ws-button
+                  variant="primary"
+                  [loading]="savingName()"
+                  [disabled]="!firstName().trim() || !lastName().trim()"
+                  (click)="saveName()"
+                >
+                  {{ 'PROFILE.SAVE_NAME' | translate }}
+                </ws-button>
               </div>
-            </div>
-            <div class="profile-card__actions">
-              <ws-button
-                variant="primary"
-                [loading]="savingName()"
-                [disabled]="!firstName().trim() || !lastName().trim()"
-                (click)="saveName()"
-              >
-                {{ 'PROFILE.SAVE_NAME' | translate }}
-              </ws-button>
-            </div>
-          </ws-card>
+            </ws-card>
+          }
 
           <!-- Change password card -->
           <ws-card class="profile-card">
@@ -136,41 +154,43 @@
             </div>
           </ws-card>
 
-          <!-- Change email card -->
-          <ws-card class="profile-card">
-            <h3 class="profile-card__heading">{{ 'PROFILE.EMAIL_HEADING' | translate }}</h3>
-            @if (profile()!.hasPendingEmailChange) {
-              <div class="profile-pending-badge">
-                {{ 'PROFILE.EMAIL_CHANGE_PENDING' | translate }}
+          @if (!profile()!.identityManagedByAdministrator) {
+            <!-- Change email card -->
+            <ws-card class="profile-card">
+              <h3 class="profile-card__heading">{{ 'PROFILE.EMAIL_HEADING' | translate }}</h3>
+              @if (profile()!.hasPendingEmailChange) {
+                <div class="profile-pending-badge">
+                  {{ 'PROFILE.EMAIL_CHANGE_PENDING' | translate }}
+                </div>
+              }
+              <div class="ws-form-grid">
+                <div class="form-field form-field--full">
+                  <ws-input
+                    [label]="'PROFILE.NEW_EMAIL' | translate"
+                    type="email"
+                    inputId="newEmail"
+                    autocomplete="email"
+                    [ngModel]="newEmail()"
+                    (valueChange)="newEmail.set($event)"
+                  />
+                </div>
               </div>
-            }
-            <div class="ws-form-grid">
-              <div class="form-field form-field--full">
-                <ws-input
-                  [label]="'PROFILE.NEW_EMAIL' | translate"
-                  type="email"
-                  inputId="newEmail"
-                  autocomplete="email"
-                  [ngModel]="newEmail()"
-                  (valueChange)="newEmail.set($event)"
-                />
+              @if (emailChangeError()) {
+                <p class="profile-field-error">{{ emailChangeError() }}</p>
+              }
+              <p class="profile-card__hint">{{ 'PROFILE.EMAIL_CHANGE_HINT' | translate }}</p>
+              <div class="profile-card__actions">
+                <ws-button
+                  variant="primary"
+                  [loading]="requestingEmailChange()"
+                  [disabled]="!newEmail().trim() || newEmail().trim() === profile()!.email"
+                  (click)="requestEmailChange()"
+                >
+                  {{ 'PROFILE.REQUEST_EMAIL_CHANGE' | translate }}
+                </ws-button>
               </div>
-            </div>
-            @if (emailChangeError()) {
-              <p class="profile-field-error">{{ emailChangeError() }}</p>
-            }
-            <p class="profile-card__hint">{{ 'PROFILE.EMAIL_CHANGE_HINT' | translate }}</p>
-            <div class="profile-card__actions">
-              <ws-button
-                variant="primary"
-                [loading]="requestingEmailChange()"
-                [disabled]="!newEmail().trim() || newEmail().trim() === profile()!.email"
-                (click)="requestEmailChange()"
-              >
-                {{ 'PROFILE.REQUEST_EMAIL_CHANGE' | translate }}
-              </ws-button>
-            </div>
-          </ws-card>
+            </ws-card>
+          }
         </section>
 
         <!-- ── Section 1b: Two-Factor Authentication ─────────────────────────── -->
@@ -443,7 +463,19 @@
         </section>
 
         <!-- ── Section 2: Organization (read-only + contact) ─────────────────── -->
-        <section class="profile-section">
+        <!-- ★★ THE WORKSPACE'S OWN SETTINGS, SO IT NEEDS THE WORKSPACE'S OWN PERMISSION. The company
+             name, the organization identifier and the GDPR deletion request are all things only the
+             account owner can act on — every one of them ends in "contact us". For everybody else it
+             was three rows of somebody else's administrivia plus a red Delete Account button, on a page
+             they opened to change their password.
+
+             ★ Settings.Update is TenantAdmin and nobody else, so CompManager and Manager stop seeing
+             this card too. Same answer for the same reason: they could not act on it either.
+
+             ★ THE IDENTIFIER CARD AT THE TOP OF THIS PAGE IS NOT GATED, deliberately. That one is what a
+             person needs to SIGN IN when they belong to more than one workspace — taking it away sends
+             them through KAN-93's recover-by-email flow every time. -->
+        <section class="profile-section" *hasPermission="'Settings.Update'">
           <h2 class="profile-section__title">{{ 'PROFILE.SECTION_ORGANIZATION' | translate }}</h2>
 
           <ws-card class="profile-card">

@@ -20,9 +20,12 @@ namespace Wasnie.Application.Compensation.Handlers.Plans;
 /// Assignments screen ended in Access Denied, and "see why you were paid that" was a promise the
 /// product could not keep.
 ///
-/// ★★ THIS IS THE ONLY PLAN ENDPOINT THAT OPENS. ListPlans, the version history, the simulator, the
-/// trigger fields, the category values and the multi-plan payee lookup all still require
-/// <c>Plans.Read</c> and are untouched — a rep must reach their own plan, never the catalogue.
+/// ★★ THE SIMULATOR OPENS THE SAME WAY, AND EVERYTHING ELSE STAYS SHUT. ListPlans, the version
+/// history, the category values and the multi-plan payee lookup still require <c>Plans.Read</c> — a rep
+/// must reach their own plan, never the catalogue. <c>SimulateRuleHandler</c> was on that list until a
+/// rep opened a rule and the simulator panel fired one 403 per keystroke: the permission had been
+/// narrowed and the screen never found out. Simulating a rule you are paid under reads nothing and
+/// touches nobody, so the reader was admitted rather than the panel hidden.
 ///
 /// ★★ A REFUSAL STILL LEAVES A ROW (§B1). The guard alone would have thrown silently, and a denial
 /// nobody can see afterwards is the failure mode this codebase has a rule about — it also cost an hour

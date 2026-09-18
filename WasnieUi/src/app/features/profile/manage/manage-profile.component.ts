@@ -10,6 +10,7 @@ import {
   WsInputComponent,
 } from '../../../shared/ui';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { WsToastService } from '../../../shared/ui/ws-toast/ws-toast.service';
 import { ProfileService, ProfileDto, TwoFactorStatusDto } from '../services/profile.service';
 
@@ -27,6 +28,7 @@ type TwoFactorStep = 'status' | 'setup' | 'confirm' | 'recoveryCodes' | 'disable
     WsButtonComponent,
     WsCopyButtonComponent,
     WsInputComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './manage-profile.component.html',
   styleUrl: './manage-profile.component.scss',

@@ -65,11 +65,20 @@ public sealed class GetMyDashboardHandler(
 
         // ★ Routed through the existing handler rather than re-querying: it already splits the figures
         // that ARE period-scoped from the balance that cannot be, and that distinction is the one
-        // people misread. PayeeAccessGuard runs inside it and will resolve to this same payee.
-        var summary = await sender.Send(new GetPayeeLedgerSummaryQuery(payee.Id), cancellationToken);
+        // people misread. The window goes to it verbatim, so the money on this screen and the money on
+        // /payees/:id over the same dates come from one predicate rather than two that agree today.
+        // PayeeAccessGuard runs inside it and will resolve to this same payee.
+        var summary = await sender.Send(
+            new GetPayeeLedgerSummaryQuery(payee.Id, From: request.From, To: request.To),
+            cancellationToken);
 
-        var quotas = await LoadQuotasAsync(payee.Id, cancellationToken);
+        var quotas = await LoadQuotasAsync(payee.Id, request.From, request.To, cancellationToken);
 
+        // ★★ ALL-TIME, AND NOT BY OVERSIGHT (KAN-98). This is not a figure about the window; it is a
+        // standing notice that something of theirs is stuck. Scoping it to the dates would mean a sale
+        // that cannot be paid disappears the moment the reader looks at a different month — the
+        // invisibility KAN-94 existed to end, reintroduced through the new control. It sits beside
+        // awaiting-payment and outstanding debt, which are as-of-now for the same reason.
         var awaitingSetup = await CountSalesAwaitingSetupAsync(payee.Id, cancellationToken);
 
         // ★ The id travels back so the screen can mount the ledger panel that already exists, rather
@@ -82,7 +91,11 @@ public sealed class GetMyDashboardHandler(
             payee.FullName,
             summary.IsSuccess ? summary.Value : null,
             quotas,
-            awaitingSetup));
+            awaitingSetup,
+            // ★ What was APPLIED, not what was asked for. The screen states the window instead of
+            // assuming its own control still holds the value the figures were built from.
+            request.From,
+            request.To));
     }
 
     /// <summary>
@@ -119,7 +132,16 @@ public sealed class GetMyDashboardHandler(
     }
 
     /// <summary>
-    /// The person's quotas in effect today, and how far along each one is.
+    /// The person's quotas over the window they are looking at, and how far along each one is.
+    ///
+    /// ★★ INTERSECTION, NOT "IN EFFECT TODAY" (KAN-98). A closed quota was unreachable on this screen:
+    /// the only thing it could show was whatever was running right now, so the person who wanted to see
+    /// how last quarter went had nowhere to look. A quota belongs in the answer when its period overlaps
+    /// the window at all — the same reading the payout figures beside it use.
+    ///
+    /// ★★ NO WINDOW COLLAPSES TO EXACTLY THE OLD BEHAVIOUR, by construction rather than by a branch.
+    /// Both bounds default to today, and a quota intersecting the single day [today, today] is precisely
+    /// a quota in effect today. One rule, with no second path to keep in step with it.
     ///
     /// ★★ IT SELECTS THE SAME QUOTA THE ENGINE DOES. Periods of one plan can overlap, and
     /// <c>QuotaAttainmentService</c> breaks the tie by shortest span then most recent — so listing a
@@ -131,16 +153,18 @@ public sealed class GetMyDashboardHandler(
     /// payee has a handful of quotas, so the rows never justify fighting the translation.
     /// </summary>
     private async Task<IReadOnlyList<MyQuotaAttainmentDto>> LoadQuotasAsync(
-        Guid payeeId, CancellationToken cancellationToken)
+        Guid payeeId, DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(clock.UtcNow);
+        var windowStart = from ?? today;
+        var windowEnd = to ?? today;
 
         var quotas = await db.Quotas
             .Where(q => q.PayeeId == payeeId && q.Status != QuotaStatus.Draft)
             .ToListAsync(cancellationToken);
 
         var inEffect = quotas
-            .Where(q => q.Period.Start <= today && q.Period.End >= today)
+            .Where(q => q.Period.Start <= windowEnd && q.Period.End >= windowStart)
             .GroupBy(q => q.PlanId)
             .Select(g => g
                 .OrderBy(q => q.Period.End.DayNumber - q.Period.Start.DayNumber)
@@ -159,7 +183,8 @@ public sealed class GetMyDashboardHandler(
 
         foreach (var q in inEffect)
         {
-            var reading = await attainment.ComputeAsync(payeeId, q.PlanId, today, cancellationToken);
+            var reading = await attainment.ComputeAsync(
+                payeeId, q.PlanId, MeasurementDate(q, windowEnd, today), cancellationToken);
             var achieved = await AchievedAsync(payeeId, q, cancellationToken);
 
             result.Add(new MyQuotaAttainmentDto(
@@ -178,6 +203,31 @@ public sealed class GetMyDashboardHandler(
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// The day a quota's ratio is measured on: the end of what the reader asked about, pulled back
+    /// inside the quota's own period and never into the future.
+    ///
+    /// ★★ IT MUST LAND INSIDE THE QUOTA, OR THE ENGINE ANSWERS ABOUT A DIFFERENT ONE.
+    /// <c>ComputeAsync</c> takes a date and resolves the quota in effect on it; asked about a day past
+    /// the end of this quota it would return the NEXT period's reading, and the screen would print that
+    /// ratio underneath this quota's target — two numbers that were never about each other. A window of
+    /// a whole year over a March quota is the ordinary case here, not an edge one.
+    ///
+    /// ★★ AND NEVER LATER THAN TODAY. Measuring a running quota at the far end of a window that has not
+    /// happened yet reports a partial month as though the month were over.
+    ///
+    /// ★ A QUOTA THAT HAS NOT STARTED IS MEASURED AT ITS OWN START, which is the only date that resolves
+    /// to it. Nothing is achieved there, and that is true rather than convenient.
+    /// </summary>
+    private static DateOnly MeasurementDate(Quota quota, DateOnly windowEnd, DateOnly today)
+    {
+        var asOf = windowEnd < today ? windowEnd : today;
+
+        if (asOf < quota.Period.Start) return quota.Period.Start;
+        if (asOf > quota.Period.End) return quota.Period.End;
+        return asOf;
     }
 
     /// <summary>

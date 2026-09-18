@@ -15,23 +15,59 @@
 // ★ THE SCOPE CHIP IS NOT DECORATION. All four figures are all-time, and a reader who assumes they
 // are "this month" reads every one of them wrong. Saying it once, next to the heading, is cheaper
 // than four labels and harder to miss.
+//
+// ★★ THE HAIRLINE BETWEEN THE TITLE AND THE CHIPS IS A PSEUDO-ELEMENT, NOT MARKUP. A flex container's
+// ::after becomes a flex ITEM, so it can be a rule that stretches — and `order` puts it between the
+// two real children without adding a div nobody reads. That matters beyond tidiness: this page's
+// markup is deliberately the twin of the company dashboard's, and a wrapper added here for looks is
+// the first step of the two drifting apart.
 .my-dash__section-hd {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+
+  &::after {
+    content: '';
+    order: 1;
+    flex: 1 1 var(--space-8);
+    height: 1px;
+    // Subtle on purpose: it separates, it does not draw attention. A full-strength border here
+    // would compete with the card edges directly underneath it.
+    background: var(--color-border-subtle);
+  }
 }
 
+// The accent bar is the one piece of colour in the section furniture, and it is the brand's.
+//
+// ★ INSET WITH `top`/`bottom` RATHER THAN A FIXED HEIGHT, so it tracks the cap height of the title at
+// any size and in any of the three themes. A hardcoded height drifts the moment the type scale moves.
 .my-dash__section-title {
+  order: 0;
+  position: relative;
   margin: 0;
-  font-size: var(--font-size-18);
+  padding-left: var(--space-3);
+  font-size: var(--font-size-20);
   font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--color-text-primary);
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.18em;
+    bottom: 0.18em;
+    width: 3px;
+    border-radius: var(--radius-full);
+    background: var(--color-brand);
+  }
 }
 
 .my-dash__section-tags {
+  order: 2;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -42,9 +78,15 @@
   margin-bottom: var(--space-8);
 }
 
+// ★ A STATE SENTENCE IS NOT A TABLE ROW. "No quotas yet" and "no money yet" sat flush against the
+// card's padding and read as a truncated list. Centred with room around it, an empty card looks
+// deliberate rather than unfinished — the same reading `ws-empty-state` gives the bigger cases.
 .my-dash__state {
   margin: 0;
-  font-size: var(--font-size-13);
+  padding: var(--space-6) var(--space-2);
+  text-align: center;
+  font-size: var(--font-size-14);
+  line-height: 1.5;
   color: var(--color-text-secondary);
 }
 
@@ -58,14 +100,25 @@
   margin-bottom: var(--space-6);
 }
 
+// ★★ AN ACCENT RULE, NOT A TINTED PANEL. The obvious move is to flood the block with
+// `--color-warning-bg`, and it is the wrong one twice over: the background lives on `.ws-card`, which
+// belongs to that component's template and cannot be reached from here (Angular's view encapsulation —
+// the same wall that once kept the metric cards from reaching the payee page), and a second filled
+// surface inside a card reads as a panel inside a panel. A rule on the edge says "notice" using only
+// what this template owns.
 .my-dash__pending {
   @apply flex items-start;
   gap: var(--space-3);
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--color-warning);
 }
 
 .my-dash__pending-icon {
   color: var(--color-warning);
   flex-shrink: 0;
+  // Optical alignment: the icon box is taller than the title's cap height, so matching the two by
+  // their boxes leaves it sitting visibly high.
+  margin-top: 1px;
 }
 
 .my-dash__pending-text {
@@ -87,3 +140,14 @@
   line-height: 1.5;
   color: var(--color-text-secondary);
 }
+
+// ── What is deliberately NOT here ──────────────────────────────────────────
+//
+// ★★ NO RULE FOR `.metric-card*` OR `.bento-gauge-*`. Those come from `styles/_metric-cards.scss` and
+// `styles/_attainment-rows.scss`, and the payee page and the company dashboard draw the very same
+// blocks from them. A hover lift or a divider added here would make this page's cards SIMILAR to
+// theirs instead of IDENTICAL, which is the drift those partials were extracted to end — and it would
+// be invisible until somebody put the two screens side by side.
+//
+// If these blocks should look richer, they should look richer EVERYWHERE, and the change belongs in
+// the partial.

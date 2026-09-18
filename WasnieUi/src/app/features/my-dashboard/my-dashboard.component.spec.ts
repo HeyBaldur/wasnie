@@ -44,6 +44,10 @@ const MEASURED_QUOTA: MyQuotaAttainment = {
 function linked(overrides: Partial<MyDashboard> = {}): MyDashboard {
   return {
     linked: true,
+    // KAN-98. The window the SERVER applied, echoed back. The heading reads this rather than the
+    // picker, so a fixture without it would leave the range chip silently absent.
+    from: '2026-09-01',
+    to: '2026-09-30',
     payeeId: 'p1',
     payeeName: 'Ada Lovelace',
     summary: {
@@ -80,16 +84,71 @@ describe('MyDashboardStore', () => {
 
   it('asks for the caller own dashboard and sends no identifier with it', () => {
     void store.load();
-    const req = http.expectOne(url);
+    const req = http.expectOne(r => r.url === url);
 
-    // ★ The security property, asserted rather than assumed: nothing in this request names a payee.
-    expect(req.request.params.keys().length).toBe(0);
+    // ★★ THE SECURITY PROPERTY, ASSERTED RATHER THAN ASSUMED. KAN-98 put two values on this request
+    // and this is the line that says which two. They name DAYS, never a person: no payeeId, no email,
+    // no reference. The endpoint answers about whoever holds the token and nothing here can change that.
+    expect(req.request.params.keys().sort()).toEqual(['from', 'to']);
     req.flush(linked());
+  });
+
+  /**
+   * ★ THE WINDOW IN EFFECT GOES OUT WITH THE REQUEST. A range the store holds but never sends is a
+   * picker that moves and changes nothing - and the figures underneath would look perfectly plausible.
+   */
+  it('sends the window it is holding', () => {
+    store.range.set({ from: '2026-07-01', to: '2026-07-31' });
+    void store.load();
+
+    const req = http.expectOne(r => r.url === url);
+    expect(req.request.params.get('from')).toBe('2026-07-01');
+    expect(req.request.params.get('to')).toBe('2026-07-31');
+    req.flush(linked());
+  });
+
+  /**
+   * ★★ A BACKWARDS RANGE IS NOT SENT. The picker orders its own two ends, so this only happens when
+   * something else sets the range - but the server refuses it, and a refusal renders as the error state,
+   * which on this screen is indistinguishable from "we could not read your pay".
+   */
+  it('ignores a backwards range instead of asking for one', () => {
+    store.range.set({ from: '2026-07-01', to: '2026-07-31' });
+    store.setRange({ from: '2026-09-30', to: '2026-09-01' });
+
+    expect(store.range()).toEqual({ from: '2026-07-01', to: '2026-07-31' });
+  });
+
+  /**
+   * ★★ THE HEADING READS WHAT THE SERVER ANSWERED, NOT WHAT THE PICKER HOLDS. The two differ for the
+   * whole of a request, and that gap is exactly when somebody glances at the heading - a label driven by
+   * the control would relabel July's pay as August's a full round-trip before the money changed.
+   */
+  it('reports the window the server applied, not the one requested', async () => {
+    store.range.set({ from: '2026-07-01', to: '2026-07-31' });
+
+    const promise = store.load();
+    http.expectOne(r => r.url === url).flush(linked({ from: '2026-02-01', to: '2026-04-15' }));
+    await promise;
+
+    expect(store.appliedRange()).toEqual({ from: '2026-02-01', to: '2026-04-15' });
+  });
+
+  /**
+   * ★ AN ALL-TIME ANSWER HAS NO WINDOW TO STATE. The server sends null on both ends when it applied
+   * none, and the screen must show no range chip rather than guess one from the picker.
+   */
+  it('has no applied window when the server applied none', async () => {
+    const promise = store.load();
+    http.expectOne(r => r.url === url).flush(linked({ from: null, to: null }));
+    await promise;
+
+    expect(store.appliedRange()).toBeNull();
   });
 
   it('exposes the figures the server sent, unchanged', async () => {
     const promise = store.load();
-    http.expectOne(url).flush(linked());
+    http.expectOne(r => r.url === url).flush(linked());
     await promise;
 
     expect(store.linked()).toBe(true);
@@ -100,7 +159,7 @@ describe('MyDashboardStore', () => {
 
   it('reports "not linked" as a fact, not as an absence of money', async () => {
     const promise = store.load();
-    http.expectOne(url).flush(linked({ linked: false, payeeId: null, payeeName: null, summary: null, quotas: [] }));
+    http.expectOne(r => r.url === url).flush(linked({ linked: false, payeeId: null, payeeName: null, summary: null, quotas: [] }));
     await promise;
 
     expect(store.linked()).toBe(false);
@@ -109,7 +168,7 @@ describe('MyDashboardStore', () => {
 
   it('leaves `linked` unknown after a failed request instead of answering false', async () => {
     const promise = store.load();
-    http.expectOne(url).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+    http.expectOne(r => r.url === url).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
     await promise;
 
     // ★★ THE DISTINCTION THIS WHOLE BATCH IS ABOUT. A failed load must not render as "you have no
@@ -120,11 +179,11 @@ describe('MyDashboardStore', () => {
 
   it('drops the previous figures when a reload fails', async () => {
     const first = store.load();
-    http.expectOne(url).flush(linked());
+    http.expectOne(r => r.url === url).flush(linked());
     await first;
 
     const second = store.load();
-    http.expectOne(url).flush({}, { status: 500, statusText: 'Server Error' });
+    http.expectOne(r => r.url === url).flush({}, { status: 500, statusText: 'Server Error' });
     await second;
 
     expect(store.dashboard()).toBeNull();
@@ -179,5 +238,23 @@ describe('MyDashboardComponent', () => {
     const keys = c.cards(BALANCE).map((x) => x.key);
 
     expect(keys).toEqual(['earned', 'paid', 'awaiting', 'debt']);
+  });
+
+  /**
+   * ★★ KAN-98 - EACH CARD DECLARES ITS OWN WINDOW, and this is the assertion that keeps the four from
+   * being labelled as one thing. Earned and Paid move with the picker; Awaiting and You owe cannot,
+   * because the ledger has no period dimension at all - "what did they owe in March" is not a question
+   * the data can answer. The section used to carry a single "All time" chip over all four, which was
+   * true before the range and is now false for half of them. One label meaning two things, on a pay
+   * screen, is the shape of every money bug in this repo.
+   */
+  it('gives each figure the window it actually covers', () => {
+    const c = make();
+    const scopes = Object.fromEntries(c.cards(BALANCE).map((x) => [x.key, x.scopeKey]));
+
+    expect(scopes['earned']).toBe('MY_DASHBOARD.SCOPE_RANGE');
+    expect(scopes['paid']).toBe('MY_DASHBOARD.SCOPE_RANGE');
+    expect(scopes['awaiting']).toBe('MY_DASHBOARD.SCOPE_ALL_TIME');
+    expect(scopes['debt']).toBe('MY_DASHBOARD.SCOPE_TODAY');
   });
 });

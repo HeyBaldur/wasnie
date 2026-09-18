@@ -38,6 +38,13 @@ public sealed class RequestEmailChangeHandler(
         if (string.IsNullOrEmpty(userId))
             return Result<bool>.Failure("Not authenticated.");
 
+        // ★★ THE ADDRESS OF AN ADMINISTERED ACCOUNT IS HOW THE WORKSPACE REACHES THAT PERSON, and it is
+        // also how they sign in. Moving it is the administrator's call, in Users. Checked BEFORE the
+        // cooldown and the hourly counter so a refused request neither consumes a slot nor sends mail.
+        if (await AdministeredIdentity.IsAdministeredAsync(dbContext, userId, cancellationToken))
+            return Result<bool>.Failure(
+                "Your sign-in address is maintained by an administrator of this workspace. Ask them to change it.");
+
         var currentEmail = currentUser.Email ?? string.Empty;
         var newEmail = request.NewEmail.Trim().ToLowerInvariant();
 

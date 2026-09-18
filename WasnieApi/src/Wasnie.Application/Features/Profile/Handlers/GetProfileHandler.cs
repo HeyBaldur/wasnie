@@ -30,12 +30,15 @@ public sealed class GetProfileHandler(
         var tenant = await dbContext.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantContext.TenantId, cancellationToken);
 
+        var administered = await AdministeredIdentity.IsAdministeredAsync(dbContext, userId, cancellationToken);
+
         return new ProfileDto(
             FirstName: firstName,
             LastName: lastName,
             Email: email,
             HasPendingEmailChange: hasPending,
             CompanyName: tenant?.Name ?? string.Empty,
-            OrganizationSlug: tenant?.Slug ?? string.Empty);
+            OrganizationSlug: tenant?.Slug ?? string.Empty,
+            IdentityManagedByAdministrator: administered);
     }
 }

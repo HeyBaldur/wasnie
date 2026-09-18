@@ -66,6 +66,22 @@ import {
 export class AssignmentsListComponent implements OnInit {
   readonly store = inject(AssignmentsStore);
   private readonly currentUser = inject(CurrentUserService);
+
+  /**
+   * Whether this reader has anything to DO with a selection.
+   *
+   * ★★ IT IS AN "OR", AND IT HAS TO BE. The bar carries activate/deactivate (Assignments.Update) and
+   * delete (Assignments.Delete), and a role holding one but not the other still has a use for the
+   * checkboxes. Gating on either permission alone would take the column away from somebody who can
+   * act — the opposite mistake, and a quieter one.
+   *
+   * ★ `*hasPermission` cannot express this: it takes one key. That is why the condition is a computed
+   * here rather than a directive on the column.
+   */
+  readonly canBulkEdit = computed(() =>
+    this.currentUser.hasPermission('Assignments.Update') ||
+    this.currentUser.hasPermission('Assignments.Delete')
+  );
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
