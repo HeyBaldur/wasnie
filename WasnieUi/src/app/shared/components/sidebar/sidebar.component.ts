@@ -35,8 +35,11 @@ interface NavSection {
   items: NavEntry[];
 }
 
-/** Separación entre el rail y el panel del submenú. El SCSS no puede saberla: la posición se calcula aquí. */
-const FLYOUT_GAP_PX = 6;
+/**
+ * Separación entre el rail y el panel del submenú. El SCSS no puede saberla: la posición se calcula aquí.
+ * 10 y no 6 desde que el panel lleva flecha (2026-09-19): la flecha vive en este hueco y apunta a la fila.
+ */
+const FLYOUT_GAP_PX = 10;
 
 /** Margen para cruzar ese hueco con el puntero antes de que el panel empiece a cerrarse. */
 const FLYOUT_CLOSE_DELAY_MS = 160;
@@ -49,7 +52,7 @@ const FLYOUT_CLOSE_DELAY_MS = 160;
  * panel se queda montado con la clase `--leaving` durante estos milisegundos y recién entonces se
  * desmonta. Debe coincidir con la duración de la transición del SCSS.
  */
-const FLYOUT_LEAVE_MS = 120;
+const FLYOUT_LEAVE_MS = 160;
 
 @Component({
   selector: 'app-sidebar',
@@ -82,6 +85,12 @@ export class SidebarComponent implements OnInit {
   private readonly flyoutKey = signal<string | null>(null);
   readonly flyoutTop = signal(0);
   readonly flyoutLeft = signal(0);
+  /**
+   * La altura, dentro del panel, a la que está el CENTRO de la fila que lo abrió: ahí va la punta de la
+   * flecha y desde ahí crece el panel (`--ws-flyout-anchor` en el SCSS). Medida, no supuesta: la fila
+   * cambia de alto con la densidad y con el badge.
+   */
+  readonly flyoutAnchor = signal(18);
 
   /** El panel sigue montado, pero ya se está yendo: es el estado que hace posible la animación de salida. */
   readonly flyoutLeaving = signal(false);
@@ -166,8 +175,12 @@ export class SidebarComponent implements OnInit {
     this.clearTimers();
     this.flyoutLeaving.set(false);
     const rect = trigger.getBoundingClientRect();
-    this.flyoutTop.set(rect.top);
-    this.flyoutLeft.set(rect.right + FLYOUT_GAP_PX);
+    // ★ Redondeado a píxel entero: el rect del trigger trae decimales (235.45, 525.8) y un panel en
+    // coordenadas fraccionarias pinta su borde de 1px repartido entre dos píxeles — borroso, y la
+    // flecha nunca empalma limpio con él.
+    this.flyoutTop.set(Math.round(rect.top));
+    this.flyoutLeft.set(Math.round(rect.right + FLYOUT_GAP_PX));
+    this.flyoutAnchor.set(Math.round(rect.height / 2));
     this.flyoutKey.set(key);
   }
 

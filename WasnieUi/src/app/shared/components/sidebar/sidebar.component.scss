@@ -266,12 +266,50 @@
 // posterior: la clase `--leaving` cambiaría opacidad y transform y no se vería moverse nada. Sin
 // fill-mode, terminada la entrada el elemento queda en los valores base y la salida sí transiciona.
 //
-// El desplazamiento es de 8px sobre X y nace del borde izquierdo (`transform-origin`): el panel
-// tiene que leerse como algo que SALE de su fila, no como algo que aparece en el aire.
+// ★★ EL LENGUAJE ES EL DE UN POPOVER DE macOS (2026-09-19): una flecha que señala la fila de la que
+// sale, y una entrada con RESORTE que nace desde la punta de esa flecha. Cada pieza tiene su motivo:
+//   · El resorte es una curva `linear()` — la única forma en CSS de tener un rebote amortiguado de
+//     verdad (sobrepasa ~6% y se asienta); `cubic-bezier` sólo puede rebotar una vez y se nota
+//     mecánico. Navegadores sin `linear()` ignoran la declaración y se quedan con la curva de antes.
+//   · El desenfoque que se aclara (`filter: blur`) es lo que hace que "se materialice" en vez de
+//     aparecer: es el gesto que se reconoce como Apple.
+//   · El origen de la escala es la PUNTA DE LA FLECHA (`--ws-flyout-anchor`, que el componente
+//     calcula como la mitad de la fila): el panel crece desde el sitio que lo abrió, no desde su
+//     esquina.
+//
+// ★★ SIN VIDRIO ESMERILADO, Y NO POR GUSTO. La primera versión lo tenía y la flecha nunca pudo
+// fundirse con el panel: un elemento con `backdrop-filter` es "backdrop root" de sus hijos, así que el
+// vidrio de la flecha (hija del panel) no veía la página sino el interior vacío del panel, y salía de
+// otro tono. Dos vidrios anidados no pueden coincidir. Opaco, la flecha es EXACTAMENTE la superficie del
+// panel y se dibuja encima de su borde, tapando el tramo de la base: se lee como una sola pieza.
+//
+// Valores de efecto locales (no hay tokens de movimiento en el sistema). Si otro componente los
+// necesita, se elevan.
+$flyout-spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 20.8%,
+  1.051 24.4%, 1.061 28.2%, 1.055 32.4%, 1.019 43.6%, 1.004 51.5%, 0.998 60%, 1);
+$flyout-ease-fallback: cubic-bezier(0.16, 1, 0.3, 1);
+// Lado del cuadrado que, girado 45°, es la flecha. PAR a propósito: su centro cae en un píxel entero.
+$flyout-arrow: 12px;
+
 @keyframes ws-sidebar-flyout-in {
   from {
     opacity: 0;
-    transform: translateX(-8px) scale(0.98);
+    transform: translateX(-6px) scale(0.9);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+// Las filas entran un instante después del panel, deslizando apenas: como las opciones de un menú de
+// macOS, que ya están ahí cuando el panel termina de asentarse.
+@keyframes ws-sidebar-flyout-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
   }
   to {
     opacity: 1;
@@ -288,15 +326,45 @@
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-popover);
-  transform-origin: left center;
-  animation: ws-sidebar-flyout-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
-  transition: opacity 120ms ease, transform 120ms ease;
+  // La punta de la flecha: media diagonal a la izquierda del borde interior (+1px del borde exterior).
+  transform-origin: calc(1px - #{$flyout-arrow} * 0.7071) var(--ws-flyout-anchor, 18px);
+  animation: ws-sidebar-flyout-in 220ms $flyout-ease-fallback;
+  animation: ws-sidebar-flyout-in 420ms $flyout-spring;
+  transition:
+    opacity 160ms ease-in,
+    transform 160ms cubic-bezier(0.4, 0, 1, 1),
+    filter 160ms ease-in;
 
-  // ★ EL ESTADO DE SALIDA. El componente lo mantiene montado estos 120ms a propósito (ver
-  // FLYOUT_LEAVE_MS); `pointer-events: none` evita que un click alcance un menú que ya se está yendo.
+  // La flecha: un cuadrado girado 45° del que sólo se ve la MITAD de fuera (`clip-path`), con borde en
+  // sus dos lados exteriores. Medido en píxeles, no a ojo:
+  //   · `left`/`top` de un pseudo se miden desde el borde INTERIOR del panel (la caja de padding), no
+  //     del exterior — el error de 1px de la primera versión fue exactamente ese.
+  //   · Su centro va sobre ese borde interior (`left: -lado/2`), así el triángulo cubre por completo
+  //     la franja de 1px del borde del panel en su base, y sus dos líneas exteriores nacen justo donde
+  //     el borde del panel sigue. Se pinta ENCIMA del borde del padre (un hijo posicionado va después).
+  //   · `top` resta 1px por la misma razón: el ancla se mide desde el borde exterior.
+  &::before {
+    content: '';
+    position: absolute;
+    box-sizing: border-box;
+    left: calc(-1 * #{$flyout-arrow} / 2);
+    top: calc(var(--ws-flyout-anchor, 18px) - 1px - #{$flyout-arrow} / 2);
+    width: $flyout-arrow;
+    height: $flyout-arrow;
+    background: var(--color-bg-surface-raised);
+    border-left: 1px solid var(--color-border-default);
+    border-bottom: 1px solid var(--color-border-default);
+    transform: rotate(45deg);
+    clip-path: polygon(0 0, 0 100%, 100% 100%);
+  }
+
+  // ★ EL ESTADO DE SALIDA. El componente lo mantiene montado FLYOUT_LEAVE_MS a propósito;
+  // `pointer-events: none` evita que un click alcance un menú que ya se está yendo. Vuelve hacia la
+  // flecha, más rápido de lo que salió: en macOS lo que se cierra no se hace esperar.
   &--leaving {
     opacity: 0;
-    transform: translateX(-8px) scale(0.98);
+    transform: translateX(-4px) scale(0.94);
+    filter: blur(4px);
     pointer-events: none;
   }
 }
@@ -322,12 +390,12 @@
 // ★ LA ENTRADA ESCALONADA VA EN EL SCSS, NO EN EL TEMPLATE. Son cuatro filas como mucho; un
 // `nth-child` las retrasa sin que el componente tenga que llevar índices ni estilos en línea (§5.5).
 .sidebar__flyout:not(.sidebar__flyout--leaving) .sidebar__flyout-link {
-  animation: ws-sidebar-flyout-in 200ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: ws-sidebar-flyout-item-in 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 @for $i from 1 through 4 {
   .sidebar__flyout-list li:nth-child(#{$i}) .sidebar__flyout-link {
-    animation-delay: #{$i * 20}ms;
+    animation-delay: #{60 + $i * 30}ms;
   }
 }
 
@@ -377,6 +445,7 @@
 
   .sidebar__flyout--leaving {
     transform: none;
+    filter: none;
   }
 }
 

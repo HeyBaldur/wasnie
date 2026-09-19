@@ -98,6 +98,7 @@
                         [class.sidebar__flyout--leaving]="flyoutLeaving()"
                         [style.top.px]="flyoutTop()"
                         [style.left.px]="flyoutLeft()"
+                        [style.--ws-flyout-anchor]="flyoutAnchor() + 'px'"
                         role="menu"
                         (keydown.escape)="closeFlyout()"
                       >
