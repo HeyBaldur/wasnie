@@ -17,6 +17,15 @@
     "CONFIRM_PASSWORD": "Potwierdź hasło",
     "TENANT_NAME": "Nazwa organizacji",
     "TENANT_SLUG": "Identyfikator organizacji",
+    "SECTION_ORGANIZATION": "Twoja organizacja",
+    "SECTION_ORGANIZATION_DESC": "Przestrzeń robocza, w której Twój zespół będzie zarządzał planami wynagrodzeń, wypłatami i wynikami.",
+    "SECTION_ADMIN": "Konto administratora",
+    "SECTION_ADMIN_DESC": "Pierwszy użytkownik przestrzeni roboczej, z pełnym dostępem do planów, wypłat i zarządzania użytkownikami.",
+    "TENANT_NAME_HINT": "Nazwa Twojej firmy, tak jak ma się pojawiać w całej przestrzeni roboczej.",
+    "TENANT_SLUG_HINT": "Małe litery, cyfry i myślniki. Nie można go zmienić po utworzeniu przestrzeni roboczej.",
+    "TENANT_SLUG_PREVIEW": "Twój zespół zaloguje się za pomocą",
+    "ADMIN_EMAIL_HINT": "Służy do logowania i do otrzymania wiadomości potwierdzającej.",
+    "ADMIN_PASSWORD_HINT": "Co najmniej 8 znaków, w tym jedna wielka litera i jedna cyfra.",
     "FIRST_NAME": "Imię",
     "LAST_NAME": "Nazwisko",
     "FULL_NAME": "Imię i nazwisko",
@@ -40,8 +49,25 @@
     "RESEND_CONFIRMATION": "Wyślij ponownie e-mail potwierdzający",
     "ALREADY_CONFIRMED": "Twoje konto jest już potwierdzone. Zaloguj się poniżej.",
     "FORGOT_PASSWORD": "Nie pamiętasz hasła?",
+    "FORGOT_ORGANIZATION_ID": "Nie pamiętasz?",
     "PASSWORD_RESET_SUCCESS": "Hasło zostało zaktualizowane. Zaloguj się nowym hasłem.",
-    "BACK_TO_LOGIN": "Powrót do logowania"
+    "BACK_TO_LOGIN": "Powrót do logowania",
+    "ORGANIZATION_ID": "Identyfikator organizacji",
+    "ORGANIZATION_ID_HINT": "Identyfikator przestrzeni roboczej, do której zostałeś zaproszony. Znajdziesz go w e-mailu z zaproszeniem.",
+    "USER_TYPE": "Typ użytkownika",
+    "USER_TYPE_ADMIN": "Administrator",
+    "USER_TYPE_ADMIN_DESC": "Dla właściciela konta, który administruje przestrzenią roboczą: planami wynagrodzeń, wypłatami i dostępem użytkowników. Zaloguj się adresem e-mail i hasłem.",
+    "USER_TYPE_MEMBER": "Członek zespołu",
+    "USER_TYPE_MEMBER_DESC": "Dla przedstawicieli i menedżerów pracujących w istniejącej przestrzeni roboczej. Zaloguj się adresem e-mail, hasłem oraz identyfikatorem organizacji podanym w zaproszeniu.",
+    "ORGANIZATION_REQUIRED": "Ten adres e-mail jest używany w więcej niż jednej przestrzeni roboczej. Podaj identyfikator organizacji, aby kontynuować."
+  },
+  "FORGOT_ORGANIZATION": {
+    "TITLE": "Nie pamiętasz identyfikatora organizacji?",
+    "DESC": "Podaj swój adres e-mail, a wyślemy identyfikator organizacji przestrzeni roboczej, którą administrujesz. Ze względów bezpieczeństwa nigdy nie pokazujemy go na ekranie, a poprosić o niego mogą tylko administratorzy.",
+    "SUBMIT": "Wyślij mi go",
+    "SENT_TITLE": "Sprawdź skrzynkę",
+    "SENT_DESC": "Jeśli ten adres administruje przestrzenią roboczą, jej identyfikator organizacji został tam wysłany.",
+    "SENT_NON_ADMIN": "Otrzymują go tylko administratorzy. Jeśli nim nie jesteś, poproś swojego administratora — może go odczytać ze swojego konta."
   },
   "FORGOT_PASSWORD": {
     "TITLE": "Zresetuj swoje hasło",
@@ -197,7 +223,8 @@
     "UPGRADE_BTN": "Uaktualnij",
     "UPGRADE_TOOLTIP": "Jesteś na planie Darmowym — przejdź na Profesjonalny",
     "PLAN_BADGE_TOOLTIP": "Zarządzaj subskrypcją",
-    "AUDIT_LOGS": "Dziennik audytu"
+    "AUDIT_LOGS": "Dziennik audytu",
+    "USERS": "Użytkownicy"
   },
   "NAV": {
     "TOGGLE": "Zwiń pasek boczny",
@@ -228,7 +255,9 @@
     "AUDIT_LOGS": "Dziennik audytu",
     "GUIDED_TOUR": "Piaskownica",
     "PRICING": "Cennik",
-    "MANAGE_BILLING": "Rozliczenia"
+    "MANAGE_BILLING": "Rozliczenia",
+    "USERS": "Użytkownicy",
+    "MY_DASHBOARD": "Mój panel"
   },
   "WELCOME": {
     "EYEBROW": "Twoja przestrzeń jest gotowa",
@@ -511,6 +540,7 @@
     "EXPORT": "Eksportuj",
     "COPY": "Kopiuj",
     "COPY_NAME": "Kopiuj nazwę",
+    "RESIZE_COLUMN": "Zmień szerokość kolumny: {{name}}",
     "COPY_REFERENCE": "Kopiuj numer referencyjny",
     "COPY_ID": "Kopiuj ID",
     "COPIED": "Skopiowano!",
@@ -524,7 +554,8 @@
     "RETRY": "Spróbuj ponownie",
     "NO_RESULTS": "Brak wyników",
     "DISMISS": "Zamknij",
-    "CLOSE": "Zamknij"
+    "CLOSE": "Zamknij",
+    "YES": "Tak"
   },
   "ERRORS": {
     "GENERIC": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -922,6 +953,8 @@
     }
   },
   "ATTAINMENT": {
+    "PCT_OF_TARGET": "{{pct}}% celu",
+    "NOTE": "Słupek porównuje to, co osiągnięto w tym okresie, z wyznaczonym celem. Osiągnięcie to wartość zmierzona dotychczas przez silnik; cel to wartość wymagana przez kwotę.",
     "TARGET": "Cel",
     "ACHIEVED": "Osiągnięto",
     "MEASURE_REVENUE": "Przychód",
@@ -1047,7 +1080,9 @@
     "COUNTER_IN_RANGE": "w tym zakresie",
     "COMMISSIONS_UNREACHABLE_NOTE": "Z kwoty niewypłaconej żaden pay run nie może objąć:",
     "COMMISSIONS_UNREACHABLE_LINK": "Zobacz, co jest zablokowane i dlaczego",
-    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Przejrzyj dezaktywowane przypisania"
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Przejrzyj dezaktywowane przypisania",
+    "NOT_YOURS_TITLE": "To zestawienie jest dla administratorów",
+    "NOT_YOURS_DESC": "Pokazuje prowizje całej firmy, czego Twoja rola nie obejmuje. Twoje własne dane wkrótce pojawią się na tym ekranie; w międzyczasie korzystaj z menu po lewej stronie."
   },
   "QUOTAS": {
     "TITLE": "Kwoty",
@@ -2121,7 +2156,7 @@
     "SUBTITLE": "Zarządzaj swoimi danymi osobowymi i bezpieczeństwem konta.",
     "LOAD_ERROR": "Nie udało się załadować profilu. Spróbuj ponownie.",
     "SECTION_YOUR_PROFILE": "Dane osobowe",
-    "SECTION_ORGANIZATION": "Organizacja",
+    "SECTION_ORGANIZATION": "Twoja organizacja",
     "NAME_HEADING": "Imię i nazwisko",
     "NAME_MISSING_NOTICE": "Twoje imię i nazwisko nie zostało jeszcze ustawione. Uzupełnij je i zapisz zmiany.",
     "SAVE_NAME": "Zapisz imię",
@@ -2153,7 +2188,10 @@
     "CONFIRM_EMAIL_LOADING": "Potwierdzanie nowego adresu e-mail…",
     "CONFIRM_EMAIL_SUCCESS_TITLE": "Adres e-mail zaktualizowany!",
     "CONFIRM_EMAIL_SUCCESS_DESC": "Twój e-mail został zaktualizowany. Zaloguj się przy użyciu nowego adresu. Przekierowywanie…",
-    "CONFIRM_EMAIL_ERROR_TITLE": "Link wygasł lub jest nieprawidłowy"
+    "CONFIRM_EMAIL_ERROR_TITLE": "Link wygasł lub jest nieprawidłowy",
+    "ORGANIZATION_ID_HEADING": "Identyfikator organizacji",
+    "ORGANIZATION_ID_HINT": "Przekaż go osobom, które zapraszasz. Potrzebują go do logowania, gdy ich adres jest używany w więcej niż jednej przestrzeni roboczej.",
+    "ORGANIZATION_ID_COPY": "Kopiuj identyfikator"
   },
   "TWO_FACTOR": {
     "SECTION_TITLE": "Bezpieczeństwo",
@@ -2239,9 +2277,9 @@
     "CLOSE_FIGURE_CREDITS": "{{count}} kredyt(ów)",
     "CLOSE_FIGURE_BALANCE": "Saldo księgi",
     "CLOSE_RESOLUTION_LABEL": "Co stało się z pieniędzmi?",
-    "CLOSE_RESOLUTION_SETTLED": "Rozliczone poza Wasnie",
+    "CLOSE_RESOLUTION_SETTLED": "Rozliczone poza Incentra",
     "CLOSE_RESOLUTION_WRITTEN_OFF": "Odpisane w straty",
-    "CLOSE_RESOLUTION_SETTLED_HINT": "Zajęły się tym kadry, płace lub finanse — pieniądze trafiły do osoby albo zostały od niej odzyskane w miejscu, którego Wasnie nie widzi.",
+    "CLOSE_RESOLUTION_SETTLED_HINT": "Zajęły się tym kadry, płace lub finanse — pieniądze trafiły do osoby albo zostały od niej odzyskane w miejscu, którego Incentra nie widzi.",
     "CLOSE_RESOLUTION_WRITTEN_OFF_HINT": "Firma bierze to na siebie. Nikt tego nie otrzyma, a kwota zostaje zapisana jako koszt.",
     "CLOSE_NOTE_LABEL": "Dlaczego (wymagane)",
     "CLOSE_NOTE_PLACEHOLDER": "Co zdecydowano i kto.",
@@ -2416,7 +2454,8 @@
     "TOKENS_EXHAUSTED_BUY": "Dodaj tokeny",
     "ERROR_TRIAL_LIMIT_REACHED": "Wykorzystano wszystkie tokeny asystenta dostępne w bezpłatnym okresie próbnym. Wykup subskrypcję, aby korzystać z Zeke bez ograniczeń.",
     "WELCOME_EYEBROW": "Zeke · Twój asystent Incentra",
-    "WELCOME_TRY_ASKING": "Zapytaj na przykład"
+    "WELCOME_TRY_ASKING": "Zapytaj na przykład",
+    "LOCKED_CTA": "Zobacz plany"
   },
   "RECONCILIATION": {
     "TITLE": "Centrum uzgodnień",
@@ -3007,5 +3046,241 @@
     "LABEL": "Okres próbny",
     "ENDS_ON": "Okres próbny kończy się {{date}}",
     "CTA": "Ulepsz plan"
+  },
+  "USERS": {
+    "TITLE": "Użytkownicy",
+    "SUBTITLE": "Kto ma dostęp do tej przestrzeni i które zaproszenia są wciąż otwarte.",
+    "PAYEE": {
+      "NOT_LINKED": "Niepowiązany"
+    },
+    "LINK_PAYEE": {
+      "NO_MATCH": "Żaden niepowiązany payee nie pasuje.",
+      "TITLE": "Powiąż z payee",
+      "MESSAGE": "Wybierz rekord payee, którym jest {{name}}. Od tej chwili zobaczy własne prowizje, saldo i cele.",
+      "PLACEHOLDER": "Wybierz payee",
+      "SUBMIT": "Powiąż",
+      "SUGGESTION": "Istnieje payee z tym samym adresem e-mail: {{name}}.",
+      "USE_SUGGESTION": "Użyj tego",
+      "NONE_AVAILABLE": "Każdy payee w tej przestrzeni należy już do jakiegoś konta. Najpierw odłącz jeden albo utwórz rekord payee."
+    },
+    "UNLINK_PAYEE": {
+      "TITLE": "Odłącz payee",
+      "MESSAGE": "{{name}} przestanie widzieć prowizje, saldo i cele osoby {{payee}}. Ani konto, ani rekord payee nie zostają usunięte, a powiązanie można utworzyć ponownie."
+    },
+    "SECTION": {
+      "PEOPLE": "Osoby",
+      "PENDING": "Oczekujące zaproszenia",
+      "HISTORY": "Zamknięte zaproszenia ({{count}})"
+    },
+    "TABLE": {
+      "PAYEE": "Rekord payee",
+      "NAME": "Imię i nazwisko",
+      "EMAIL": "E-mail",
+      "ROLE": "Rola",
+      "STATUS": "Status",
+      "INVITED_BY": "Zaproszony przez",
+      "SENT": "Wysłano",
+      "EXPIRES": "Wygasa",
+      "FOUNDER": "Założył przestrzeń",
+      "RESENT": "Wysłano ponownie {{count}}x"
+    },
+    "STATUS": {
+      "ACTIVE": "Aktywny",
+      "DEACTIVATED": "Dezaktywowany",
+      "UNCONFIRMED": "E-mail niepotwierdzony"
+    },
+    "INVITATION_STATUS": {
+      "PENDING": "Oczekuje",
+      "ACCEPTED": "Przyjęte",
+      "EXPIRED": "Wygasło",
+      "REVOKED": "Cofnięte"
+    },
+    "ROLES": {
+      "TENANT_ADMIN": "Administrator",
+      "COMP_MANAGER": "Menedżer wynagrodzeń",
+      "MANAGER": "Kierownik",
+      "REP": "Handlowiec",
+      "UNKNOWN": "Brak roli"
+    },
+    "ACTION": {
+      "LINK_PAYEE": "Powiąż z payee",
+      "UNLINK_PAYEE": "Odłącz payee",
+      "SELF_NOTE": "To Ty — własnej roli ani dostępu nie zmienia się tutaj.",
+      "DEACTIVATE": "Dezaktywuj",
+      "REACTIVATE": "Aktywuj ponownie",
+      "RESEND": "Wyślij ponownie",
+      "REVOKE": "Cofnij",
+      "CHANGE_ROLE": "Zmień rolę",
+      "REMOVE": "Usuń z przestrzeni roboczej"
+    },
+    "SEATS": {
+      "USED": "Wykorzystano {{used}} z {{limit}} miejsc",
+      "FULL": "Wszystkie {{limit}} miejsc jest zajętych. Dezaktywuj kogoś lub cofnij zaproszenie, aby zwolnić miejsce."
+    },
+    "INVITE": {
+      "BUTTON": "Zaproś użytkownika",
+      "TITLE": "Zaproś kogoś do tej przestrzeni",
+      "EMAIL_LABEL": "Adres e-mail",
+      "EMAIL_PLACEHOLDER": "imie@firma.com",
+      "EMAIL_ERROR": "Podaj prawidłowy adres e-mail.",
+      "ROLE_LABEL": "Rola",
+      "ROLE_PLACEHOLDER": "Wybierz rolę",
+      "ROLE_ERROR": "Wybierz rolę.",
+      "HINT": "Otrzyma e-mail z linkiem do ustawienia hasła. Link jest ważny 7 dni.",
+      "SUBMIT": "Wyślij zaproszenie",
+      "PAYEE_LABEL": "Powiązany odbiorca",
+      "PAYEE_PLACEHOLDER": "Nikt - ta osoba nie otrzymuje prowizji",
+      "PAYEE_HINT": "Wybierz rekord odbiorcy, którym jest ta osoba, aby mogła widzieć własne prowizje. Zostaw puste dla administratora lub osoby z finansów.",
+      "PAYEE_SUGGESTED": "{{name}} ma ten sam adres e-mail. Czy to ta sama osoba?"
+    },
+    "DEACTIVATE": {
+      "TITLE": "Dezaktywować tego użytkownika?",
+      "MESSAGE": "{{name}} nie będzie mógł się już zalogować. Nic nie jest usuwane: nazwisko pozostaje przy wszystkim, co zatwierdził lub zmienił, a dostęp możesz przywrócić w każdej chwili."
+    },
+    "REVOKE": {
+      "TITLE": "Cofnąć to zaproszenie?",
+      "MESSAGE": "Link wysłany na {{email}} przestanie działać. Możesz zaprosić tę osobę ponownie później."
+    },
+    "EMPTY": {
+      "TITLE": "Nikogo tu jeszcze nie ma",
+      "MESSAGE": "Zaproś współpracownika, aby dać mu dostęp do tej przestrzeni."
+    },
+    "CHANGE_ROLE": {
+      "TITLE": "Zmień rolę",
+      "MESSAGE": "Wybierz nową rolę dla {{name}}.",
+      "SUBMIT": "Zapisz rolę"
+    },
+    "ADMIN_WARNING": {
+      "TITLE": "Dostęp administratora jest pełny",
+      "LEAD_NAMED": "{{name}} będzie mieć możliwość robienia wszystkiego, co Ty możesz robić w tej przestrzeni roboczej, bez żadnych ograniczeń:",
+      "LEAD_INVITE": "Ta osoba będzie mieć możliwość robienia wszystkiego, co Ty możesz robić w tej przestrzeni roboczej, bez żadnych ograniczeń:",
+      "ITEM_USERS": "Zapraszać, dezaktywować i usuwać osoby oraz zmieniać rolę każdego — w tym odebrać Ci rolę administratora.",
+      "ITEM_PLANS": "Tworzyć, edytować, aktywować i archiwizować plany wynagrodzeń, cele i przypisania.",
+      "ITEM_PAYOUTS": "Obliczać, zatwierdzać i oznaczać wypłaty jako opłacone oraz korygować dowolne saldo w księdze.",
+      "ITEM_BILLING": "Zarządzać subskrypcją, rozliczeniami, integracjami i ustawieniami przestrzeni roboczej.",
+      "FOOT": "Przyznaj tę rolę tylko komuś, komu ufasz na tyle, by powierzyć mu całą przestrzeń roboczą."
+    },
+    "REFUSAL": {
+      "ALREADY_MEMBER": "Ta osoba jest już w tej przestrzeni roboczej.",
+      "ALREADY_INVITED": "Ten adres ma już otwarte zaproszenie. Wyślij je ponownie zamiast tworzyć nowe.",
+      "NO_SEATS": "Wszystkie {{limit}} miejsc jest zajętych. Zwolnij jedno, zanim zaprosisz kogoś jeszcze.",
+      "ROLE_UNKNOWN": "Taka rola nie istnieje.",
+      "ROLE_NOT_ASSIGNABLE": "Tej roli nie można obecnie przypisać. Wybierz rolę Administrator lub Handlowiec.",
+      "ALREADY_USED": "To zaproszenie zostało już przyjęte.",
+      "EXPIRED": "To zaproszenie wygasło. Wyślij nowe.",
+      "REVOKED": "To zaproszenie zostało cofnięte.",
+      "LAST_ADMIN": "To jedyny pozostały administrator. Nadaj najpierw komuś innemu rolę administratora, inaczej nikt nie będzie mógł zarządzać użytkownikami.",
+      "CANNOT_ACT_ON_SELF": "Nie możesz zmienić własnego dostępu. Poproś innego administratora.",
+      "PAYEE_NOT_FOUND": "Ten odbiorca już nie istnieje.",
+      "PAYEE_ALREADY_LINKED": "{{payee}} należy już do innego konta. Najpierw usuń powiązanie."
+    },
+    "REMOVE": {
+      "TITLE": "Usunąć tę osobę z przestrzeni roboczej?",
+      "MESSAGE": "{{name}} przestanie należeć do tej przestrzeni i zniknie z tej listy. Konto, dostęp do innych przestrzeni oraz nazwisko przy wszystkim, co zatwierdziła, pozostają bez zmian. Możesz zaprosić ją ponownie w dowolnej chwili."
+    }
+  },
+  "ACCEPT_INVITATION": {
+    "TITLE_PLAIN": "Przyjmij zaproszenie",
+    "TITLE": "Dołącz do {{company}}",
+    "SUBTITLE": "Zaproszono Cię na adres {{email}}. Wybierz hasło, aby zakończyć.",
+    "CHECKING": "Sprawdzanie zaproszenia...",
+    "FIRST_NAME": "Imię",
+    "LAST_NAME": "Nazwisko",
+    "PASSWORD": "Hasło",
+    "PASSWORD_HINT": "Co najmniej 10 znaków, w tym wielka litera, cyfra i symbol.",
+    "CONFIRM_PASSWORD": "Potwierdź hasło",
+    "PASSWORDS_MISMATCH": "Hasła nie są takie same.",
+    "SUBMIT": "Utwórz konto",
+    "GO_TO_LOGIN": "Przejdź do logowania",
+    "DONE_TITLE": "Wszystko gotowe",
+    "DONE_MESSAGE": "Twoje konto jest gotowe. Zaloguj się, aby zacząć.",
+    "ERROR_GENERIC": "Nie udało się tego dokończyć. Spróbuj ponownie.",
+    "REFUSAL": {
+      "TITLE": "Tego zaproszenia nie można użyć",
+      "INVALID": "Ten link jest nieprawidłowy. Poproś osobę zapraszającą o nowy.",
+      "ALREADY_USED": "To zaproszenie zostało już przyjęte. Spróbuj się zalogować.",
+      "EXPIRED": "To zaproszenie wygasło. Poproś osobę zapraszającą o nowe.",
+      "REVOKED": "To zaproszenie zostało cofnięte. Skontaktuj się z osobą zapraszającą.",
+      "ALREADY_MEMBER": "Ten adres ma już konto. Spróbuj się zalogować.",
+      "GENERIC": "Tego zaproszenia nie można użyć. Poproś osobę zapraszającą o nowe."
+    }
+  },
+  "MY_DASHBOARD": {
+    "AWAITING_SETUP_TITLE": "{{count}} Twoich sprzedaży nie może jeszcze wygenerować prowizji",
+    "AWAITING_SETUP_DESC": "Te sprzedaże są zapisane na Ciebie, ale konfiguracja Twojego planu nie jest kompletna, więc nie liczą się jeszcze do prowizji. Poproś administratora, aby ją dokończył — w tym czasie nic nie przepada.",
+    "SUBTITLE": "Twoje prowizje, saldo i postępy względem celów.",
+    "ERROR_TITLE": "Nie udało się wczytać Twoich danych",
+    "ERROR_DESC": "Niczego nie brakuje na Twoim koncie - zapytanie się nie powiodło. Odśwież stronę, a jeśli błąd się powtarza, powiadom administratora.",
+    "UNLINKED_TITLE": "Twoje konto nie jest jeszcze powiązane z odbiorcą",
+    "UNLINKED_DESC": "Prowizje są zapisywane na rekordzie odbiorcy, a Twój nie został powiązany z tym kontem. Poproś administratora o powiązanie - do tego czasu nie ma danych do pokazania, co nie oznacza, że nic nie zarobiłeś.",
+    "MONEY_TITLE": "Twoje prowizje",
+    "EARNED": "Naliczone",
+    "PAID": "Wypłacone",
+    "AWAITING": "Oczekuje na wypłatę",
+    "DEBT": "Twoje zadłużenie",
+    "DISPUTED_NOTE": "Sporne i nieuwzględnione powyżej:",
+    "NO_MONEY_YET": "Nie zarejestrowano jeszcze niczego na Twoim koncie.",
+    "STATE_NOTHING_RECORDED": "Brak wypłat i brak zadłużenia.",
+    "STATE_EARNINGS_NO_DEBT": "Masz naliczone środki i żadnego zadłużenia.",
+    "STATE_EARNINGS_WITH_DEBT": "Masz naliczone środki i zadłużenie, a oczekujące kwoty je pokrywają.",
+    "STATE_DEBT_ONLY": "Masz zadłużenie i nic oczekującego, czym można je zrównoważyć.",
+    "STATE_DEBT_EXCEEDS": "Zadłużenie przewyższa wszystkie oczekujące kwoty, więc różnica przechodzi dalej.",
+    "STATE_UNKNOWN": "Twoje saldo pokazano powyżej.",
+    "QUOTAS_TITLE": "Twoje cele",
+    "QUOTAS_EMPTY": "Nie masz celu obejmującego te daty.",
+    "NO_TARGET": "Dla tego planu nie ustalono celu.",
+    "SCOPE_ALL_TIME": "Cały okres",
+    "EARNED_DESC": "Wszystko, co według reguł planu zostało naliczone.",
+    "PAID_DESC": "Z tego — kwota już wypłacona.",
+    "AWAITING_DESC": "Naliczone i jeszcze niewypłacone.",
+    "DEBT_DESC": "Kwota, którą jesteś winien firmie w tej chwili.",
+    "SCOPE_RANGE": "Wybrane daty",
+    "SCOPE_TODAY": "Na dziś"
+  },
+  "ACCESS": {
+    "UNKNOWN": "Nie udało się wczytać uprawnień tej roli. Lista nie jest pokazywana, zamiast pokazać błędną.",
+    "AREA": {
+      "SELF": "Jej własne wynagrodzenie",
+      "PEOPLE": "Osoby",
+      "PLANS": "Plany i reguły",
+      "TARGETS": "Cele",
+      "ASSIGNMENTS": "Przypisania",
+      "SALES": "Sprzedaż i prowizje",
+      "PAY": "Płatności",
+      "ADMIN": "Administracja"
+    },
+    "CAP": {
+      "OWN_PAY": "Widzi własne saldo i prowizje",
+      "PAYEES_READ": "Widzi kartoteki wszystkich osób",
+      "PAYEES_CREATE": "Dodaje osobę",
+      "PAYEES_UPDATE": "Edytuje osobę",
+      "PAYEES_TERMINATE": "Kończy współpracę z osobą",
+      "PLANS_READ": "Widzi wszystkie plany prowizyjne",
+      "PLANS_READ_OWN": "Widzi plany, według których jest rozliczana",
+      "PLANS_CREATE": "Tworzy plan",
+      "PLANS_ACTIVATE": "Aktywuje plan",
+      "PLANS_STOP_RULE": "Zatrzymuje regułę w trakcie okresu",
+      "QUOTAS_READ": "Widzi cele",
+      "QUOTAS_SET": "Ustala i zamyka cele",
+      "ASSIGNMENTS_READ": "Widzi, kto jest w którym planie",
+      "ASSIGNMENTS_CREATE": "Przypisuje kogoś do planu",
+      "ASSIGNMENTS_DELETE": "Usuwa kogoś z planu",
+      "TRANSACTIONS_READ": "Widzi zarejestrowaną sprzedaż",
+      "TRANSACTIONS_CREATE": "Rejestruje sprzedaż",
+      "TRANSACTIONS_VOID": "Anuluje sprzedaż",
+      "CREDITS_READ": "Widzi wyliczone prowizje",
+      "PAYOUTS_READ": "Widzi przebiegi wypłat i wypłaty",
+      "PAYOUTS_CALCULATE": "Uruchamia przebieg wypłat",
+      "PAYOUTS_APPROVE": "Zatwierdza wypłatę",
+      "PAYOUTS_MARK_PAID": "Oznacza wypłatę jako opłaconą",
+      "LEDGER_READ": "Widzi salda i zadłużenie",
+      "LEDGER_ADJUST": "Ręcznie koryguje saldo",
+      "RECONCILIATION_CLOSE": "Zamyka pozycję w Uzgodnieniach",
+      "REPORTS_VIEW_ALL": "Widzi pulpit całej firmy",
+      "USERS_MANAGE": "Zaprasza użytkowników i nimi zarządza",
+      "SETTINGS_UPDATE": "Zmienia ustawienia obszaru roboczego",
+      "SUBSCRIPTION_MANAGE": "Zarządza rozliczeniami",
+      "AUDIT_READ": "Czyta dziennik audytu"
+    }
   }
 }

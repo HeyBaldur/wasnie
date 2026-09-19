@@ -17,6 +17,15 @@
     "CONFIRM_PASSWORD": "Confirm password",
     "TENANT_NAME": "Organization name",
     "TENANT_SLUG": "Organization identifier",
+    "SECTION_ORGANIZATION": "Your organization",
+    "SECTION_ORGANIZATION_DESC": "The workspace where your team will manage compensation plans, payouts and results.",
+    "SECTION_ADMIN": "Administrator account",
+    "SECTION_ADMIN_DESC": "The first user of the workspace, with full access to plans, payouts and user management.",
+    "TENANT_NAME_HINT": "Your company's name, as it should appear throughout the workspace.",
+    "TENANT_SLUG_HINT": "Lowercase letters, numbers and hyphens. It cannot be changed once the workspace is created.",
+    "TENANT_SLUG_PREVIEW": "Your team signs in with",
+    "ADMIN_EMAIL_HINT": "Used to sign in and to receive the confirmation message.",
+    "ADMIN_PASSWORD_HINT": "At least 8 characters, with one capital letter and one number.",
     "FIRST_NAME": "First name",
     "LAST_NAME": "Last name",
     "FULL_NAME": "Full name",
@@ -40,35 +49,29 @@
     "RESEND_CONFIRMATION": "Resend confirmation email",
     "ALREADY_CONFIRMED": "Your account is already confirmed. Sign in below.",
     "FORGOT_PASSWORD": "Forgot password?",
+    "FORGOT_ORGANIZATION_ID": "Forgot it?",
     "PASSWORD_RESET_SUCCESS": "Password updated. Sign in with your new password.",
-    "BACK_TO_LOGIN": "Back to sign in"
+    "BACK_TO_LOGIN": "Back to sign in",
+    "ORGANIZATION_ID": "Organization identifier",
+    "ORGANIZATION_ID_HINT": "The identifier of the workspace you were invited to. It is in your invitation email.",
+    "USER_TYPE": "User type",
+    "USER_TYPE_ADMIN": "Administrator",
+    "USER_TYPE_ADMIN_DESC": "For the account owner who administers the workspace — compensation plans, payouts and user access. Sign in with your email address and password.",
+    "USER_TYPE_MEMBER": "Team member",
+    "USER_TYPE_MEMBER_DESC": "For representatives and managers who operate inside an existing workspace. Sign in with your email address, password and the Organization identifier issued in your invitation.",
+    "ORGANIZATION_REQUIRED": "This email is used in more than one workspace. Enter the organization identifier to continue."
+  },
+  "FORGOT_ORGANIZATION": {
+    "TITLE": "Forgot your Organization identifier?",
+    "DESC": "Enter your email address and we will send you the Organization identifier of the workspace you administer. For security it is never shown on screen, and only administrators can request it.",
+    "SUBMIT": "Send it to me",
+    "SENT_TITLE": "Check your inbox",
+    "SENT_DESC": "If that address administers a workspace, its Organization identifier has been sent there.",
+    "SENT_NON_ADMIN": "Only administrators receive it. If you are not one, ask your administrator — they can read it from the sign-in page of their own account."
   },
   "FORGOT_PASSWORD": {
-    "TITLE": "AI token usage",
-    "CHAT_REMAINING": "{{tokens}} tokens left",
-    "NEAR_LIMIT": "Your workspace is close to its monthly AI token limit.",
-    "CONFIRM_BACK": "Choose another pack",
-    "CONFIRM_ACTION": "Confirm and pay",
-    "CONFIRM_NOTE": "You will confirm the payment with Stripe. Nothing is charged until you do.",
-    "CONFIRM_NO_CARD": "You will be asked for a payment method.",
-    "CONFIRM_CARD": "Charged to {{brand}} ending {{last4}}.",
-    "CONFIRM_LINE": "Add <strong>{{tokens}} tokens</strong> for <strong>{{price}}</strong>.",
-    "ADDON_SELECT_LABEL": "Select {{tokens}} tokens for {{price}}",
-    "ADDON_BEST_VALUE": "Best value",
-    "ADDON_PER_MILLION": "{{price}} per million",
-    "ADDON_ONE_OFF": "one-off",
-    "ADDON_TOKENS": "{{tokens}} tokens",
-    "ADDONS_FAILED": "The purchase could not be started. Please try again.",
-    "ADDONS_UNAVAILABLE": "Token add-ons are not available for this workspace right now.",
-    "ADDONS_DIALOG_DESC": "A one-off purchase. Additional tokens are used only after the tokens included in your plan.",
-    "ADDONS_DIALOG_TITLE": "Add AI tokens",
-    "ADDONS_ACTION": "Add tokens",
-    "ADDONS_DESC": "Add tokens to this billing period. They are used after the tokens included in your plan and carry over to the next period.",
-    "ADDONS_TITLE": "AI token add-ons",
-    "ADDON_EXPIRED": "{{tokens}} additional tokens expired unused.",
-    "ADDON_EXPIRES": "Expires {{date}}.",
-    "ADDON_REMAINING": "+ {{tokens}} additional tokens available.",
-    "DESC": "Tokens Zeke has used for this account — questions and answers together.",
+    "TITLE": "Reset your password",
+    "DESC": "Forgot your password? Enter the email address associated with your account. We will send you a secure link to reset your password and get back to managing your incentive compensation.",
     "SUBMIT": "Send reset link",
     "SENT_TITLE": "Check your inbox",
     "SENT_DESC": "If an account exists for that email, a reset link has been sent."
@@ -220,7 +223,8 @@
     "UPGRADE_BTN": "Upgrade",
     "UPGRADE_TOOLTIP": "You're on the Free plan — upgrade to Professional",
     "PLAN_BADGE_TOOLTIP": "Manage your subscription",
-    "AUDIT_LOGS": "Audit logs"
+    "AUDIT_LOGS": "Audit logs",
+    "USERS": "Users"
   },
   "NAV": {
     "TOGGLE": "Toggle sidebar",
@@ -251,7 +255,9 @@
     "AUDIT_LOGS": "Audit logs",
     "GUIDED_TOUR": "Sandbox",
     "PRICING": "Pricing",
-    "MANAGE_BILLING": "Manage billing"
+    "MANAGE_BILLING": "Manage billing",
+    "USERS": "Users",
+    "MY_DASHBOARD": "My dashboard"
   },
   "WELCOME": {
     "EYEBROW": "Your workspace is ready",
@@ -534,6 +540,7 @@
     "EXPORT": "Export",
     "COPY": "Copy",
     "COPY_NAME": "Copy name",
+    "RESIZE_COLUMN": "Resize column: {{name}}",
     "COPY_REFERENCE": "Copy reference",
     "COPY_ID": "Copy ID",
     "COPIED": "Copied!",
@@ -547,7 +554,8 @@
     "RETRY": "Try again",
     "NO_RESULTS": "No results found",
     "DISMISS": "Dismiss",
-    "CLOSE": "Close"
+    "CLOSE": "Close",
+    "YES": "Yes"
   },
   "ERRORS": {
     "GENERIC": "Something went wrong. Please try again.",
@@ -945,6 +953,8 @@
     }
   },
   "ATTAINMENT": {
+    "PCT_OF_TARGET": "{{pct}}% of target",
+    "NOTE": "The bar compares what has been achieved in this period against the target set for it. Achieved counts what the engine has measured so far; the target is what the quota asks for.",
     "TARGET": "Target",
     "ACHIEVED": "Achieved",
     "MEASURE_REVENUE": "Revenue",
@@ -1070,7 +1080,9 @@
     "COUNTER_IN_RANGE": "in this range",
     "COMMISSIONS_UNREACHABLE_NOTE": "Of the unpaid amount, no pay run can reach:",
     "COMMISSIONS_UNREACHABLE_LINK": "See what is stuck and why",
-    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Review deactivated assignments"
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Review deactivated assignments",
+    "NOT_YOURS_TITLE": "This overview is for administrators",
+    "NOT_YOURS_DESC": "It shows the whole company's commissions, which your role does not include. Your own figures are coming to this screen shortly; in the meantime, use the menu on the left for what you can access."
   },
   "IMPORTS": {
     "STEPS": {
@@ -2144,7 +2156,7 @@
     "SUBTITLE": "Manage your personal details and account security.",
     "LOAD_ERROR": "We couldn't load your profile. Please try again.",
     "SECTION_YOUR_PROFILE": "Personal Details",
-    "SECTION_ORGANIZATION": "Organization",
+    "SECTION_ORGANIZATION": "Your organization",
     "NAME_HEADING": "Full Name",
     "NAME_MISSING_NOTICE": "Your name isn't set yet. Please fill in your first and last name and save.",
     "SAVE_NAME": "Save Name",
@@ -2176,7 +2188,10 @@
     "CONFIRM_EMAIL_LOADING": "Confirming your new email address…",
     "CONFIRM_EMAIL_SUCCESS_TITLE": "Email address updated!",
     "CONFIRM_EMAIL_SUCCESS_DESC": "Your email has been updated. Please sign in with your new address. Redirecting…",
-    "CONFIRM_EMAIL_ERROR_TITLE": "Link expired or invalid"
+    "CONFIRM_EMAIL_ERROR_TITLE": "Link expired or invalid",
+    "ORGANIZATION_ID_HEADING": "Organization identifier",
+    "ORGANIZATION_ID_HINT": "Give this to anyone you invite. They need it to sign in when their email is used in more than one workspace.",
+    "ORGANIZATION_ID_COPY": "Copy identifier"
   },
   "TWO_FACTOR": {
     "SECTION_TITLE": "Security",
@@ -2262,9 +2277,9 @@
     "CLOSE_FIGURE_CREDITS": "{{count}} credit(s)",
     "CLOSE_FIGURE_BALANCE": "Ledger balance",
     "CLOSE_RESOLUTION_LABEL": "What happened to the money?",
-    "CLOSE_RESOLUTION_SETTLED": "Settled outside Wasnie",
+    "CLOSE_RESOLUTION_SETTLED": "Settled outside Incentra",
     "CLOSE_RESOLUTION_WRITTEN_OFF": "Written off",
-    "CLOSE_RESOLUTION_SETTLED_HINT": "Payroll, HR or finance handled it — the money reached the person, or was recovered from them, somewhere Wasnie cannot see.",
+    "CLOSE_RESOLUTION_SETTLED_HINT": "Payroll, HR or finance handled it — the money reached the person, or was recovered from them, somewhere Incentra cannot see.",
     "CLOSE_RESOLUTION_WRITTEN_OFF_HINT": "The company absorbs it. Nobody will be paid this, and it is recorded as a cost.",
     "CLOSE_NOTE_LABEL": "Why (required)",
     "CLOSE_NOTE_PLACEHOLDER": "What was decided, and by whom.",
@@ -2439,7 +2454,8 @@
     "TOKENS_EXHAUSTED_BUY": "Add tokens",
     "ERROR_TRIAL_LIMIT_REACHED": "You have used all the assistant tokens included in your free trial. Subscribe to keep using Zeke without limits.",
     "WELCOME_EYEBROW": "Zeke · your Incentra assistant",
-    "WELCOME_TRY_ASKING": "Try asking"
+    "WELCOME_TRY_ASKING": "Try asking",
+    "LOCKED_CTA": "See the plans"
   },
   "RECONCILIATION": {
     "TITLE": "Reconciliation Centre",
@@ -3030,5 +3046,241 @@
     "LABEL": "Free trial",
     "ENDS_ON": "Your trial ends {{date}}",
     "CTA": "Upgrade"
+  },
+  "USERS": {
+    "TITLE": "Users",
+    "SUBTITLE": "Who has access to this workspace, and the invitations still open.",
+    "PAYEE": {
+      "NOT_LINKED": "Not linked"
+    },
+    "LINK_PAYEE": {
+      "NO_MATCH": "No unlinked payee matches that.",
+      "TITLE": "Link to a payee",
+      "MESSAGE": "Choose the payee record that {{name}} is. They will then see their own commissions, balance and targets.",
+      "PLACEHOLDER": "Choose a payee",
+      "SUBMIT": "Link",
+      "SUGGESTION": "A payee with the same email address exists: {{name}}.",
+      "USE_SUGGESTION": "Use this one",
+      "NONE_AVAILABLE": "Every payee in this workspace already belongs to a login. Unlink one first, or create the payee record."
+    },
+    "UNLINK_PAYEE": {
+      "TITLE": "Unlink payee",
+      "MESSAGE": "{{name}} will stop seeing the commissions, balance and targets of {{payee}}. Neither the login nor the payee record is deleted, and the link can be made again."
+    },
+    "SECTION": {
+      "PEOPLE": "People",
+      "PENDING": "Pending invitations",
+      "HISTORY": "Closed invitations ({{count}})"
+    },
+    "TABLE": {
+      "PAYEE": "Payee record",
+      "NAME": "Name",
+      "EMAIL": "Email",
+      "ROLE": "Role",
+      "STATUS": "Status",
+      "INVITED_BY": "Invited by",
+      "SENT": "Sent",
+      "EXPIRES": "Expires",
+      "FOUNDER": "Created the workspace",
+      "RESENT": "Resent {{count}}x"
+    },
+    "STATUS": {
+      "ACTIVE": "Active",
+      "DEACTIVATED": "Deactivated",
+      "UNCONFIRMED": "Email not confirmed"
+    },
+    "INVITATION_STATUS": {
+      "PENDING": "Pending",
+      "ACCEPTED": "Accepted",
+      "EXPIRED": "Expired",
+      "REVOKED": "Revoked"
+    },
+    "ROLES": {
+      "TENANT_ADMIN": "Administrator",
+      "COMP_MANAGER": "Compensation manager",
+      "MANAGER": "Manager",
+      "REP": "Sales rep",
+      "UNKNOWN": "No role"
+    },
+    "ACTION": {
+      "LINK_PAYEE": "Link to a payee",
+      "UNLINK_PAYEE": "Unlink payee",
+      "SELF_NOTE": "This is you — your own role and access cannot be changed here.",
+      "DEACTIVATE": "Deactivate",
+      "REACTIVATE": "Reactivate",
+      "RESEND": "Resend",
+      "REVOKE": "Revoke",
+      "CHANGE_ROLE": "Change role",
+      "REMOVE": "Remove from workspace"
+    },
+    "SEATS": {
+      "USED": "{{used}} of {{limit}} seats used",
+      "FULL": "All {{limit}} seats are in use. Deactivate somebody or withdraw an invitation to free one."
+    },
+    "INVITE": {
+      "BUTTON": "Invite user",
+      "TITLE": "Invite someone to this workspace",
+      "EMAIL_LABEL": "Email address",
+      "EMAIL_PLACEHOLDER": "name@company.com",
+      "EMAIL_ERROR": "Enter a valid email address.",
+      "ROLE_LABEL": "Role",
+      "ROLE_PLACEHOLDER": "Choose a role",
+      "ROLE_ERROR": "Choose a role.",
+      "HINT": "They will get an email with a link to set their password. The link is valid for 7 days.",
+      "SUBMIT": "Send invitation",
+      "PAYEE_LABEL": "Linked payee",
+      "PAYEE_PLACEHOLDER": "Nobody - this person does not get paid",
+      "PAYEE_HINT": "Pick the payee record this person is, so they can see their own commissions. Leave it empty for an administrator or a finance user.",
+      "PAYEE_SUGGESTED": "{{name}} has the same email address. Is this the same person?"
+    },
+    "DEACTIVATE": {
+      "TITLE": "Deactivate this user?",
+      "MESSAGE": "{{name}} will no longer be able to sign in. Nothing is deleted: their name stays on everything they approved or changed, and you can reactivate them at any time."
+    },
+    "REVOKE": {
+      "TITLE": "Withdraw this invitation?",
+      "MESSAGE": "The link sent to {{email}} will stop working. You can invite them again later."
+    },
+    "EMPTY": {
+      "TITLE": "Nobody here yet",
+      "MESSAGE": "Invite a colleague to give them access to this workspace."
+    },
+    "CHANGE_ROLE": {
+      "TITLE": "Change role",
+      "MESSAGE": "Choose the new role for {{name}}.",
+      "SUBMIT": "Save role"
+    },
+    "ADMIN_WARNING": {
+      "TITLE": "Administrator access is total",
+      "LEAD_NAMED": "{{name}} will be able to do everything you can do in this workspace, with nothing held back:",
+      "LEAD_INVITE": "This person will be able to do everything you can do in this workspace, with nothing held back:",
+      "ITEM_USERS": "Invite, deactivate and remove people, and change anyone's role — including taking the administrator role away from you.",
+      "ITEM_PLANS": "Create, edit, activate and archive compensation plans, quotas and assignments.",
+      "ITEM_PAYOUTS": "Calculate, approve and mark payouts as paid, and adjust any balance in the ledger.",
+      "ITEM_BILLING": "Manage the subscription, billing, integrations and workspace settings.",
+      "FOOT": "Only give this role to someone you would trust with the whole workspace."
+    },
+    "REFUSAL": {
+      "ALREADY_MEMBER": "That person is already in this workspace.",
+      "ALREADY_INVITED": "That address already has an invitation open. Resend it instead.",
+      "NO_SEATS": "All {{limit}} seats are in use. Free one before inviting anybody else.",
+      "ROLE_UNKNOWN": "That role does not exist.",
+      "ROLE_NOT_ASSIGNABLE": "That role cannot be assigned right now. Choose Administrator or Sales rep.",
+      "ALREADY_USED": "That invitation has already been accepted.",
+      "EXPIRED": "That invitation has expired. Send a new one.",
+      "REVOKED": "That invitation was withdrawn.",
+      "LAST_ADMIN": "This is the only administrator left. Give somebody else the administrator role first, or nobody will be able to manage users.",
+      "CANNOT_ACT_ON_SELF": "You cannot change your own access. Ask another administrator.",
+      "PAYEE_NOT_FOUND": "That payee no longer exists.",
+      "PAYEE_ALREADY_LINKED": "{{payee}} already belongs to another login. Unlink it first."
+    },
+    "REMOVE": {
+      "TITLE": "Remove this person from the workspace?",
+      "MESSAGE": "{{name}} will no longer belong to this workspace and will disappear from this list. Their account, their access to any other workspace and their name on everything they approved all stay exactly as they are. You can invite them back at any time."
+    }
+  },
+  "ACCEPT_INVITATION": {
+    "TITLE_PLAIN": "Accept invitation",
+    "TITLE": "Join {{company}}",
+    "SUBTITLE": "You were invited at {{email}}. Choose a password to finish.",
+    "CHECKING": "Checking your invitation...",
+    "FIRST_NAME": "First name",
+    "LAST_NAME": "Last name",
+    "PASSWORD": "Password",
+    "PASSWORD_HINT": "At least 10 characters, with an uppercase letter, a digit and a symbol.",
+    "CONFIRM_PASSWORD": "Confirm password",
+    "PASSWORDS_MISMATCH": "The passwords do not match.",
+    "SUBMIT": "Create my account",
+    "GO_TO_LOGIN": "Go to sign in",
+    "DONE_TITLE": "You are all set",
+    "DONE_MESSAGE": "Your account is ready. Sign in to get started.",
+    "ERROR_GENERIC": "We could not finish that. Please try again.",
+    "REFUSAL": {
+      "TITLE": "This invitation cannot be used",
+      "INVALID": "This link is not valid. Ask whoever invited you to send a new one.",
+      "ALREADY_USED": "This invitation has already been accepted. Try signing in instead.",
+      "EXPIRED": "This invitation has expired. Ask whoever invited you to send a new one.",
+      "REVOKED": "This invitation was withdrawn. Contact whoever invited you.",
+      "ALREADY_MEMBER": "That email address already has an account. Try signing in instead.",
+      "GENERIC": "This invitation cannot be used. Ask whoever invited you to send a new one."
+    }
+  },
+  "MY_DASHBOARD": {
+    "AWAITING_SETUP_TITLE": "{{count}} of your sales cannot be paid on yet",
+    "AWAITING_SETUP_DESC": "These sales are recorded against you, but your plan setup is not complete, so they do not count towards your commission yet. Ask your administrator to finish it — nothing is lost in the meantime.",
+    "SUBTITLE": "Your commissions, your balance and how your targets are going.",
+    "ERROR_TITLE": "We could not load your figures",
+    "ERROR_DESC": "Nothing is missing from your account - the request failed. Reload the page, and tell your administrator if it keeps happening.",
+    "UNLINKED_TITLE": "Your account is not linked to a payee yet",
+    "UNLINKED_DESC": "Commissions are recorded against a payee record, and yours has not been attached to this login. Ask an administrator to link it - until then there are no figures to show, which is not the same as having earned nothing.",
+    "MONEY_TITLE": "Your commissions",
+    "EARNED": "Earned",
+    "PAID": "Paid to you",
+    "AWAITING": "Awaiting payment",
+    "DEBT": "You owe",
+    "DISPUTED_NOTE": "Under dispute and not counted above:",
+    "NO_MONEY_YET": "Nothing has been recorded against you yet.",
+    "STATE_NOTHING_RECORDED": "No payouts and no debt recorded.",
+    "STATE_EARNINGS_NO_DEBT": "You have earnings and owe nothing.",
+    "STATE_EARNINGS_WITH_DEBT": "You have earnings and a debt, with enough pending to cover it.",
+    "STATE_DEBT_ONLY": "You have a debt and nothing pending to set against it.",
+    "STATE_DEBT_EXCEEDS": "Your debt is larger than everything pending, so the difference carries over.",
+    "STATE_UNKNOWN": "Your balance is shown above.",
+    "QUOTAS_TITLE": "Your targets",
+    "QUOTAS_EMPTY": "You have no target covering these dates.",
+    "NO_TARGET": "No target has been set for this plan.",
+    "SCOPE_ALL_TIME": "All time",
+    "EARNED_DESC": "Everything the plan rules say you have made.",
+    "PAID_DESC": "Of that, what has already reached you.",
+    "AWAITING_DESC": "Earned and not paid out yet.",
+    "DEBT_DESC": "What you owe the company right now.",
+    "SCOPE_RANGE": "Selected dates",
+    "SCOPE_TODAY": "As of today"
+  },
+  "ACCESS": {
+    "UNKNOWN": "Could not load what this role can do. The list below is not shown rather than shown wrong.",
+    "AREA": {
+      "SELF": "Their own pay",
+      "PEOPLE": "People",
+      "PLANS": "Plans and rules",
+      "TARGETS": "Targets",
+      "ASSIGNMENTS": "Assignments",
+      "SALES": "Sales and commissions",
+      "PAY": "Payments",
+      "ADMIN": "Administration"
+    },
+    "CAP": {
+      "OWN_PAY": "See their own balance and commissions",
+      "PAYEES_READ": "See everyone's payee records",
+      "PAYEES_CREATE": "Add a payee",
+      "PAYEES_UPDATE": "Edit a payee",
+      "PAYEES_TERMINATE": "Terminate a payee",
+      "PLANS_READ": "See every compensation plan",
+      "PLANS_READ_OWN": "See the plans they are paid under",
+      "PLANS_CREATE": "Create a plan",
+      "PLANS_ACTIVATE": "Activate a plan",
+      "PLANS_STOP_RULE": "Stop a rule mid-period",
+      "QUOTAS_READ": "See targets",
+      "QUOTAS_SET": "Set and close targets",
+      "ASSIGNMENTS_READ": "See who is on which plan",
+      "ASSIGNMENTS_CREATE": "Put somebody on a plan",
+      "ASSIGNMENTS_DELETE": "Take somebody off a plan",
+      "TRANSACTIONS_READ": "See recorded sales",
+      "TRANSACTIONS_CREATE": "Record a sale",
+      "TRANSACTIONS_VOID": "Void a sale",
+      "CREDITS_READ": "See calculated commissions",
+      "PAYOUTS_READ": "See pay runs and payouts",
+      "PAYOUTS_CALCULATE": "Run a pay run",
+      "PAYOUTS_APPROVE": "Approve a payout",
+      "PAYOUTS_MARK_PAID": "Mark a payout as paid",
+      "LEDGER_READ": "See balances and debt",
+      "LEDGER_ADJUST": "Adjust a balance by hand",
+      "RECONCILIATION_CLOSE": "Close an item in Reconciliation",
+      "REPORTS_VIEW_ALL": "See the whole company's dashboard",
+      "USERS_MANAGE": "Invite and manage users",
+      "SETTINGS_UPDATE": "Change workspace settings",
+      "SUBSCRIPTION_MANAGE": "Manage billing",
+      "AUDIT_READ": "Read the audit trail"
+    }
   }
 }

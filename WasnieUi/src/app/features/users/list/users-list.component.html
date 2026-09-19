@@ -1,0 +1,454 @@
+<app-shell>
+  <ws-page-layout
+    icon="users"
+    [title]="'USERS.TITLE' | translate"
+    [subtitle]="'USERS.SUBTITLE' | translate"
+  >
+    <!-- The action rides in the header slot, on the title's line — where Payees puts "Import" and
+         "New Payee". A button on its own row below the header was the first draft and read as an
+         afterthought bolted onto the page. -->
+    <ws-button
+      slot="actions"
+      variant="primary"
+      [hidden]="!('Users.Manage' | hasPermission)"
+      [disabled]="!store.canInvite() || store.saving()"
+      (click)="inviteOpen.set(true)"
+    >
+      <app-icon name="plus" [size]="16" />
+      {{ 'USERS.INVITE.BUTTON' | translate }}
+    </ws-button>
+
+    <!-- Only when a plan caps seats. Every plan is unlimited today, so this is normally absent
+         rather than reading "4 of unlimited". -->
+    @if (store.showsSeatCounter()) {
+      <div class="users__toolbar">
+        <span class="users__seats">
+          {{ 'USERS.SEATS.USED' | translate:{ used: store.seats()!.used, limit: store.seats()!.limit } }}
+        </span>
+      </div>
+    }
+
+    @if (!store.canInvite()) {
+      <!-- ★ Shown-but-disabled, and the one place on this screen where that is right: the cap is a
+           fact about the SUBSCRIPTION, not about this reader's authority, so hiding the button would
+           leave an admin with no explanation. §5.8 governs permissions, and this is not one. -->
+      <div class="users__notice">
+        <app-icon name="alert-triangle" [size]="16" />
+        <span>{{ 'USERS.SEATS.FULL' | translate:{ used: store.seats()?.used, limit: store.seats()?.limit } }}</span>
+      </div>
+    }
+
+    <!-- ── People, and who they are ───────────────────────────────────────
+         ★★ MASTER AND DETAIL, BECAUSE THE TABLE ALONE COULD NOT ANSWER THE PAGE'S OWN QUESTION. It
+         showed a role NAME and nothing else, so "should this person hold this role?" had to be decided
+         from a word; and the four things an administrator could do about it lived behind a ⋮ that had
+         to be opened before it could be read. The decision and the means to make it were never on
+         screen at the same time. Now the row selects and the panel beside it says what the role means.
+
+         ★ A LAYOUT, NOT A NEW PRIMITIVE. There is no WsDrawer in this design system and adding one is
+         a separate decision (DESIGN_SYSTEM §10.3), so the panel is a `ws-card` in the second column of
+         a grid — the same master/detail shape the plan and payee screens already use. -->
+    <div class="users__split" [class.users__split--open]="selectedUserId() !== null">
+
+      <div class="users__list-col">
+        <ws-table>
+          <table>
+          <thead>
+            <tr>
+              <!-- ★ THE HEADER NOW MATCHES THE BODY. It read NAME · ROLE · PAYEE while the cells below
+                   rendered name · payee · role, so every payee name in this workspace has been sitting
+                   under a column headed "Role". Two orders, one table, and nothing to catch it. -->
+              <th class="col-name">{{ 'USERS.TABLE.NAME' | translate }}</th>
+              <th>{{ 'USERS.TABLE.PAYEE' | translate }}</th>
+              <th>{{ 'USERS.TABLE.ROLE' | translate }}</th>
+              <th>{{ 'USERS.TABLE.STATUS' | translate }}</th>
+              <th class="col-secondary">{{ 'USERS.TABLE.INVITED_BY' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (user of store.users(); track user.userId) {
+              <!-- ★★ THE WHOLE ROW IS THE CONTROL, and it is a real one: `tabindex` and Enter/Space, so
+                   somebody arriving by keyboard can open the panel the same way. A div that only
+                   answers to a mouse is the commonest way a table like this stops being usable. -->
+              <tr
+                class="users__row"
+                [class.users__row--inactive]="!user.isActive"
+                [class.users__row--selected]="selectedUserId() === user.userId"
+                tabindex="0"
+                role="button"
+                [attr.aria-pressed]="selectedUserId() === user.userId"
+                (click)="selectUser(user)"
+                (keydown.enter)="selectUser(user)"
+                (keydown.space)="selectUser(user); $event.preventDefault()"
+              >
+                <td class="col-name">
+                  <div class="user-identity">
+                    <span class="user-avatar">{{ initialsFor(user) }}</span>
+                    <div class="user-identity__text">
+                      <span class="user-name">{{ displayName(user) }}</span>
+                      <span class="user-email">{{ user.email }}</span>
+                    </div>
+                  </div>
+                </td>
+
+                <!-- KAN-93. NOT LINKED IS SAID OUT LOUD, NOT LEFT BLANK. An empty cell reads as
+                     "nothing to report"; this is the state that silently breaks somebody's personal
+                     dashboard, and it is the only thing on this screen an administrator has to act on. -->
+                <td>
+                  @if (user.linkedPayeeName) {
+                    <span class="users__payee">{{ user.linkedPayeeName }}</span>
+                  } @else {
+                    <ws-badge variant="warning">{{ 'USERS.PAYEE.NOT_LINKED' | translate }}</ws-badge>
+                  }
+                </td>
+
+                <td>{{ roleKey(user.role) | translate }}</td>
+
+                <td>
+                  @if (user.isActive) {
+                    <ws-badge variant="success" [dot]="true">{{ 'USERS.STATUS.ACTIVE' | translate }}</ws-badge>
+                  } @else {
+                    <ws-badge variant="neutral">{{ 'USERS.STATUS.DEACTIVATED' | translate }}</ws-badge>
+                  }
+                  @if (!user.emailConfirmed) {
+                    &nbsp;<ws-badge variant="warning">{{ 'USERS.STATUS.UNCONFIRMED' | translate }}</ws-badge>
+                  }
+                </td>
+
+                <td class="col-secondary">{{ user.invitedByEmail ?? ('USERS.TABLE.FOUNDER' | translate) }}</td>
+              </tr>
+            } @empty {
+              <ws-table-empty icon="users" messageKey="USERS.EMPTY.MESSAGE" />
+            }
+          </tbody>
+          </table>
+        </ws-table>
+      </div>
+
+      <!-- ★ THE COLUMN IS ONLY IN THE DOM WHEN SOMEBODY IS SELECTED, so the table has the full width
+           until it is asked for. An always-present empty panel would spend the page's whole width on
+           an invitation to click something. -->
+      @if (selectedUser(); as user) {
+        <aside class="users__panel-col">
+          <app-user-access-panel
+            [user]="user"
+            [permissions]="store.permissionsFor(user.role)"
+            [rolesLoaded]="store.rolesLoaded()"
+            [isSelf]="isSelf(user)"
+            [canManage]="canManage()"
+            (closed)="selectedUserId.set(null)"
+            (linkPayee)="openLinkPayee($event)"
+            (unlinkPayee)="askUnlinkPayee($event)"
+            (changeRole)="openRoleChange($event)"
+            (deactivate)="askDeactivate($event)"
+            (reactivate)="reactivate($event)"
+            (remove)="askRemove($event)"
+          />
+        </aside>
+      }
+    </div>
+
+    <!-- ── Outstanding invitations ─────────────────────────────────────────── -->
+    @if (store.pendingInvitations().length > 0) {
+      <div class="users__section">
+        <h2 class="users__section-title">
+          {{ 'USERS.SECTION.PENDING' | translate }}
+          <ws-badge variant="brand" size="sm">{{ store.pendingInvitations().length }}</ws-badge>
+        </h2>
+
+        <ws-table>
+          <table>
+          <thead>
+            <tr>
+              <th class="col-name">{{ 'USERS.TABLE.EMAIL' | translate }}</th>
+              <th>{{ 'USERS.TABLE.ROLE' | translate }}</th>
+              <th class="col-secondary">{{ 'USERS.TABLE.SENT' | translate }}</th>
+              <th class="col-secondary">{{ 'USERS.TABLE.EXPIRES' | translate }}</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (invitation of store.pendingInvitations(); track invitation.id) {
+              <tr>
+                <td class="col-name">
+                  <div class="user-identity">
+                    <span class="user-avatar user-avatar--pending">
+                      <app-icon name="mail" [size]="14" />
+                    </span>
+                    <div class="user-identity__text">
+                      <span class="user-name">{{ invitation.email }}</span>
+                      @if (invitation.resendCount > 0) {
+                        <span class="user-email">
+                          {{ 'USERS.TABLE.RESENT' | translate:{ count: invitation.resendCount } }}
+                        </span>
+                      }
+                    </div>
+                  </div>
+                </td>
+                <td>{{ roleKey(invitation.role) | translate }}</td>
+                <td class="col-secondary">{{ invitation.createdAt | dateFormat }}</td>
+                <td class="col-secondary">{{ invitation.expiresAt | dateFormat }}</td>
+                <td class="col-actions" (click)="$event.stopPropagation()">
+                  <div *hasPermission="'Users.Manage'" class="row-menu">
+                    <button
+                      class="row-menu__trigger"
+                      [class.row-menu__trigger--open]="openMenuId() === invitation.id"
+                      type="button"
+                      (click)="toggleMenu(invitation.id, $event)"
+                    >
+                      <app-icon name="more-vertical" [size]="16" />
+                    </button>
+                    @if (openMenuId() === invitation.id) {
+                      <div class="row-menu__dropdown"
+                        [style.top.px]="menuPosition()!.top ?? null"
+                        [style.bottom.px]="menuPosition()!.bottom ?? null"
+                        [style.right.px]="menuPosition()!.right"
+                      >
+                        <button class="row-menu__item" type="button" (click)="resend(invitation)">
+                          <app-icon name="send" [size]="14" />
+                          {{ 'USERS.ACTION.RESEND' | translate }}
+                        </button>
+                        <button class="row-menu__item row-menu__item--danger" type="button"
+                                (click)="askRevoke(invitation)">
+                          <app-icon name="x" [size]="14" />
+                          {{ 'USERS.ACTION.REVOKE' | translate }}
+                        </button>
+                      </div>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+          </table>
+        </ws-table>
+      </div>
+    }
+
+    <!-- ── Closed invitations, collapsed ───────────────────────────────────── -->
+    @if (store.closedInvitations().length > 0) {
+      <div class="users__section">
+        <button class="users__history-toggle" type="button"
+                (click)="showClosedInvitations.set(!showClosedInvitations())">
+          <app-icon [name]="showClosedInvitations() ? 'chevron-up' : 'chevron-down'" [size]="14" />
+          {{ 'USERS.SECTION.HISTORY' | translate:{ count: store.closedInvitations().length } }}
+        </button>
+
+        @if (showClosedInvitations()) {
+          <ws-table>
+            <table>
+            <thead>
+              <tr>
+                <th class="col-name">{{ 'USERS.TABLE.EMAIL' | translate }}</th>
+                <th>{{ 'USERS.TABLE.ROLE' | translate }}</th>
+                <th>{{ 'USERS.TABLE.STATUS' | translate }}</th>
+                <th class="col-secondary">{{ 'USERS.TABLE.SENT' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (invitation of store.closedInvitations(); track invitation.id) {
+                <tr>
+                  <td class="col-name">{{ invitation.email }}</td>
+                  <td>{{ roleKey(invitation.role) | translate }}</td>
+                  <td>
+                    <ws-badge variant="neutral">
+                      {{ invitationStatusKey(invitation.status) | translate }}
+                    </ws-badge>
+                  </td>
+                  <td class="col-secondary">{{ invitation.createdAt | dateFormat }}</td>
+                </tr>
+              }
+            </tbody>
+            </table>
+          </ws-table>
+        }
+      </div>
+    }
+  </ws-page-layout>
+</app-shell>
+
+<!-- ── Invite ────────────────────────────────────────────────────────────── -->
+@if (inviteOpen()) {
+  <ws-modal
+    [isOpen]="true"
+    [title]="'USERS.INVITE.TITLE' | translate"
+    size="sm"
+    (closed)="inviteOpen.set(false)"
+  >
+    <app-invite-user-form (invited)="onInvited()" (cancelled)="inviteOpen.set(false)" />
+  </ws-modal>
+}
+
+<!-- ★ A modal, not an inline dropdown. ws-select is a ControlValueAccessor: one control per row
+     would be rebuilt on every reload and lose focus mid-interaction. -->
+@if (changeRoleFor(); as user) {
+  <ws-modal
+    [isOpen]="true"
+    [title]="'USERS.CHANGE_ROLE.TITLE' | translate"
+    size="sm"
+    (closed)="changeRoleFor.set(null)"
+  >
+    <form [formGroup]="roleForm" (ngSubmit)="submitRoleChange()" class="users__role-form">
+      <p class="users__role-form-who">
+        {{ 'USERS.CHANGE_ROLE.MESSAGE' | translate:{ name: displayName(user) } }}
+      </p>
+
+      <ws-select
+        formControlName="role"
+        [options]="roleOptions()"
+        [label]="'USERS.TABLE.ROLE' | translate"
+        [placeholder]="'USERS.INVITE.ROLE_PLACEHOLDER' | translate"
+      />
+
+      @if (grantsAdmin()) {
+        <app-admin-grant-warning [name]="displayName(user)" />
+      }
+
+      <div class="users__role-form-actions">
+        <ws-button variant="ghost" type="button" [disabled]="store.saving()"
+                   (click)="changeRoleFor.set(null)">
+          {{ 'COMMON.CANCEL' | translate }}
+        </ws-button>
+        <ws-button variant="primary" type="submit" [disabled]="store.saving()">
+          {{ 'USERS.CHANGE_ROLE.SUBMIT' | translate }}
+        </ws-button>
+      </div>
+    </form>
+  </ws-modal>
+}
+
+<!-- ── Link a payee (KAN-93) ─────────────────────────────────────────────── -->
+<!--
+  ★★ A MODAL WITH A PICKER, NOT AN INLINE DROPDOWN — the same reason the role dialog is one:
+  `ws-select` is a ControlValueAccessor, and one control per row would be rebuilt on every reload and
+  lose focus mid-interaction.
+-->
+@if (linkPayeeFor(); as user) {
+  <ws-modal
+    [isOpen]="true"
+    [title]="'USERS.LINK_PAYEE.TITLE' | translate"
+    size="sm"
+    (closed)="linkPayeeFor.set(null)"
+  >
+    <form [formGroup]="linkPayeeForm" (ngSubmit)="submitLinkPayee()" class="users__role-form">
+      <p class="users__role-form-who">
+        {{ 'USERS.LINK_PAYEE.MESSAGE' | translate:{ name: displayName(user) } }}
+      </p>
+
+      @if (payeesLoading()) {
+        <p class="users__role-form-hint">{{ 'COMMON.LOADING' | translate }}</p>
+      } @else if (noPayeesAvailable()) {
+        <!-- ★★ EMPTY IS EXPLAINED, NOT DRAWN AS AN EMPTY PICKER — and this is the case where EVERY
+             payee already belongs to a login, which is a different problem from a search that matched
+             nothing and has a different fix: detach the other login first. It is driven by the
+             server's total, never by the length of the dropdown; ws-select says "no results" for the
+             other case on its own. -->
+        <div class="users__notice">
+          <app-icon name="alert-triangle" [size]="16" />
+          <span>{{ 'USERS.LINK_PAYEE.NONE_AVAILABLE' | translate }}</span>
+        </div>
+      } @else {
+        @if (suggestedPayee(); as suggestion) {
+          <!-- ★★ THE MATCH IS OFFERED, NEVER PRE-SELECTED. Addresses coincide for boring reasons — a
+               shared mailbox, a replacement in the same seat — and a match accepted by reflex hands
+               somebody another person's pay. The administrator is the one who presses this.
+
+               ★ IT SURVIVES THE SEARCH BOX. The suggestion is answered by its own query on the
+               server, so it stays on screen while the admin types a name into the picker below. -->
+          <p class="users__role-form-hint">
+            {{ 'USERS.LINK_PAYEE.SUGGESTION' | translate:{ name: suggestion.fullName } }}
+            <button type="button" class="users__link-button" (click)="acceptSuggestion()">
+              {{ 'USERS.LINK_PAYEE.USE_SUGGESTION' | translate }}
+            </button>
+          </p>
+        }
+
+        <!-- ★★ SEARCHED ON THE SERVER, NOT SCROLLED. A workspace with a thousand payees cannot be a
+             dropdown; `searchFn` sends what is typed and the handler caps the answer. Same shape as
+             every other payee picker in the product. `initialOption` is what keeps the chosen name on
+             the trigger when it is not in the last page of results — see `pickedPayeeOption`. -->
+        <ws-select
+          formControlName="payeeId"
+          [searchFn]="payeeSearchFn"
+          [initialOption]="pickedPayeeOption()"
+          [label]="'USERS.TABLE.PAYEE' | translate"
+          [placeholder]="'USERS.LINK_PAYEE.PLACEHOLDER' | translate"
+          noResultsLabel="USERS.LINK_PAYEE.NO_MATCH"
+        />
+      }
+
+      <div class="users__role-form-actions">
+        <ws-button variant="ghost" type="button" [disabled]="store.saving()"
+                   (click)="linkPayeeFor.set(null)">
+          {{ 'COMMON.CANCEL' | translate }}
+        </ws-button>
+        <ws-button variant="primary" type="submit"
+                   [disabled]="store.saving() || noPayeesAvailable()">
+          {{ 'USERS.LINK_PAYEE.SUBMIT' | translate }}
+        </ws-button>
+      </div>
+    </form>
+  </ws-modal>
+}
+
+<!-- ★ The message names what STOPS being visible, because that is the whole effect: unlinking does
+     not delete a payee or a login, it closes one person's window onto their own pay (§C3). -->
+@if (confirmUnlink(); as user) {
+  <ws-confirmation-modal
+    [isOpen]="true"
+    [cancelLabel]="'COMMON.CANCEL' | translate"
+    [loading]="store.saving()"
+    [title]="'USERS.UNLINK_PAYEE.TITLE' | translate"
+    [message]="'USERS.UNLINK_PAYEE.MESSAGE' | translate:{ name: displayName(user), payee: user.linkedPayeeName }"
+    [confirmLabel]="'USERS.ACTION.UNLINK_PAYEE' | translate"
+    variant="danger"
+    (confirmed)="confirmUnlinkPayee()"
+    (cancelled)="confirmUnlink.set(null)"
+  />
+}
+
+<!-- ★ The confirmation says what deactivation ACTUALLY does (§C3): the account keeps existing and
+     keeps holding its audit trail, and only signing in stops. -->
+@if (confirmDeactivate(); as user) {
+  <ws-confirmation-modal
+    [isOpen]="true"
+    [cancelLabel]="'COMMON.CANCEL' | translate"
+    [loading]="store.saving()"
+    [title]="'USERS.DEACTIVATE.TITLE' | translate"
+    [message]="'USERS.DEACTIVATE.MESSAGE' | translate:{ name: displayName(user) }"
+    [confirmLabel]="'USERS.ACTION.DEACTIVATE' | translate"
+    variant="danger"
+    (confirmed)="confirmDeactivation()"
+    (cancelled)="confirmDeactivate.set(null)"
+  />
+}
+
+<!-- The message spells out the difference from Deactivate, because the two words are close enough
+     that an admin could pick the wrong one: what survives is named, and so is what does not. -->
+@if (confirmRemove(); as user) {
+  <ws-confirmation-modal
+    [isOpen]="true"
+    [cancelLabel]="'COMMON.CANCEL' | translate"
+    [loading]="store.saving()"
+    [title]="'USERS.REMOVE.TITLE' | translate"
+    [message]="'USERS.REMOVE.MESSAGE' | translate:{ name: displayName(user) }"
+    [confirmLabel]="'USERS.ACTION.REMOVE' | translate"
+    variant="danger"
+    (confirmed)="confirmRemoval()"
+    (cancelled)="confirmRemove.set(null)"
+  />
+}
+
+@if (confirmRevoke(); as invitation) {
+  <ws-confirmation-modal
+    [isOpen]="true"
+    [cancelLabel]="'COMMON.CANCEL' | translate"
+    [loading]="store.saving()"
+    [title]="'USERS.REVOKE.TITLE' | translate"
+    [message]="'USERS.REVOKE.MESSAGE' | translate:{ email: invitation.email }"
+    [confirmLabel]="'USERS.ACTION.REVOKE' | translate"
+    variant="danger"
+    (confirmed)="confirmRevocation()"
+    (cancelled)="confirmRevoke.set(null)"
+  />
+}

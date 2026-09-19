@@ -1,3 +1,4 @@
+import { REMOVE_STYLES_ON_COMPONENT_DESTROY } from '@angular/platform-browser';
 import {
   ApplicationConfig,
   ErrorHandler,
@@ -29,6 +30,25 @@ const SUPPORTED_LANGS = ['en', 'es', 'pl'];
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    /**
+     * ★★ KEEP A DESTROYED COMPONENT'S STYLES IN THE DOCUMENT. Angular 17+ removes a component's
+     * `<style>` when its LAST instance is destroyed, and `ws-modal` animates an inert CLONE of the
+     * closed dialog out over 220ms — so a modal whose only `ws-select` had just been destroyed left a
+     * ghost carrying the right `_ngcontent` attribute and nothing to match it. Measured: the trigger
+     * went `display: flex → block`, `height: 32px → 35px`, `border: 1px → 0`, background transparent.
+     * On screen that is the reported "for a millisecond the dropdown loses everything and you see
+     * only letters".
+     *
+     * ★ FIXED HERE RATHER THAN IN THE MODAL, because the modal is not the only thing that outlives a
+     * component's node: any exit animation on removed content has the same hole, and inlining computed
+     * styles onto the clone would be a second rendering of every rule, lossy for pseudo-elements and
+     * media queries.
+     *
+     * ★ THE COST IS A STYLE ELEMENT THAT STAYS. It is what Angular ≤16 did by default, the sheets are
+     * deduplicated per component, and this application loads every one of them on the first visit to
+     * the screen that uses it anyway.
+     */
+    { provide: REMOVE_STYLES_ON_COMPONENT_DESTROY, useValue: false },
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),

@@ -16,15 +16,25 @@
         backRoute="/quotas"
         backLabel="QUOTAS.TITLE"
       >
+        <!-- ★★ STATUS IS NOT AUTHORITY, AND THIS BLOCK HAD ONLY THE FIRST. Whether a quota is Draft
+             or Active decides WHICH action makes sense; it has never decided WHO may take it. With no
+             permission gate, a Sales Rep opening their own quota was offered "Close quota" — an act
+             that ends the target their commission is measured against. The server refused it
+             (`QuotasSet`), so the only way to learn was to press it; §5.8 exists to end exactly that.
+             The LIST already gated these two, which is what made the gap invisible.
+
+             ★ THE KEY IS `Quotas.Set`, THE ONE THE HANDLERS REALLY ASK FOR. Both ActivateQuotaHandler
+             and CloseQuotaHandler require it. A control whose permission disagrees with its handler is
+             not a control, it is a trap — the same rule the dashboard nav entry carries. -->
         <div slot="actions" class="quota-detail__actions">
           @if (quota.status === 'Draft') {
-            <ws-button variant="primary" size="sm" (click)="onActivate()">
+            <ws-button *hasPermission="'Quotas.Set'" variant="primary" size="sm" (click)="onActivate()">
               <app-icon name="check-circle" [size]="14" />
               {{ 'QUOTAS.ACTION_ACTIVATE' | translate }}
             </ws-button>
           }
           @if (quota.status === 'Active') {
-            <ws-button variant="danger" size="sm" (click)="onClose()">
+            <ws-button *hasPermission="'Quotas.Set'" variant="danger" size="sm" (click)="onClose()">
               <app-icon name="x-circle" [size]="14" />
               {{ 'QUOTAS.ACTION_CLOSE' | translate }}
             </ws-button>
@@ -62,7 +72,17 @@
         <div class="field-group">
           <span class="field-label">{{ 'QUOTAS.FIELD_PAYEE' | translate }}</span>
           <span class="field-value">
-            <a class="field-link" [routerLink]="['/payees', quota.payeeId]">{{ quota.payeeName }}</a>
+            <!-- ★★ WHERE THIS LEADS DEPENDS ON WHO IS READING. Payees is hidden from a Sales Rep
+                 entirely (KAN-93 bug 1), so this link sent them to Access Denied from a page they were
+                 legitimately on — a dead end inside their own quota. A rep can only ever open their
+                 OWN quota (every quota handler applies PayeeAccessGuard), so for them the payee IS
+                 themselves and their own record lives at /profile.
+
+                 ★ THE ADMINISTRATOR AND THE MANAGER ARE UNTOUCHED: holding `Payees.Read` they keep
+                 going to the payee page, which for a manager is their report's. The discriminator is
+                 the same key the /payees route guard uses, so the link cannot offer a page the guard
+                 then refuses. -->
+            <a class="field-link" [routerLink]="payeeLink(quota.payeeId)">{{ quota.payeeName }}</a>
           </span>
         </div>
         <div class="field-group">

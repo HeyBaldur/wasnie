@@ -19,6 +19,7 @@ using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Infrastructure.Compensation.Calculation;
 using Wasnie.Infrastructure.Persistence;
+using Wasnie.UnitTests.TestDoubles;
 
 namespace Wasnie.UnitTests.Application;
 
@@ -74,7 +75,7 @@ public sealed class SimulatePlanRulesTests : IDisposable
             new RuleCalculationExplainer(NullLogger<RuleCalculationExplainer>.Instance),
             guid, clock);
 
-        _planByIdHandler = new GetPlanByIdHandler(_db, auth);
+        _planByIdHandler = new GetPlanByIdHandler(_db, auth, FakePlanAccessGuard.SeesEverything());
     }
 
     public void Dispose() => _db.Dispose();

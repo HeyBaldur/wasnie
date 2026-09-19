@@ -10,6 +10,7 @@ import { PlansStore } from '../state/plans.store';
 import { ToastService } from '../../../shared/services/toast.service';
 import { Plan } from '../models/plan.model';
 import { Rule } from '../models/rule.model';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 
 const PLAN_ID = 'plan-1';
 const RULE_ID = '8f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f';
@@ -69,6 +70,14 @@ describe('Rule form — coded save errors and the missing rule', () => {
         provideRouter([]),
         { provide: PlansStore, useValue: store as unknown as PlansStore },
         { provide: ToastService, useValue: toast },
+        // KAN-93. These specs drive the ADMINISTRATOR's path, which is the one that loads the
+        // tenant's category vocabulary. A reader holding only `Plans.ReadOwn` deliberately does not
+        // request it — the picker falls back to free text — so the permission has to be stated here
+        // or the expected request is never made.
+        {
+          provide: CurrentUserService,
+          useValue: { hasPermission: (p: string) => p === 'Plans.Read' },
+        },
         {
           provide: ActivatedRoute,
           useValue: {

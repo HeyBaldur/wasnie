@@ -14,6 +14,7 @@ using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Infrastructure.Persistence;
 using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
+using Wasnie.UnitTests.TestDoubles;
 
 namespace Wasnie.UnitTests.Application;
 
@@ -47,7 +48,7 @@ public sealed class PlanRulesPayloadCompletenessTests
             IRequest<TResponse> request, CancellationToken cancellationToken = default) => request switch
         {
             ListPlansQuery q => (TResponse)(object)await new ListPlansHandler(db, auth).Handle(q, cancellationToken),
-            GetPlanByIdQuery q => (TResponse)(object)await new GetPlanByIdHandler(db, auth).Handle(q, cancellationToken),
+            GetPlanByIdQuery q => (TResponse)(object)await new GetPlanByIdHandler(db, auth, FakePlanAccessGuard.SeesEverything()).Handle(q, cancellationToken),
             _ => throw new NotSupportedException(request.GetType().Name),
         };
 

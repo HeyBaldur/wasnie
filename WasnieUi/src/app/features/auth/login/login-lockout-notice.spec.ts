@@ -27,7 +27,7 @@ describe('LoginComponent — account lockout notice', () => {
   }
 
   function submit(): void {
-    fixture.componentInstance.form.setValue({ email: 'a@example.com', password: 'secret123' });
+    fixture.componentInstance.form.setValue({ email: 'a@example.com', password: 'secret123', organizationId: '' });
     fixture.componentInstance.submit();
     fixture.detectChanges();
   }

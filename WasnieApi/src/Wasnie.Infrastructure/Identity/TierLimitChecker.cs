@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Exceptions;
@@ -6,6 +6,7 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
 using Wasnie.Application.Features.Subscription;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.Identity;
 
 namespace Wasnie.Infrastructure.Identity;
 
@@ -36,9 +37,43 @@ public sealed class TierLimitChecker(
     ICurrentUserService currentUser,
     IAuditService auditService,
     ISandboxScope sandboxScope,
-    ISubscriptionPlanCatalog catalog)
+    ISubscriptionPlanCatalog catalog,
+    IClock clock)
     : ITierLimitChecker
 {
+    /// <summary>
+    /// Seats in use and seats allowed (KAN-32). Both halves of "used" are COUNTED, never stored:
+    /// active access rows plus outstanding invitations. See <see cref="SeatUsage"/> for why the
+    /// outstanding half counts.
+    /// </summary>
+    public async Task<SeatUsage> GetSeatUsageAsync(CancellationToken cancellationToken = default)
+    {
+        var plan = await CurrentPlanAsync(cancellationToken);
+        var now = clock.UtcNowOffset;
+
+        var activeUsers = await db.TenantUsers
+            .Where(TenantUser.ActiveSpec)
+            .CountAsync(cancellationToken);
+
+        var pending = await db.Invitations
+            .Where(Invitation.PendingSpec(now))
+            .CountAsync(cancellationToken);
+
+        return new SeatUsage(activeUsers, pending, plan?.MaxUsers, plan?.Code ?? string.Empty);
+    }
+
+    public async Task EnsureSeatAvailableAsync(CancellationToken cancellationToken = default)
+    {
+        if (sandboxScope.IsSandbox) return;
+
+        var usage = await GetSeatUsageAsync(cancellationToken);
+        if (usage.HasRoom) return;
+
+        var limit = usage.Limit!.Value;
+        await LogLimitDenialAsync("users", usage.Used, limit, usage.Tier, cancellationToken);
+        throw new TierLimitExceededException(usage.Tier, "users", usage.Used, limit, null);
+    }
+
     public async Task EnsurePayeeLimitAsync(CancellationToken cancellationToken = default)
     {
         if (sandboxScope.IsSandbox) return;

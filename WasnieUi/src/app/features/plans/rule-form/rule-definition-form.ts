@@ -5,6 +5,7 @@ import { distinctUntilChanged, Observable } from 'rxjs';
 import { extractApiError, extractApiErrorCode } from '../../../shared/utils/api-error';
 import { isKnownRateTableError, rateTableErrorKey, rateTableErrorParams } from './rate-table-error';
 import { PlansApiService } from '../services/plans.api.service';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 import type { SelectOption } from '../../../shared/ui';
 import {
   AddRuleRequest,
@@ -50,6 +51,7 @@ export function createRuleDefinitionForm(options: RuleDefinitionFormOptions): Ru
   return new RuleDefinitionForm(
     inject(FormBuilder),
     inject(PlansApiService),
+    inject(CurrentUserService),
     inject(DestroyRef),
     options,
   );
@@ -122,6 +124,7 @@ export class RuleDefinitionForm {
   constructor(
     private readonly fb: FormBuilder,
     private readonly plansApi: PlansApiService,
+    private readonly currentUser: CurrentUserService,
     private readonly destroyRef: DestroyRef,
     private readonly options: RuleDefinitionFormOptions,
   ) {
@@ -288,6 +291,14 @@ export class RuleDefinitionForm {
       next: fields => this.triggerFields.set(fields),
       error: () => this.triggerFields.set([]),
     });
+
+    // ★★ THE CATEGORY VOCABULARY IS NOT ASKED FOR WITHOUT `Plans.Read`. Unlike the field catalogue
+    // above, these are the TENANT'S real category values, so the narrow permission deliberately does
+    // not open them. Requesting anyway would 403 — and, because the handler refuses through
+    // `RequireAsync`, write a PermissionDenied audit row every time a rep opens a rule. The picker
+    // falls back to free text on an empty list, so the reader still sees the value their own rule
+    // filters on; only the list of alternatives is missing, which they have no use for.
+    if (!this.currentUser.hasPermission('Plans.Read')) return;
 
     // The category picker's choices. Arrives independently of the rule load, so reconcile once it lands
     // (the rule may already be on screen). A failure leaves the list empty → free-text fallback, so the

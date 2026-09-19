@@ -6,8 +6,11 @@ import {
   WsPageHeaderComponent,
   WsCardComponent,
   WsButtonComponent,
+  WsCopyButtonComponent,
   WsInputComponent,
 } from '../../../shared/ui';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { WsToastService } from '../../../shared/ui/ws-toast/ws-toast.service';
 import { ProfileService, ProfileDto, TwoFactorStatusDto } from '../services/profile.service';
 
@@ -23,12 +26,24 @@ type TwoFactorStep = 'status' | 'setup' | 'confirm' | 'recoveryCodes' | 'disable
     WsPageHeaderComponent,
     WsCardComponent,
     WsButtonComponent,
+    WsCopyButtonComponent,
     WsInputComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './manage-profile.component.html',
   styleUrl: './manage-profile.component.scss',
 })
 export class ManageProfileComponent implements OnInit {
+  private readonly currentUser = inject(CurrentUserService);
+
+  /**
+   * KAN-91. The workspace identifier an administrator hands their team so they can sign in.
+   *
+   * It is READ from the session, not fetched: the token already carries it and the profile has no
+   * business asking the server for something it was told at login.
+   */
+  readonly organizationId = computed(() => this.currentUser.currentUser()?.tenantSlug ?? '');
+
   private readonly profileService = inject(ProfileService);
   private readonly toast = inject(WsToastService);
 

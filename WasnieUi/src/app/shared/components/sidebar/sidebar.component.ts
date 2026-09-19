@@ -35,8 +35,11 @@ interface NavSection {
   items: NavEntry[];
 }
 
-/** Separación entre el rail y el panel del submenú. El SCSS no puede saberla: la posición se calcula aquí. */
-const FLYOUT_GAP_PX = 6;
+/**
+ * Separación entre el rail y el panel del submenú. El SCSS no puede saberla: la posición se calcula aquí.
+ * 10 y no 6 desde que el panel lleva flecha (2026-09-19): la flecha vive en este hueco y apunta a la fila.
+ */
+const FLYOUT_GAP_PX = 10;
 
 /** Margen para cruzar ese hueco con el puntero antes de que el panel empiece a cerrarse. */
 const FLYOUT_CLOSE_DELAY_MS = 160;
@@ -49,7 +52,7 @@ const FLYOUT_CLOSE_DELAY_MS = 160;
  * panel se queda montado con la clase `--leaving` durante estos milisegundos y recién entonces se
  * desmonta. Debe coincidir con la duración de la transición del SCSS.
  */
-const FLYOUT_LEAVE_MS = 120;
+const FLYOUT_LEAVE_MS = 160;
 
 @Component({
   selector: 'app-sidebar',
@@ -82,6 +85,12 @@ export class SidebarComponent implements OnInit {
   private readonly flyoutKey = signal<string | null>(null);
   readonly flyoutTop = signal(0);
   readonly flyoutLeft = signal(0);
+  /**
+   * La altura, dentro del panel, a la que está el CENTRO de la fila que lo abrió: ahí va la punta de la
+   * flecha y desde ahí crece el panel (`--ws-flyout-anchor` en el SCSS). Medida, no supuesta: la fila
+   * cambia de alto con la densidad y con el badge.
+   */
+  readonly flyoutAnchor = signal(18);
 
   /** El panel sigue montado, pero ya se está yendo: es el estado que hace posible la animación de salida. */
   readonly flyoutLeaving = signal(false);
@@ -166,8 +175,12 @@ export class SidebarComponent implements OnInit {
     this.clearTimers();
     this.flyoutLeaving.set(false);
     const rect = trigger.getBoundingClientRect();
-    this.flyoutTop.set(rect.top);
-    this.flyoutLeft.set(rect.right + FLYOUT_GAP_PX);
+    // ★ Redondeado a píxel entero: el rect del trigger trae decimales (235.45, 525.8) y un panel en
+    // coordenadas fraccionarias pinta su borde de 1px repartido entre dos píxeles — borroso, y la
+    // flecha nunca empalma limpio con él.
+    this.flyoutTop.set(Math.round(rect.top));
+    this.flyoutLeft.set(Math.round(rect.right + FLYOUT_GAP_PX));
+    this.flyoutAnchor.set(Math.round(rect.height / 2));
     this.flyoutKey.set(key);
   }
 
@@ -241,14 +254,75 @@ export class SidebarComponent implements OnInit {
    */
   readonly assistant = inject(AssistantStore);
 
-  readonly navSections: NavSection[] = [
+  /**
+   * ★★ IT IS COMPUTED, BECAUSE THE FIRST ENTRY IS NOT THE SAME SCREEN FOR EVERYONE (KAN-92). The
+   * company dashboard needs Reports.ViewAll; whoever lacks it gets their OWN dashboard in that slot
+   * instead. One "home" entry, always the one that will actually open — a menu that lists both would
+   * offer most people a page that refuses them, which is the trap the comment below already names.
+   */
+  /**
+   * The sections that actually have something in them for THIS reader.
+   *
+   * ★★ A HEADING WITH NOTHING UNDER IT IS A PROMISE THE RAIL DOES NOT KEEP. Every item rides on
+   * `*hasPermission`, so a role holding none of a section's permissions still got the section LABEL:
+   * a Manager saw "OPERATIONS" and "SETTINGS" as headings over empty space, which reads as a menu
+   * that failed to load rather than one that has nothing to offer them.
+   *
+   * ★ THE FILTER IS THE SAME QUESTION `*hasPermission` ASKS, one level up. It has to be — two rules
+   * deciding the same visibility is how a section hides while its items would have shown.
+   *
+   * ★ A GROUP COUNTS WHEN ANY OF ITS CHILDREN DOES, which is what `children.some` is for: a collapsed
+   * Financials group with one reachable child still earns its section.
+   */
+  readonly visibleSections = computed<NavSection[]>(() =>
+    this.navSections().filter((section) => section.items.some((e) => this.canSeeEntry(e))),
+  );
+
+  /**
+   * Whether this reader has anything at all behind a rail entry.
+   *
+   * ★★ A GROUP IS VISIBLE WHEN ANY CHILD IS — NOT WHEN ITS OWN KEY MATCHES, and the difference was
+   * hiding a screen somebody was entitled to. The Financials group carried `Reports.ViewAll` while one
+   * of its children, `/terminated-accounts`, asks for `Ledger.Read`. A Manager holds Ledger.Read and
+   * not Reports.ViewAll, so the group vanished and took the one page they could open with it: a
+   * permission granted in `RolePermissions.cs` that no menu entry anywhere exposed.
+   *
+   * ★ ONE RULE, ASKED IN THREE PLACES — the section filter, the expanded group and the collapsed
+   * flyout. Two copies of this question is how a group hides while its children would have shown.
+   */
+  canSeeEntry(entry: NavEntry): boolean {
+    return this.isNavGroup(entry)
+      ? entry.children.some((child) => this.currentUser.hasPermission(child.permission))
+      : this.currentUser.hasPermission(entry.permission);
+  }
+
+  /**
+   * ★ THE SETTINGS BLOCK IS NOT PART OF `navSections`, so the filter above cannot reach it — it is
+   * written out by hand at the foot of the rail. Same question, asked where it lives.
+   */
+  readonly showsSettingsSection = computed(() =>
+    [this.integrationsItem, this.settingsItem].some((i) => this.currentUser.hasPermission(i.permission)),
+  );
+
+  readonly navSections = computed<NavSection[]>(() => [
     {
       sectionKey: 'NAV.SECTION_OVERVIEW',
       items: [
-        { path: '/dashboard', labelKey: 'NAV.DASHBOARD', icon: 'dashboard', permission: 'Payees.Read' },
+        // KAN-92. THE PERMISSION HERE MUST BE THE ONE THE SCREEN ACTUALLY ENFORCES. It said
+        // 'Payees.Read', which a Rep holds, while GetDashboardSummaryHandler requires
+        // 'Reports.ViewAll', which a Rep does not: the menu offered a page that refused them, and
+        // every visit raised a permission toast. A nav entry whose permission disagrees with its
+        // handler is not a menu, it is a trap.
+        this.currentUser.hasPermission('Reports.ViewAll')
+          ? { path: '/dashboard', labelKey: 'NAV.DASHBOARD', icon: 'dashboard', permission: 'Reports.ViewAll' }
+          // The permission is the one /api/me/dashboard really enforces, so the entry cannot offer a
+          // page that then refuses. Every assignable role holds it.
+          : { path: '/my-dashboard', labelKey: 'NAV.MY_DASHBOARD', icon: 'dashboard', permission: 'LedgerSummary.Read' },
         // ★ ENTRADA PERMANENTE, NO SÓLO LA PRIMERA VEZ. El recorrido guiado es también el sitio donde
         // probar cosas sin miedo: se vuelve a él cuando hace falta, no cuando el producto lo ofrece.
-        { path: '/guided-tour', labelKey: 'NAV.GUIDED_TOUR', icon: 'bowl-chopsticks', permission: 'Payees.Read' },
+        // The guided tour builds a plan and a payee end to end, so it needs the permissions to
+        // create them — not merely to read a payee.
+        { path: '/guided-tour', labelKey: 'NAV.GUIDED_TOUR', icon: 'bowl-chopsticks', permission: 'Plans.Create' },
       ],
     },
     {
@@ -281,7 +355,7 @@ export class SidebarComponent implements OnInit {
         },
       ],
     },
-  ];
+  ]);
 
   // The manual is NOT in this menu. It moved to the topbar, beside the user: it is help, not a place in
   // the product's navigation, and it sat oddly among Subscription / Integrations / Settings.

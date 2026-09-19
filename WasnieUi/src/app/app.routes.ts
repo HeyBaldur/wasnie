@@ -1,14 +1,16 @@
 import { Routes } from '@angular/router';
 import { planGuard } from './core/guards/plan.guard';
-import { hasPermissionGuard } from './core/auth/guards/has-permission.guard';
+import { hasPermissionGuard, hasAnyPermissionGuard } from './core/auth/guards/has-permission.guard';
 import { subscriptionGuard } from './core/guards/subscription.guard';
 import { authGuard } from './core/guards/auth.guard';
+import { companyDashboardGuard, landingRedirect } from './core/guards/landing.guard';
 import { environment } from '../environments/environment';
 
 export const routes: Routes = [
   {
+    // KAN-92: the landing depends on what the person can see. See landingRedirect.
     path: '',
-    redirectTo: 'dashboard',
+    redirectTo: landingRedirect,
     pathMatch: 'full',
   },
   {
@@ -37,16 +39,31 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     title: 'NAV.DASHBOARD',
-    canActivate: [planGuard, subscriptionGuard],
+    canActivate: [planGuard, subscriptionGuard, companyDashboardGuard],
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then(
         (m) => m.DashboardComponent
       ),
   },
   {
+    // The personal dashboard (KAN-92). No permission guard: it shows the caller their OWN figures and
+    // the server resolves whose they are from the token, so there is nothing here to be entitled to.
+    path: 'my-dashboard',
+    title: 'NAV.MY_DASHBOARD',
+    canActivate: [planGuard, subscriptionGuard],
+    loadComponent: () =>
+      import('./features/my-dashboard/my-dashboard.component').then(
+        (m) => m.MyDashboardComponent
+      ),
+  },
+  {
     path: 'plans',
     title: 'NAV.PLANS',
-    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Plans.Read')],
+    // KAN-93 bug 6. EITHER PERMISSION OPENS THE BRANCH, and the child routes narrow it from there:
+    // the list, the creation form and the rule editor still require `Plans.Read`, so a rep holding
+    // only `Plans.ReadOwn` reaches a plan of theirs and nothing else. The nav entry keeps asking for
+    // `Plans.Read`, so the catalogue stays out of their menu.
+    canActivate: [planGuard, subscriptionGuard, hasAnyPermissionGuard('Plans.Read', 'Plans.ReadOwn')],
     loadChildren: () =>
       import('./features/plans/plans.routes').then((m) => m.plansRoutes),
   },
@@ -97,6 +114,16 @@ export const routes: Routes = [
     canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Audit.Read')],
     loadChildren: () =>
       import('./features/audit-logs/audit-logs.routes').then((m) => m.auditLogsRoutes),
+  },
+  {
+    // KAN-32. Users.Read, not Users.Manage: a CompManager may see the roster and cannot change it.
+    // The guard is what makes hiding the menu entry more than decoration — without it a typed URL
+    // would still render a page full of colleagues' addresses.
+    path: 'users',
+    title: 'NAV.USERS',
+    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Users.Read')],
+    loadChildren: () =>
+      import('./features/users/users.routes').then((m) => m.usersRoutes),
   },
   {
     path: 'payouts',

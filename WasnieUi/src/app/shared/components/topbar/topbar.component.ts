@@ -58,6 +58,12 @@ export class TopbarComponent {
     void this.router.navigateByUrl('/audit-logs');
   }
 
+  /** The users screen (KAN-32). Closes the dropdown first, as goToAuditLogs does. */
+  goToUsers(): void {
+    this.dropdownOpen.set(false);
+    void this.router.navigateByUrl('/users');
+  }
+
   toggleDropdown(event: MouseEvent): void {
     event.stopPropagation();
     this.dropdownOpen.update((v) => !v);

@@ -10,6 +10,16 @@ export interface ProfileDto {
   hasPendingEmailChange: boolean;
   companyName: string;
   organizationSlug: string;
+
+  /**
+   * Whether an administrator maintains this person's name and sign-in address rather than they
+   * themselves - true when an administrator attached this login to a payee record.
+   *
+   * THE SCREEN HIDES THE TWO CARDS AND THE SERVER REFUSES ANYWAY. `PUT /api/profile/name` and the
+   * email-change request carry no permission at all (self-service by design), so hiding alone would
+   * be a screen saying no in front of an endpoint saying yes.
+   */
+  identityManagedByAdministrator: boolean;
 }
 
 export interface TwoFactorStatusDto {

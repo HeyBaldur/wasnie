@@ -22,6 +22,31 @@ public static class Permission
     /// </summary>
     public const string PlansStopRule = "Plans.StopRule";
 
+    /// <summary>
+    /// Reading the plan and the RULES of a plan one is personally assigned to (KAN-93, bug 6).
+    ///
+    /// ★★ DISCLOSURE IS NOT TRANSPARENCY, AND THIS PERMISSION IS THE DIFFERENCE. Handing somebody a
+    /// plan document tells them what they were promised; letting them read the rate table, the tiers,
+    /// the trigger, the cap and the floor lets them CHECK THE ARITHMETIC on their own payslip. A rep
+    /// who cannot do the second keeps a spreadsheet of their own — "shadow accounting", the clearest
+    /// symptom of a compensation tool nobody believes. The product already claims transparency as its
+    /// differentiator (see <see cref="LedgerRead"/>); this is the half that makes the claim true.
+    ///
+    /// ★★ IT IS NOT <see cref="PlansRead"/> AND MUST NEVER BE WIDENED INTO IT. That one opens the
+    /// tenant's WHOLE CATALOGUE — every plan of every team, the version history, the simulator and the
+    /// multi-plan payee lookup. This one buys the plan behind the holder's OWN assignments and nothing
+    /// else; which plans those are is <c>IPlanAccessGuard</c>'s question, exactly as PayeeAccessGuard
+    /// answers "whose payee". Permission says WHAT may be received, the guard says WHOSE.
+    ///
+    /// ★★ IT IS READ-ONLY AND CARRIES NO ADMINISTRATION. Versions, assignments, processing, archiving,
+    /// cloning and the rule brake are compensation CONFIGURATION — somebody else's job, and in the case
+    /// of the assignments tab, other people's data. Granting this must not grant any of them.
+    ///
+    /// ★ REP ONLY, FOR NOW. KAN-93 covers the Sales Rep; a Manager explaining a reduced payment would
+    /// plausibly want the same view, but that is a separate decision with its own owner.
+    /// </summary>
+    public const string PlansReadOwn = "Plans.ReadOwn";
+
     public const string QuotasRead = "Quotas.Read";
     public const string QuotasSet = "Quotas.Set";
     public const string QuotasUpdate = "Quotas.Update";
@@ -137,4 +162,26 @@ public static class Permission
 
     // Connecting a CRM exposes the tenant's data to a third party — restricted to tenant admins.
     public const string IntegrationsManage = "Integrations.Manage";
+
+    /// <summary>
+    /// Seeing who has access to the tenant, and which invitations are outstanding.
+    ///
+    /// ★ SEPARATE FROM <see cref="UsersManage"/> because the two answer different questions. Reading
+    /// the list is how a CompManager works out who to ask about a pay run; handing somebody a login is
+    /// not part of that job. The same split as Ledger.Read against Ledger.Adjust.
+    /// </summary>
+    public const string UsersRead = "Users.Read";
+
+    /// <summary>
+    /// Inviting, revoking, deactivating and changing somebody's role (KAN-32).
+    ///
+    /// ★★ ONE PERMISSION FOR ALL FOUR, AND ON PURPOSE. They are the same power wearing four verbs:
+    /// whoever can invite a TenantAdmin can already grant themselves anything, so withholding "change
+    /// role" from them would protect nothing. Splitting it would suggest a boundary that does not
+    /// exist. This is the opposite case to Payouts.MarkPaid against Payouts.Discard, where the two
+    /// genuinely are different authorities over money.
+    ///
+    /// ★ TENANT ADMIN ONLY. A CompManager runs compensation; they do not decide who works here.
+    /// </summary>
+    public const string UsersManage = "Users.Manage";
 }

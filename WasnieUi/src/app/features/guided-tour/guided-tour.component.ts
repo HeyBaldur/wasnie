@@ -5,6 +5,7 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom, throwError } from 'rxjs';
+import { CurrentUserService } from '../../core/auth/current-user.service';
 import {
   SelectOption,
   WsBadgeComponent,
@@ -82,6 +83,7 @@ export class GuidedTourComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   readonly store = inject(GuidedTourStore);
   private readonly settingsApi = inject(SettingsApiService);
+  private readonly currentUser = inject(CurrentUserService);
 
   readonly resetting = signal(false);
 
@@ -299,10 +301,16 @@ export class GuidedTourComponent implements OnInit {
 
     // Una lectura fallida deja la lista vacía: se aplican los valores por defecto de Payees y, si el
     // servidor exige algo más, el error del paso ya dice qué.
-    this.settingsApi.getFieldRequirements().subscribe({
-      next: requirements => this.fieldRequirements.set(requirements),
-      error: () => this.fieldRequirements.set([]),
-    });
+    // ★★ NOT ASKED FOR WITHOUT Settings.Update. `GetFieldRequirements` requires it — a WRITE permission
+    // guarding a read — and only TenantAdmin holds it, so every other role opening the tour took a 403
+    // and left a PermissionDenied audit row behind, for a request whose failure is already handled.
+    // The fallbacks below are what the tour uses either way, so nothing is lost by not asking.
+    if (this.currentUser.hasPermission('Settings.Update')) {
+      this.settingsApi.getFieldRequirements().subscribe({
+        next: requirements => this.fieldRequirements.set(requirements),
+        error: () => this.fieldRequirements.set([]),
+      });
+    }
 
     this.ruleDef.loadCatalogs();
     this.resetRuleForm();

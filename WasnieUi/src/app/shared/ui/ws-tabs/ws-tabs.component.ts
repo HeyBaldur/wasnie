@@ -36,6 +36,17 @@ export class WsTabsComponent {
    */
   readonly variant = input<'group' | 'header'>('group');
 
+  /**
+   * Marca la pestaña abierta con un check verde y la tiñe del color de marca.
+   *
+   * ★ OPCIONAL Y APAGADO POR DEFECTO. Donde las pestañas son navegación entre dos vistas de la misma
+   * tarjeta, un check sobraría: no se confirma nada, se mira otra cosa. Se enciende cuando la
+   * pestaña es una ELECCIÓN que cambia el formulario de debajo — el acceso, donde elegir mal
+   * significa escribir credenciales en el formulario equivocado — y ahí la marca es lo que dice
+   * «ésta es la que estás rellenando».
+   */
+  readonly selectedCheck = input(false);
+
   select(value: string): void {
     this.value.set(value);
   }

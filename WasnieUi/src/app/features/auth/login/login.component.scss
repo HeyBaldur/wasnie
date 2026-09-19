@@ -168,6 +168,31 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  // POC. El fondo del panel lo pintaba la fotografía; ahora lo pinta el propio panel, y el campo de
+  // nodos va encima.
+  //
+  // ★ OSCURO EN LOS TRES TEMAS, A PROPÓSITO. Este panel nunca siguió al tema: llevaba una foto con
+  // un velo negro y texto blanco encima. La primera versión lo montó sobre `--color-base` y en tema
+  // claro el panel salió casi blanco, con los nodos blancos invisibles y el titular ilegible.
+  //
+  // ★ EL VIOLETA DEL LOGO, NO EL AZUL DE MARCA. Acceso y alta son las dos puertas de entrada al
+  // producto y comparten el color de la marca; el azul se queda en las pantallas de recuperación,
+  // que son utilitarias. El acento vale lo mismo en los tres temas, así que el panel no cambia de
+  // luminosidad al cambiar de tema.
+  // ★ EL RESPLANDOR VA DONDE ESTÁ EL PLANETA, no en el centro del panel. Centrado, iluminaba el
+  // lado vacío y la silueta se perdía en el lavado; detrás del planeta hace lo contrario, recorta
+  // el borde contra el negro. Si se mueve el centro de la esfera, este punto se mueve con él.
+  background:
+    radial-gradient(
+      circle at 106% 46%,
+      color-mix(in srgb, var(--color-accent-violet) 34%, transparent) 0%,
+      transparent 68%
+    ),
+    linear-gradient(160deg,
+      color-mix(in srgb, var(--color-accent-violet) 12%, black) 0%,
+      black 45%,
+      color-mix(in srgb, var(--color-accent-violet) 10%, black) 100%
+    );
 }
 
 .auth-page__hero-bg {
@@ -184,10 +209,10 @@
   inset: 0;
   background: linear-gradient(
     to bottom,
-    rgba(0, 0, 0, 0.18) 0%,
-    rgba(0, 0, 0, 0.10) 40%,
-    rgba(0, 0, 0, 0.65) 75%,
-    rgba(0, 0, 0, 0.82) 100%
+    rgba(0, 0, 0, 0.10) 0%,
+    rgba(0, 0, 0, 0.06) 40%,
+    rgba(0, 0, 0, 0.62) 75%,
+    rgba(0, 0, 0, 0.84) 100%
   );
 }
 
@@ -293,4 +318,55 @@
     background: transparent;
     padding: 0;
   }
+}
+
+// KAN-93. The Organization identifier recovery link, riding on the end of the field's hint line.
+// Inline rather than on its own row: it is a footnote to the hint, and a separate line would give it
+// the weight of a primary action on a form whose primary action is signing in.
+.login__hint-link {
+  margin-left: var(--space-1);
+  color: var(--color-brand);
+  font-weight: 600;
+  text-decoration: underline;
+
+  &:hover { color: var(--color-brand-hover); }
+}
+
+/* ─── Tipo de usuario (pestañas) ─── */
+
+// El bloque se agrupa con menos aire del que separa los campos entre sí: la etiqueta, las pestañas
+// y la descripción son UNA cosa, y el hueco del formulario (`--space-5`) las habría desarmado.
+.login__user-type {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.login__user-type-label {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+// La descripción de la pestaña abierta. Es la mitad que explica QUÉ hace cada una; sin ella las
+// pestañas serían dos palabras y el usuario tendría que adivinar en cuál entra.
+.login__user-type-desc {
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+// El campo del identificador y su pista viajan juntos, igual que el bloque de arriba.
+.login__organization {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.login__hint {
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
 }

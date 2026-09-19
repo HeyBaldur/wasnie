@@ -1,0 +1,239 @@
+<app-shell [refreshOnEnter]="store">
+  <ws-page-layout
+    icon="dashboard"
+    titleSize="lg"
+    [title]="greetingKey() | translate: { name: greetingNamePart() }"
+    [subtitle]="'MY_DASHBOARD.SUBTITLE' | translate"
+  >
+    <!-- KAN-98. The window that governs THIS WHOLE SCREEN, not one block of it.
+         A person could not look at their own pay for a closed month: the money was all-time and the
+         quotas were whatever was running today, so "how much was I paid two months ago" - the single
+         most ordinary question somebody has about their own commission - had nowhere to be asked. The
+         administrator's dashboard has had this control since KAN-62; this is the same control, the same
+         primitive and the same default (the whole current month), because the two screens answering the
+         same question differently is how they start to disagree. -->
+    <ws-date-range-picker
+      slot="actions"
+      class="range-picker"
+      align="end"
+      labelPosition="inline"
+      [formControl]="rangeControl"
+      [label]="'DASHBOARD.RANGE_LABEL' | translate"
+    />
+
+    <!-- ★★ FOUR STATES, NEVER FOLDED INTO ONE. Loading, failed, not-linked and real figures each get
+         their own block: three of them would otherwise be drawn as a page of zeros, and a zero on a
+         pay screen is read as "you earned nothing". -->
+    @if (store.error()) {
+      <ws-empty-state
+        icon="alert-triangle"
+        titleKey="MY_DASHBOARD.ERROR_TITLE"
+        descKey="MY_DASHBOARD.ERROR_DESC"
+      />
+    } @else if (store.linked() === false) {
+      <!-- C3: the screen says what the system did, and who can undo it. -->
+      <ws-empty-state
+        icon="user"
+        titleKey="MY_DASHBOARD.UNLINKED_TITLE"
+        descKey="MY_DASHBOARD.UNLINKED_DESC"
+      />
+    } @else {
+
+      <!-- ── Sales the system cannot pay on yet (KAN-94) ──────────────────────
+           ★★ IT SITS ABOVE THE MONEY, BECAUSE IT QUALIFIES IT. Every figure below is built from
+           payouts, and a sale that cannot be processed produces no credit and therefore no payout —
+           so the cards are blind to it. Somebody with a €5,000 sale to their name and no plan
+           assignment read this page as "I have earned nothing". Placed underneath, the correction
+           would arrive after the wrong conclusion.
+
+           ★★ NO AMOUNT, NO DATE, NO REASON. A large number on a pay screen is read as "I am owed
+           this", and what they are owed is unknowable until an administrator finishes the setup — it
+           may be nothing. The reason (missing assignment / currency mismatch) is tenant configuration
+           this reader cannot act on. Their one available action is the sentence itself. §C3.
+
+           ★ AND IT IS NOT AN ERROR STATE. The sale is safely recorded; what is missing is setup. The
+           wording says that, and the tone is a warning rather than a failure. -->
+      @if (store.salesAwaitingSetup() > 0) {
+        <ws-card padding="md" class="my-dash__pending-card">
+          <div class="my-dash__pending">
+            <app-icon name="alert-triangle" [size]="20" class="my-dash__pending-icon" />
+            <div class="my-dash__pending-text">
+              <h3 class="my-dash__pending-title">
+                {{ 'MY_DASHBOARD.AWAITING_SETUP_TITLE' | translate: { count: store.salesAwaitingSetup() } }}
+              </h3>
+              <p class="my-dash__pending-desc">{{ 'MY_DASHBOARD.AWAITING_SETUP_DESC' | translate }}</p>
+            </div>
+          </div>
+        </ws-card>
+      }
+
+      <!-- ── Money ───────────────────────────────────────────────────────────
+           ★★ STRUCTURAL TWINS OF THE COMPANY DASHBOARD'S COMMISSION CARDS. Same ws-card, same
+           metric-card blocks, same figure typography, same compact-plus-exact value row — because the
+           rules live in `styles/_metric-cards.scss` and are had by writing the markup, not by copying
+           CSS. Two screens showing the same kind of figure must be identical, not similar.
+
+           One block per currency, and they are never summed: adding euros to zlotys invents a number. -->
+      @for (balance of store.balances(); track balance.currency) {
+        <div class="my-dash__section-hd">
+          <h2 class="my-dash__section-title">{{ 'MY_DASHBOARD.MONEY_TITLE' | translate }}</h2>
+          <!-- THE SECTION CHIP USED TO SAY "all time" FOR ALL FOUR CARDS, and with a window in play
+               that is now true of two of them and false of the other two. It states the window instead,
+               and each card declares its own scope below - because Earned and Paid move with the dates
+               while Awaiting and You owe cannot (the ledger has no period dimension at all: "what did
+               they owe in March" is not a question the data can answer). One label covering both kinds
+               would be one field meaning two things on a pay screen. -->
+          <div class="my-dash__section-tags">
+            <ws-badge variant="neutral" size="sm">{{ balance.currency }}</ws-badge>
+            @if (appliedRangeLabel(); as label) {
+              <ws-badge variant="neutral" size="sm">{{ label }}</ws-badge>
+            }
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 w-full max-w-full mb-8">
+          @for (card of cards(balance); track card.key) {
+            <ws-card padding="md">
+              <div class="metric-card">
+                <div class="metric-card__hd">
+                  <h3 class="metric-card__title">{{ card.labelKey | translate }}</h3>
+                  <p class="metric-card__sub">{{ card.descKey | translate }}</p>
+                  <!-- Each figure says which days it covers. Two of the four move with the picker and
+                       two of them cannot, and nothing else on the card distinguishes them. -->
+                  <p class="metric-card__sub">
+                    <ws-badge variant="neutral" size="sm">{{ card.scopeKey | translate }}</ws-badge>
+                  </p>
+                </div>
+                <div class="mt-4 flex items-end justify-between gap-4 w-full flex-1">
+                  <div class="flex flex-col gap-1 min-w-0 flex-1">
+                    <!-- Zero is rendered as a figure, never as an em-dash or a blank: "nothing yet"
+                         and "we could not work it out" must not look the same. -->
+                    <div class="metric-card__value commission-card__value">
+                      {{ fmtCompact(card.value, balance.currency) }}
+                    </div>
+                    <span class="metric-card__value--full">
+                      {{ card.value | currencyFormat: balance.currency }}
+                    </span>
+                    <span class="metric-card__ccy">{{ balance.currency }}</span>
+                  </div>
+                </div>
+              </div>
+            </ws-card>
+          }
+        </div>
+
+        <!-- The token decides the sentence; the engine never sends prose. This is where the situation
+             is PHRASED, which is why none of the four figures above needs a colour to imply it. -->
+        <p class="commissions-closed-note">
+          <app-icon name="info" [size]="14" />
+          <span>{{ interpretationKey(balance) | translate }}</span>
+        </p>
+
+        @if (balance.disputedInPeriod > 0) {
+          <p class="commissions-closed-note">
+            <app-icon name="alert-triangle" [size]="14" />
+            <span>
+              {{ 'MY_DASHBOARD.DISPUTED_NOTE' | translate }}
+              <strong>{{ balance.disputedInPeriod | currencyFormat: balance.currency }}</strong>
+            </span>
+          </p>
+        }
+      }
+
+      @if (store.loading()) {
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 w-full max-w-full mb-8">
+          @for (slot of loadingSlots; track slot) {
+            <ws-card padding="md">
+              <div class="metric-card">
+                <div class="metric-card__hd">
+                  <span class="skeleton skeleton--text"></span>
+                </div>
+                <div class="mt-4"><span class="skeleton skeleton--num"></span></div>
+              </div>
+            </ws-card>
+          }
+        </div>
+      } @else if (store.linked() && !store.hasMoney()) {
+        <ws-card padding="md" class="my-dash__block">
+          <p class="my-dash__state">{{ 'MY_DASHBOARD.NO_MONEY_YET' | translate }}</p>
+        </ws-card>
+      }
+
+      <!-- ── Attainment ──────────────────────────────────────────────────────
+           ★★ THE SAME ROW THE PAYEE PAGE DRAWS, from `styles/_attainment-rows.scss`. It used to live
+           in that page's own stylesheet, where nothing else could reach it. -->
+      @if (!store.loading() && store.linked()) {
+        <div class="my-dash__section-hd">
+          <h2 class="my-dash__section-title">{{ 'MY_DASHBOARD.QUOTAS_TITLE' | translate }}</h2>
+        </div>
+
+        @if (!store.quotas().length) {
+          <ws-card padding="md" class="my-dash__block">
+            <p class="my-dash__state">{{ 'MY_DASHBOARD.QUOTAS_EMPTY' | translate }}</p>
+          </ws-card>
+        } @else {
+          <!-- ★★ THE SAME CARD THE COMPANY DASHBOARD DRAWS FOR ITS TRENDS, and now literally the same
+               rules: label, headline figure, delta pill, chart, explanation. It used to be a gauge
+               dial and a 4px bar, which read as a widget rather than a figure — and it could not look
+               like this, because every `.trend-card` rule was sealed inside the dashboard component
+               until they moved to `styles/_trend-card.scss`.
+
+               ★★ TWO BARS, TARGET AND ACHIEVED, which is exactly what `ws-hbar-chart` draws: it
+               compares a "prior" bar against a "current" one. The achieved bar is the current one, so
+               it gets the blue→violet gradient that glows; the target sits behind it in neutral. The
+               chart reads as "how far along that line am I", which is the only question this block
+               answers.
+
+               ★ THE COLOURS COME FROM TOKENS (chart-theme.ts), unlike the gauge it replaces, whose
+               four states were hardcoded hex and never matched the bar beside them. -->
+          @for (q of store.quotas(); track q.quotaId) {
+            <ws-card padding="md" class="trend-card-item">
+              <div class="trend-card">
+                <div class="trend-card__head">
+                  <div class="min-w-0 flex-1">
+                    <span class="trend-card__label">
+                      {{ q.planName }} · {{ q.periodStart | dateFormat }} – {{ q.periodEnd | dateFormat }}
+                    </span>
+                    <div class="trend-card__value">
+                      @if (isUnits(q)) {
+                        {{ q.achievedAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
+                      } @else {
+                        {{ q.achievedAmount | currencyFormat: q.currency }}
+                      }
+                    </div>
+                  </div>
+
+                  @if (hasTarget(q)) {
+                    <span class="trend-card__delta-pill flex-shrink-0" [class]="pillClass(q)">
+                      {{ 'ATTAINMENT.PCT_OF_TARGET' | translate: { pct: pctOfTarget(q) } }}
+                    </span>
+                  }
+                </div>
+
+                @if (hasTarget(q)) {
+                  <div class="trend-card__chart">
+                    <ws-hbar-chart [points]="attainmentPoints(q)" />
+                  </div>
+                  <p class="trend-card__note">{{ 'ATTAINMENT.NOTE' | translate }}</p>
+                } @else {
+                  <!-- ★ NO CHART WITHOUT A TARGET. A bar at zero accuses the reader of a result that
+                       is really a gap in the configuration, and they are the one person who cannot
+                       fix it. -->
+                  <p class="trend-card__note">{{ 'MY_DASHBOARD.NO_TARGET' | translate }}</p>
+                }
+              </div>
+            </ws-card>
+          }
+        }
+      }
+
+      <!-- ── Every movement, and why the balance is what it is ───────────────
+           ★ THE PANEL THE PAYEE PAGE ALREADY MOUNTS (§5.1). One rendering of the ledger, not two, so
+           the two screens cannot start telling different stories. The adjustment form inside it is
+           gated on Ledger.Adjust and is therefore invisible here. -->
+      @if (store.payeeId(); as payeeId) {
+        <app-payee-ledger-panel [payeeId]="payeeId" />
+      }
+    }
+  </ws-page-layout>
+</app-shell>

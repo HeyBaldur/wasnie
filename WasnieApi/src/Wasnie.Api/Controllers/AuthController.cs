@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -128,6 +128,33 @@ public sealed class AuthController(IMediator mediator) : ControllerBase
             return BadRequest(new { message = result.Error });
 
         return Ok(new { message = "If that email exists, a password reset link has been sent." });
+    }
+
+    /// <summary>
+    /// "I forgot my Organization identifier" (KAN-93).
+    ///
+    /// ★★ THE ANSWER IS ALWAYS THIS SENTENCE, whatever happened inside. Whether the address exists,
+    /// administers something, or administers nothing, the response is identical — otherwise anybody
+    /// could feed it addresses and read back which companies use the product and who runs them. The
+    /// identifier itself leaves only by email.
+    ///
+    /// ★ ITS OWN LIMITER BUCKET, not the password-reset one. A person who genuinely cannot get in may
+    /// well try both within a minute, and burning one quota with the other would lock them out of the
+    /// second door while they are standing at the first.
+    /// </summary>
+    [HttpPost("request-organization-identifier")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth-org-identifier")]
+    public async Task<IActionResult> RequestOrganizationIdentifier(
+        [FromBody] RequestOrganizationIdentifierCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(new { message = "If that email belongs to an administrator, the identifier has been sent." });
     }
 
     [HttpPost("reset-password")]

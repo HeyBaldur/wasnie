@@ -37,10 +37,10 @@
   vertical-align: middle;
 }
 
+/* No margin of its own: it sits in a `.ws-cell-line`, whose gap spaces it. */
 .col-code {
   font-size: var(--font-size-12);
   color: var(--color-text-tertiary);
-  margin-left: var(--space-1);
 }
 
 .col-ref {
@@ -54,23 +54,17 @@
   }
 }
 
-/* Inline, not block: the copy button that follows has to sit on the same line as the reference,
-   and the description/product lines below are block elements that break the line on their own. */
-.col-ref__number {
-  display: inline;
-}
-
-/* ★ THE COPY BUTTONS BELONG TO THE TEXT, NOT BESIDE IT. The first version wrapped each value and
-   its button in a flex row, which made the name, the employee code and the button three siblings
-   competing for the cell's width: "(CEO-001)" was shoved to the far right of the column and the
-   name wrapped early to make room. Inline flow keeps the button behaving like a trailing character
-   of the reference or the name — it follows the last line wherever the text ends, and the original
-   column layout is untouched.
+/* ★★ THE COPY BUTTON RIDES A `.ws-cell-line` NOW (2026-09-19), and that reverses an earlier choice
+   on purpose. It used to flow inline after the text like a trailing character, which was right while
+   columns sized themselves — and wrong the moment a long reference arrived: the button dropped onto
+   a line of its own, or the column grew to hold it. With resizable, fixed-width columns the text
+   truncates with an ellipsis and the button (and the payee's employee code) stay pinned right after
+   it, never wrapping. The earlier worry — "(CEO-001)" shoved to the far right — does not come back:
+   the text is `flex: 0 1 auto`, so it only takes the width it needs.
 
    It fades in with the row: an icon pinned to every cell of a dense table competes with the values
    it exists to serve. */
 td ws-copy-button {
-  margin-left: var(--space-1);
   vertical-align: middle;
   opacity: 0;
   transition: opacity var(--transition-fast);
@@ -96,6 +90,10 @@ td ws-copy-button:focus-within {
    quieter product line without adding a whole column (keeps the table's density). */
 .col-ref__category {
   display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
   margin-top: var(--space-1);
   padding: 1px var(--space-2);
   font-size: var(--font-size-11);
@@ -114,9 +112,10 @@ td ws-copy-button:focus-within {
   font-weight: 400;
   color: var(--color-text-secondary);
   margin-top: var(--space-1);
-  white-space: normal;
-  word-break: break-word;
-  max-width: 220px;
+  /* One line that truncates; widening the column reveals the rest, the full text is on hover. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* What was sold — sits under the sale label, with the SKU as a quieter trailing token. */
@@ -127,9 +126,10 @@ td ws-copy-button:focus-within {
   font-weight: 400;
   color: var(--color-text-tertiary);
   margin-top: var(--space-1);
-  white-space: normal;
-  word-break: break-word;
-  max-width: 220px;
+  /* One line that truncates; widening the column reveals the rest, the full text is on hover. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .col-ref__sku {
@@ -145,9 +145,10 @@ td ws-copy-button:focus-within {
   font-style: italic;
   color: var(--color-text-tertiary);
   margin-top: var(--space-1);
-  white-space: normal;
-  word-break: break-word;
-  max-width: 220px;
+  /* One line that truncates; widening the column reveals the rest, the full text is on hover. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .col-secondary {

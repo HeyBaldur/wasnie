@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
 
@@ -47,6 +48,38 @@ public sealed class ResendEmailService(
         CancellationToken cancellationToken = default)
     {
         var (subject, html) = EmailTemplates.AccountLocked(firstName, forgotPasswordUrl, minutes, language);
+        return SendAsync(to, subject, html, cancellationToken);
+    }
+
+    public Task SendOrganizationIdentifierAsync(
+        string to,
+        string firstName,
+        IReadOnlyList<OrganizationIdentifier> organizations,
+        string loginUrl,
+        string language,
+        CancellationToken cancellationToken = default)
+    {
+        // The tenant id is dropped here on purpose: it belongs to the audit entry, never to the
+        // message. The template is given only what the reader is meant to see.
+        var (subject, html) = EmailTemplates.OrganizationIdentifier(
+            firstName,
+            organizations.Select(o => (o.Name, o.Slug)).ToList(),
+            loginUrl,
+            language);
+
+        return SendAsync(to, subject, html, cancellationToken);
+    }
+
+    public Task SendInvitationAsync(
+        string to,
+        string inviterName,
+        string companyName,
+        string acceptUrl,
+        int expiryDays,
+        string language,
+        CancellationToken cancellationToken = default)
+    {
+        var (subject, html) = EmailTemplates.Invitation(inviterName, companyName, acceptUrl, expiryDays, language);
         return SendAsync(to, subject, html, cancellationToken);
     }
 

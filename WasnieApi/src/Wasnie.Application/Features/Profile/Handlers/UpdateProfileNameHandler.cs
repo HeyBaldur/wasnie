@@ -8,9 +8,23 @@ using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Features.Profile.Handlers;
 
+/// <summary>
+/// Renames the signed-in person — unless somebody else maintains that name.
+///
+/// ★★ THE REFUSAL IS THE SERVER'S, NOT THE SCREEN'S. The profile page hides the name card for an
+/// administered account, and hiding is where this kind of thing usually stops; this endpoint carries
+/// no permission at all (it is self-service by design, <c>[Authorize]</c> and nothing more), so
+/// without the check here a hidden card is a suggestion and <c>PUT /api/profile/name</c> is still
+/// open to anybody with a session. The same mistake as hiding a menu entry and leaving the URL
+/// reachable, which this product has already made once.
+///
+/// ★ AND IT REFUSES BEFORE WRITING ANYTHING. The claim update and the audit row both sit after it, so
+/// a refused rename leaves no trace of a half-applied one.
+/// </summary>
 public sealed class UpdateProfileNameHandler(
     ICurrentUserService currentUser,
     IIdentityService identityService,
+    IApplicationDbContext dbContext,
     IAuditService auditService,
     ITenantContext tenantContext)
     : IRequestHandler<UpdateProfileNameCommand, Result<bool>>
@@ -20,6 +34,11 @@ public sealed class UpdateProfileNameHandler(
         var userId = currentUser.UserId;
         if (string.IsNullOrEmpty(userId))
             return Result<bool>.Failure("Not authenticated.");
+
+        // ★ An administered identity is the administrator's to change, in Users — not this person's.
+        if (await AdministeredIdentity.IsAdministeredAsync(dbContext, userId, cancellationToken))
+            return Result<bool>.Failure(
+                "Your name is maintained by an administrator of this workspace. Ask them to change it.");
 
         var oldFirst = await identityService.GetClaimAsync(userId, "given_name") ?? string.Empty;
         var oldLast = await identityService.GetClaimAsync(userId, "family_name") ?? string.Empty;

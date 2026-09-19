@@ -1,0 +1,98 @@
+<div class="auth-page">
+  <!-- LEFT: form panel -->
+  <div class="auth-page__form">
+    <div class="auth-page__form-top">
+      <app-language-toggle />
+      <app-theme-toggle />
+    </div>
+
+    <div class="auth-page__form-body">
+      <div class="auth-page__brand">
+        <img src="incentra_logo.png" alt="Incentra" class="auth-page__brand-logo" />
+      </div>
+
+      <div class="auth-page__card">
+        @if (sent()) {
+          <div class="fp-badge fp-badge--success" aria-hidden="true">
+            <app-icon name="mail" [size]="22" />
+          </div>
+          <h1 class="auth-page__card-title">{{ 'FORGOT_ORGANIZATION.SENT_TITLE' | translate }}</h1>
+          <!-- ★ IT SAYS "IF", AND IT SAYS WHO. The message is identical whether anything was sent, so
+               promising delivery would be a lie to everybody who is not an administrator — and they
+               are the majority of the people who will stand here. The second line gives them the
+               action that actually works: ask the person who has it. -->
+          <p class="auth-page__card-subtitle">{{ 'FORGOT_ORGANIZATION.SENT_DESC' | translate }}</p>
+          <p class="auth-page__card-subtitle">{{ 'FORGOT_ORGANIZATION.SENT_NON_ADMIN' | translate }}</p>
+
+          <div class="fp-links">
+            <a routerLink="/auth/login" class="fp-link">{{ 'AUTH.BACK_TO_LOGIN' | translate }}</a>
+          </div>
+        } @else {
+          <div class="fp-badge" aria-hidden="true">
+            <app-icon name="tenant" [size]="22" />
+          </div>
+          <h1 class="auth-page__card-title">{{ 'FORGOT_ORGANIZATION.TITLE' | translate }}</h1>
+          <p class="auth-page__card-subtitle">{{ 'FORGOT_ORGANIZATION.DESC' | translate }}</p>
+
+          <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
+            <ws-input
+              formControlName="email"
+              [label]="'AUTH.EMAIL' | translate"
+              type="email"
+              [error]="fieldError('email')"
+              placeholder="you@example.com"
+            />
+
+            <ws-button
+              type="submit"
+              variant="primary"
+              [fullWidth]="true"
+              [loading]="isSubmitting()"
+              class="auth-form__submit"
+            >
+              {{ 'FORGOT_ORGANIZATION.SUBMIT' | translate }}
+            </ws-button>
+          </form>
+
+          <div class="fp-links">
+            <a routerLink="/auth/login" class="fp-link">{{ 'AUTH.BACK_TO_LOGIN' | translate }}</a>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="auth-page__form-bottom">
+      <span class="auth-page__copyright">{{ 'AUTH.FOOTER_RIGHTS' | translate }}</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: hero panel -->
+  <div class="auth-page__hero">
+    <!-- IDENTIFICADOR OLVIDADO. Carriles de datos corriendo y una columna por la que todo pasa: los
+         registros se identifican al cruzarla y siguen. Es la tarea de esta pantalla. -->
+    <app-data-stream-field class="auth-page__hero-bg" />
+    <div class="auth-page__hero-overlay"></div>
+    <div class="auth-page__hero-inner">
+
+      <div class="auth-page__hero-brand">
+        <img src="incentra_logo.png" alt="Incentra" class="auth-page__hero-logo-img" />
+      </div>
+
+      <div class="auth-page__hero-bottom">
+        <h2 class="auth-page__headline">{{ 'AUTH.RECOVERY_HERO_TITLE' | translate }}</h2>
+        <p class="auth-page__subline">{{ 'AUTH.RECOVERY_HERO_SUBTITLE' | translate }}</p>
+        <div class="auth-page__trust-badges">
+          <div class="auth-page__trust-badge">
+            <img src="eu.png" alt="" class="auth-page__trust-badge-img" aria-hidden="true" />
+            <span>EU Compliant</span>
+          </div>
+          <div class="auth-page__trust-badge">
+            <img src="gdpr.png" alt="" class="auth-page__trust-badge-img" aria-hidden="true" />
+            <span>GDPR Ready</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

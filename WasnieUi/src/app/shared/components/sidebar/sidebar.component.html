@@ -2,7 +2,7 @@
   <div class="sidebar__header">
     <a class="sidebar__brand" routerLink="/dashboard" [title]="'NAV.DASHBOARD' | translate">
       <span class="sidebar__brand-monogram">
-        <img src="wasnie_logo.png" alt="Incentra ICM & SPM" />
+        <img src="incentra_logo.png" alt="Incentra ICM & SPM" />
       </span>
       @if (sidebarState.isExpanded()) {
         <span class="sidebar__brand-name">{{ 'APP.NAME' | translate }}</span>
@@ -19,7 +19,7 @@
 
   <div class="sidebar__scroll ws-scroll-thin">
   <div class="sidebar__body">
-    @for (section of navSections; track section.sectionKey) {
+    @for (section of visibleSections(); track section.sectionKey) {
       <div class="sidebar__section">
         @if (sidebarState.isExpanded()) {
           <span class="sidebar__section-label">{{ section.sectionKey | translate }}</span>
@@ -56,80 +56,87 @@
                   panel el `li` NO dispara `mouseleave` y el menú queda abierto mientras el usuario lo
                   recorre. Escuchando en el botón se cerraría al salir de la fila.
                 -->
-                <li
-                  *hasPermission="entry.permission"
-                  class="sidebar__nav-item"
-                  (mouseenter)="openFlyout(entry.key, groupTrigger)"
-                  (mouseleave)="scheduleCloseFlyout()"
-                >
-                  <button
-                    #groupTrigger
-                    class="sidebar__nav-link sidebar__nav-group-toggle"
-                    [class.sidebar__nav-link--active]="isGroupActive(entry.children)"
-                    [class.sidebar__nav-group-toggle--open]="isFlyoutOpen(entry.key)"
-                    (click)="toggleFlyout(entry.key, groupTrigger)"
-                    (keydown.escape)="closeFlyout()"
-                    [attr.aria-expanded]="isFlyoutOpen(entry.key)"
-                    aria-haspopup="true"
-                    type="button"
+                <!-- ★★ `canSeeEntry`, NOT THE GROUP'S OWN KEY. The group asked for Reports.ViewAll
+                     while `/terminated-accounts` under it asks for Ledger.Read — so a Manager, who
+                     holds the second and not the first, lost the whole group and with it the one page
+                     inside it they were entitled to open: a permission granted in RolePermissions.cs
+                     that no menu entry anywhere exposed. -->
+                @if (canSeeEntry(entry)) {
+                  <li
+                    class="sidebar__nav-item"
+                    (mouseenter)="openFlyout(entry.key, groupTrigger)"
+                    (mouseleave)="scheduleCloseFlyout()"
                   >
-                    <app-icon [name]="entry.icon" [size]="18" />
-                    <span class="sidebar__nav-label">{{ entry.labelKey | translate }}</span>
-                    <!-- ★ ONLY WHEN THERE IS SOMETHING: `financialsTotal` ya devuelve null en cero, así
-                         que el número aparece sólo si hay al menos uno.
-                         ★ Y NO SE VA AL ABRIR EL SUBMENÚ. La versión anterior lo escondía mientras el
-                         panel estaba abierto, para no repetir la suma junto a sus sumandos; con el
-                         flyout eso significa que el número desaparece justo cuando el puntero llega a
-                         la fila, y un contador que parpadea al pasar por encima se lee como un fallo. -->
-                    @if (groupBadgeFor(entry.key) !== null) {
-                      <span class="sidebar__badge">{{ groupBadgeFor(entry.key) }}</span>
-                    }
-                    <app-icon class="sidebar__nav-chevron" name="chevron-right" [size]="14" />
-                  </button>
-                  @if (isFlyoutOpen(entry.key)) {
-                    <!-- Posición fija anclada al trigger: ver la nota de `flyoutKey` en el componente. -->
-                    <div
-                      class="sidebar__flyout"
-                      [class.sidebar__flyout--leaving]="flyoutLeaving()"
-                      [style.top.px]="flyoutTop()"
-                      [style.left.px]="flyoutLeft()"
-                      role="menu"
+                    <button
+                      #groupTrigger
+                      class="sidebar__nav-link sidebar__nav-group-toggle"
+                      [class.sidebar__nav-link--active]="isGroupActive(entry.children)"
+                      [class.sidebar__nav-group-toggle--open]="isFlyoutOpen(entry.key)"
+                      (click)="toggleFlyout(entry.key, groupTrigger)"
                       (keydown.escape)="closeFlyout()"
+                      [attr.aria-expanded]="isFlyoutOpen(entry.key)"
+                      aria-haspopup="true"
+                      type="button"
                     >
-                      <!-- El nombre del grupo, ya traducido arriba: el panel flota lejos de su fila y
-                           sin este rótulo hay que acordarse de dónde salió. Sin clave nueva de i18n. -->
-                      <span class="sidebar__flyout-title">{{ entry.labelKey | translate }}</span>
-                      <ul class="sidebar__flyout-list">
-                        @for (child of entry.children; track child.path) {
-                          <li *hasPermission="child.permission" role="none">
-                            <a
-                              [routerLink]="child.path"
-                              class="sidebar__flyout-link"
-                              [class.sidebar__flyout-link--active]="isNavActive(child.path)"
-                              (click)="closeFlyout()"
-                              role="menuitem"
-                            >
-                              <app-icon [name]="child.icon" [size]="16" />
-                              <span class="sidebar__nav-label">{{ child.labelKey | translate }}</span>
-                              <!-- ★★ SÓLO A PARTIR DE UNO. El badge es rojo y significa "esto necesita
-                                   atención": un cero permanente junto a una cola vacía es una alarma que
-                                   no alarma de nada, y a fuerza de estar siempre ahí deja de mirarse.
-                                   La ausencia de badge YA dice "no hay nada".
-                                   ★ El contador sigue distinguiendo null (no cargado, o el usuario no
-                                   puede verlo) de 0 (cola limpia) — lo que cambia es que ninguno de los
-                                   dos se pinta. Misma regla que el punto del rail plegado, que ya
-                                   ocultaba el cero: dos formas de dibujar el mismo hecho no pueden
-                                   discrepar. -->
-                              @if ((badgeFor(child.path) ?? 0) > 0) {
-                                <span class="sidebar__badge">{{ badgeFor(child.path) }}</span>
-                              }
-                            </a>
-                          </li>
-                        }
-                      </ul>
-                    </div>
-                  }
-                </li>
+                      <app-icon [name]="entry.icon" [size]="18" />
+                      <span class="sidebar__nav-label">{{ entry.labelKey | translate }}</span>
+                      <!-- ★ ONLY WHEN THERE IS SOMETHING: `financialsTotal` ya devuelve null en cero, así
+                           que el número aparece sólo si hay al menos uno.
+                           ★ Y NO SE VA AL ABRIR EL SUBMENÚ. La versión anterior lo escondía mientras el
+                           panel estaba abierto, para no repetir la suma junto a sus sumandos; con el
+                           flyout eso significa que el número desaparece justo cuando el puntero llega a
+                           la fila, y un contador que parpadea al pasar por encima se lee como un fallo. -->
+                      @if (groupBadgeFor(entry.key) !== null) {
+                        <span class="sidebar__badge">{{ groupBadgeFor(entry.key) }}</span>
+                      }
+                      <app-icon class="sidebar__nav-chevron" name="chevron-right" [size]="14" />
+                    </button>
+                    @if (isFlyoutOpen(entry.key)) {
+                      <!-- Posición fija anclada al trigger: ver la nota de `flyoutKey` en el componente. -->
+                      <div
+                        class="sidebar__flyout"
+                        [class.sidebar__flyout--leaving]="flyoutLeaving()"
+                        [style.top.px]="flyoutTop()"
+                        [style.left.px]="flyoutLeft()"
+                        [style.--ws-flyout-anchor]="flyoutAnchor() + 'px'"
+                        role="menu"
+                        (keydown.escape)="closeFlyout()"
+                      >
+                        <!-- El nombre del grupo, ya traducido arriba: el panel flota lejos de su fila y
+                             sin este rótulo hay que acordarse de dónde salió. Sin clave nueva de i18n. -->
+                        <span class="sidebar__flyout-title">{{ entry.labelKey | translate }}</span>
+                        <ul class="sidebar__flyout-list">
+                          @for (child of entry.children; track child.path) {
+                            <li *hasPermission="child.permission" role="none">
+                              <a
+                                [routerLink]="child.path"
+                                class="sidebar__flyout-link"
+                                [class.sidebar__flyout-link--active]="isNavActive(child.path)"
+                                (click)="closeFlyout()"
+                                role="menuitem"
+                              >
+                                <app-icon [name]="child.icon" [size]="16" />
+                                <span class="sidebar__nav-label">{{ child.labelKey | translate }}</span>
+                                <!-- ★★ SÓLO A PARTIR DE UNO. El badge es rojo y significa "esto necesita
+                                     atención": un cero permanente junto a una cola vacía es una alarma que
+                                     no alarma de nada, y a fuerza de estar siempre ahí deja de mirarse.
+                                     La ausencia de badge YA dice "no hay nada".
+                                     ★ El contador sigue distinguiendo null (no cargado, o el usuario no
+                                     puede verlo) de 0 (cola limpia) — lo que cambia es que ninguno de los
+                                     dos se pinta. Misma regla que el punto del rail plegado, que ya
+                                     ocultaba el cero: dos formas de dibujar el mismo hecho no pueden
+                                     discrepar. -->
+                                @if ((badgeFor(child.path) ?? 0) > 0) {
+                                  <span class="sidebar__badge">{{ badgeFor(child.path) }}</span>
+                                }
+                              </a>
+                            </li>
+                          }
+                        </ul>
+                      </div>
+                    }
+                  </li>
+                }
               }
             } @else {
               <!-- Regular flat item -->
@@ -210,7 +217,9 @@
     <!-- The HubSpot auto-sync reminder used to sit here, above the SETTINGS block. It is a topbar pill now
          (`app-hubspot-sync-pill`): one line of fact does not need a card, and this was the only card in the
          aside. The SETTINGS items below are unchanged. -->
-    <div class="sidebar__section">
+    <!-- ★ WRITTEN OUT BY HAND, SO THE SECTION FILTER CANNOT REACH IT. Same question, asked where it
+         lives: a Manager held none of these and still got the heading over empty space. -->
+    <div class="sidebar__section" [hidden]="!showsSettingsSection()">
       @if (sidebarState.isExpanded()) {
         <span class="sidebar__section-label">{{ 'NAV.SECTION_SETTINGS' | translate }}</span>
       }

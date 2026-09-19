@@ -1,5 +1,6 @@
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { DashboardService } from '../services/dashboard.service';
 import { DashboardSummary } from '../models/dashboard.models';
 import { RefreshableStore } from '../../../shared/state/refreshable-store';
@@ -29,6 +30,7 @@ export function currentMonthRange(today: Date = new Date()): DashboardRange {
 @Injectable({ providedIn: 'root' })
 export class DashboardStore implements RefreshableStore {
   private readonly api = inject(DashboardService);
+  private readonly currentUser = inject(CurrentUserService);
 
   /**
    * The range that governs the page. Defaults to the WHOLE current month — first to last day, not
@@ -83,6 +85,19 @@ export class DashboardStore implements RefreshableStore {
   }
 
   private async _load(range: DashboardRange): Promise<void> {
+    // KAN-92. IT DOES NOT ASK FOR WHAT THIS READER CANNOT HAVE. The summary requires
+    // Reports.ViewAll; a Rep or a Manager reaching this screen used to fire the request anyway, take
+    // a 403, and get a permission toast for having done nothing but open a page. Checking first is
+    // the same rule the menu follows (§5.8): do not offer, do not ask, do not apologise.
+    //
+    // It is NOT a security control. The handler still enforces the permission; this only stops the
+    // client asking a question it already knows the answer to.
+    if (!this.currentUser.hasPermission('Reports.ViewAll')) {
+      this.summary.set(null);
+      this.loading.set(false);
+      return;
+    }
+
     this.loading.set(true);
     this.error.set(null);
     try {

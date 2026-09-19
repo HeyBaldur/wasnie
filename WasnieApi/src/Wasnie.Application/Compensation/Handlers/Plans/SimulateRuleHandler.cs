@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Authorization;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
@@ -26,6 +27,7 @@ namespace Wasnie.Application.Compensation.Handlers.Plans;
 public sealed class SimulateRuleHandler(
     IApplicationDbContext db,
     IAuthorizationService authorizationService,
+    IPlanAccessGuard planAccessGuard,
     IRuleCalculationExplainer explainer,
     IGuidGenerator guidGenerator,
     IClock clock)
@@ -34,8 +36,26 @@ public sealed class SimulateRuleHandler(
     public async Task<Result<RuleSimulationDto>> Handle(
         SimulateRuleQuery request, CancellationToken cancellationToken)
     {
-        // Reading a rule's behaviour is reading the plan. Same permission the screen already needs.
-        await authorizationService.RequireAsync(Permission.PlansRead, cancellationToken);
+        // ★★ TWO WAYS IN, THE SAME SHAPE AS GetPlanByIdHandler. Plans.Read simulates anything in the
+        // catalogue; Plans.ReadOwn simulates only the plans behind the reader's own assignments. The
+        // guard answers both, so asking RequireAsync first would refuse the very reader this admits.
+        //
+        // ★★ A REP SIMULATING THEIR OWN RULE IS TRANSPARENCY, NOT ADMINISTRATION. "What would I earn on
+        // a sale of 5,000" is the question the rule screen exists to answer for them, and it reads
+        // nothing: the definition is POSTed from the form and the handler computes over it. It touches
+        // no other payee, no transaction and no ledger row.
+        //
+        // ★ KAN-93 CLOSED THIS AND THE SCREEN NEVER FOUND OUT, which is the defect this replaces. The
+        // permission was narrowed deliberately, but the simulator panel kept rendering and kept firing
+        // — a rep typing an amount produced one 403 per keystroke, and a PermissionDenied audit row with
+        // it. Offering a control the server refuses is the rule §5.8 forbids; the alternatives were to
+        // hide the panel or to admit the reader, and admitting them is what the feature is for.
+        //
+        // ★ THE REFUSAL STILL LEAVES A ROW (§B1). RequireAsync writes the PermissionDenied entry and then
+        // throws; the guard alone would refuse silently, and a 403 that appears in no log cost an hour
+        // the first time. It cannot wrongly admit: a Plans.Read holder never reaches this line.
+        if (!await planAccessGuard.CanReadAsync(request.PlanId, cancellationToken))
+            await authorizationService.RequireAsync(Permission.PlansRead, cancellationToken);
 
         // ★ THE TENANT BOUNDARY IS THIS QUERY, not a check further down. CompensationPlans carries a
         // global query filter, so a plan belonging to another tenant simply is not found — there is

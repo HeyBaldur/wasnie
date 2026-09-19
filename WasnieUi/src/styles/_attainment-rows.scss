@@ -1,0 +1,225 @@
+/* ── The attainment-row language ─────────────────────────────────────────────── */
+/* */
+/* ★★ GLOBAL, FOR THE SAME REASON THE METRIC CARDS ARE. These rules lived inside */
+/* payee-detail.component.scss, where Angular's view encapsulation kept them to that one screen. The */
+/* moment a second screen showed the same thing — a gauge, a plan name, target and achieved — it */
+/* rendered the same markup and received none of the rules, and the tempting fix is to copy the CSS */
+/* across. That copy is how two screens meant to be identical start to drift. */
+/* */
+/* One definition, every screen: /payees/:id and /my-dashboard today. A third gets this look by */
+/* writing the markup, not by copying rules. */
+/* */
+/* ★ THIS FILE IS PROCESSED BY POSTCSS, NOT SASS. Single-line // comments break the build (an */
+/* apostrophe inside reads as an unterminated string) and the @import must sit flush with the others */
+/* in styles.scss, with no comment between them. Block comments only. */
+/* */
+/* Loaded from styles.scss. */
+
+.bento-gauge-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+
+  &:hover { background: var(--color-bg-surface-raised); }
+
+  & + & { border-top: 1px solid var(--color-border-subtle); }
+
+  /* A quota whose currency does not match its plan: marked, never hidden, and never silently */
+  /* dropped from the list. */
+  &--invalid {
+    border-left: 3px solid var(--color-warning);
+    padding-left: var(--space-2);
+    background: var(--color-warning-bg);
+    opacity: 0.85;
+  }
+
+  /* ★ NOT EVERY ROW IS A LINK. On the payee page the row opens the quota; on a person's own */
+  /* dashboard there is nothing they may open, so the row must not offer a hand cursor or a hover */
+  /* state promising a click that does nothing. */
+  &--static {
+    cursor: default;
+
+    &:hover { background: transparent; }
+  }
+}
+
+.bento-gauge-wrap {
+  flex-shrink: 0;
+  width: 88px;
+
+  &--faded { opacity: 0.45; }
+}
+
+/* ★ THE PLACE OF A GAUGE THAT MUST NOT BE DRAWN. A quota with no target set has an attainment of 0, */
+/* and 0 drawn as a gauge reads as a failure by the person looking at it — when it is really a gap in */
+/* the configuration, which they cannot fix. It keeps the row's geometry so the list stays aligned. */
+.bento-gauge-wrap--none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88px;
+  color: var(--color-text-tertiary);
+}
+
+.bento-gauge-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-2);
+
+  &__plan {
+    font-size: var(--font-size-13);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__period {
+    font-size: var(--font-size-11);
+    color: var(--color-text-tertiary);
+    margin-bottom: var(--space-2);
+  }
+
+  &__amounts {
+    display: flex;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-2);
+  }
+
+  &__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    font-size: var(--font-size-12);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The sentence that replaces the two figures when there is no target to compare against. */
+  &__note {
+    font-size: var(--font-size-12);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-2);
+  }
+}
+
+.bento-stat-lbl {
+  font-size: var(--font-size-10);
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── The attainment BAR ──────────────────────────────────────────────────────── */
+/* */
+/* THERE WERE TWO OF THESE, AND THAT IS WHY THEY LOOKED DIFFERENT. The company dashboard drew */
+/* `.attainment-bar` from dashboard.component.scss + dashboard-visual.scss; the quota row drew */
+/* `.bento-mini-bar` from payee-detail.component.scss. Same idea, two implementations, both sealed */
+/* inside their own component by Angular's view encapsulation — so the row was 4px and flat while the */
+/* dashboard's was 6px with an inset ring, a grow animation and a soft sheen. Nobody chose that; it is */
+/* just what happens when one thing is written twice. */
+/* */
+/* BOTH NAMES ARE KEPT AND POINT AT ONE RULE. Renaming the classes would mean editing three templates */
+/* for a change that is purely visual, and the markup of these screens is deliberately each other's */
+/* twin. A selector list costs nothing and makes the two literally the same rule rather than two rules */
+/* that agree today. */
+/* */
+/* Loaded from styles.scss, so /dashboard, /payees/:id and /my-dashboard all get it. Note the row's */
+/* bar had never reached /my-dashboard at all: those rules sat in the payee page's own stylesheet. */
+
+.attainment-bar,
+.bento-mini-bar__track {
+  /* WIDTH, NOT `flex: 1`, AND THE DIFFERENCE COSTS 70 PIXELS. The first cut used `flex: 1` because
+     that is what the row needs beside its percentage — but the dashboard's card lays its footer out
+     as a flex COLUMN, where grow applies to the cross axis: the bar stretched to 76px tall and the
+     card turned into a block of colour. The row gets its growth from its own rule below, where the
+     axis is known to be horizontal. */
+  width: 100%;
+  height: 6px;
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  /* The ring is what stops an empty track vanishing into the card on the light theme, where the
+     sunken surface and the card surface are very close together. */
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+}
+
+.attainment-bar__fill,
+.bento-mini-bar__fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-brand);
+  transition: width var(--transition-base);
+  /* Grows from the left rather than fading in: the eye reads the sweep as "this is how far along you
+     are", which is the one thing the bar is for. */
+  transform-origin: left;
+  animation: attainment-bar-grow 900ms cubic-bezier(0.2, 0.8, 0.2, 1) 250ms both;
+  background-image: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-bg-surface) 35%, transparent), transparent);
+  background-size: 200% 100%;
+}
+
+/* The two naming schemes for the same three states. `--warn`/`--ok` is the dashboard's, the
+   colour words are the row's; both resolve to the same tokens, so the amber on one screen is the
+   amber on the other. */
+.attainment-bar__fill--warn,
+.bento-mini-bar__fill.bento-bar--amber { background: var(--color-warning); }
+
+.attainment-bar__fill--ok,
+.bento-mini-bar__fill.bento-bar--green { background: var(--color-success); }
+
+.bento-mini-bar__fill.bento-bar--red  { background: var(--color-danger); }
+.bento-mini-bar__fill.bento-bar--blue { background: var(--color-brand); }
+
+/* The bar plus the figure beside it. */
+.bento-mini-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Here — and only here — the axis is horizontal, so growing is safe. `min-width: 0` lets the track
+   shrink below its 100% basis instead of pushing the percentage off the row. */
+.bento-mini-bar__track {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bento-mini-bar__pct {
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  /* Wide enough for "100%" so the bar's right edge does not jump between 9% and 100%. */
+  min-width: 40px;
+  text-align: right;
+  color: var(--color-text-primary);
+}
+
+.bento-mini-bar__pct.bento-bar--red   { color: var(--color-danger); }
+.bento-mini-bar__pct.bento-bar--amber { color: var(--color-warning); }
+.bento-mini-bar__pct.bento-bar--green { color: var(--color-success); }
+.bento-mini-bar__pct.bento-bar--blue  { color: var(--color-brand); }
+
+@keyframes attainment-bar-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Its own name, and its own guard. The dashboard's reduced-motion block is encapsulated to that
+   screen, so it could never have covered the row. */
+@media (prefers-reduced-motion: reduce) {
+  .attainment-bar__fill,
+  .bento-mini-bar__fill {
+    animation: none;
+    transition: none;
+  }
+}

@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Hangfire;
@@ -198,6 +198,44 @@ try
                 {
                     PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthPasswordReset:PermitLimit", 3),
                     Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthPasswordReset:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
+        // KAN-93 organization-identifier recovery: partitioned by IP (3 requests / 5 minutes).
+        //
+        // ★ ITS OWN BUCKET, NOT auth-password-reset. Somebody who cannot get in may try both within a
+        // minute; sharing a quota would mean the first attempt locks them out of the second remedy.
+        //
+        // ★ THE LIMITER IS THE HALF THAT STOPS VOLUME, and it is not the whole defence. It is keyed by
+        // IP, so it does nothing about one address being mailed from many of them — the handler keeps
+        // a five-minute per-address cooldown for that. Neither alone is enough, which is why there are
+        // two.
+        options.AddPolicy("auth-org-identifier", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthOrgIdentifier:PermitLimit", 3),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthOrgIdentifier:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
+        // KAN-32 invitations: the two PUBLIC routes, partitioned by IP (10 requests / 5 minutes).
+        //
+        // ★ ITS OWN BUCKET, NOT the login one. A person accepting an invitation is not signing in and
+        // must not be able to exhaust, or be blocked by, the quota that protects sign-in.
+        //
+        // ★ AND IT IS WHAT MAKES THE TOKEN UNGUESSABLE IN PRACTICE. The token itself is 256 bits, so
+        // guessing is hopeless already; this stops anybody bothering to try at volume.
+        options.AddPolicy("invitations", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:Invitations:PermitLimit", 10),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:Invitations:WindowSeconds", 300)),
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                     QueueLimit = 0,
                 }));

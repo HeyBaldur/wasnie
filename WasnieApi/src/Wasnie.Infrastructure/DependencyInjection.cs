@@ -281,6 +281,8 @@ public static class DependencyInjection
         // it caches "which payees may I see" for the duration of ONE request, and that answer belongs
         // to one principal. A singleton would serve the first caller's visibility to everybody after.
         services.AddScoped<IPayeeAccessGuard, Wasnie.Application.Authorization.PayeeAccessGuard>();
+        // KAN-93 bug 6. The same shape one level across: "which plans may this user read".
+        services.AddScoped<IPlanAccessGuard, Wasnie.Application.Authorization.PlanAccessGuard>();
 
         services.AddMemoryCache();
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();

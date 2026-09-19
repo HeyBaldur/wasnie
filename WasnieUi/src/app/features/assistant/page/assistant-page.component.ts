@@ -168,8 +168,14 @@ export class AssistantPageComponent implements OnInit {
   ngOnInit(): void {
     // The trigger normally does this from the topbar; a deep link can land here without ever having
     // rendered it, and the page must know whether the assistant is available before showing a chat.
-    void this.store.loadEntitlement();
-    void this.store.loadConversations();
+    // ★★ THE LIST WAITS FOR THE ENTITLEMENT, AND IT DID NOT. Both fired in parallel, so a workspace
+    // without the assistant got a 403 on /api/assistant/conversations and a red "You don't have
+    // permission to perform this action" toast — on top of the locked screen that already explains the
+    // situation kindly. Two messages contradicting each other, and a PermissionDenied audit row for a
+    // reader who did nothing but open a page (§5.8: do not offer, do not ask, do not apologise).
+    void this.store.loadEntitlement().then(() => {
+      if (this.store.entitled() !== false) void this.store.loadConversations();
+    });
 
     // SUBSCRIBE, don't snapshot: selecting another conversation in the rail changes only the route
     // PARAM, and Angular reuses this component when it does. A snapshot read in ngOnInit would load

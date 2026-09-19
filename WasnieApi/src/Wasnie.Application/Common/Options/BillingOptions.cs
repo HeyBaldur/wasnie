@@ -94,4 +94,24 @@ public sealed class SubscriptionPlanDefinition
 
     /// <summary>Maximum compensation plans. Null = unlimited.</summary>
     public int? MaxPlans { get; init; }
+
+    /// <summary>
+    /// Maximum people with a login in this tenant. Null = unlimited, and null is what every plan ships
+    /// with today (KAN-32).
+    ///
+    /// ★★ THE SEAT IS ACCESS CONTROL, NOT A BILLING UNIT, and that was decided rather than assumed:
+    /// the €299 plan of KAN-77 includes unlimited users, so nothing here is charged for. The parameter
+    /// exists so that the day a tier DOES want a cap it is one line of configuration instead of a
+    /// module rewrite — which is exactly what the 2026-09-02 note on that ticket asked for.
+    ///
+    /// ★ IT DOES NOT REPLACE <see cref="MaxPayees"/>, IT SITS BESIDE IT. A payee is a person who gets
+    /// paid; a user is a person who can sign in, and most payees are neither. Folding the two counts
+    /// together would charge twice for the one employee who is both.
+    ///
+    /// ★ NULL MEANS UNLIMITED HERE, following MaxPayees and MaxPlans above. Deliberately NOT the
+    /// fail-closed treatment given to Assistant:Provider: an unset provider means nobody chose, while
+    /// an unset cap means there is no cap — and refusing to let anyone in because a limit nobody wants
+    /// was left blank would be inventing a restriction out of silence.
+    /// </summary>
+    public int? MaxUsers { get; init; }
 }

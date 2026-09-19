@@ -9,6 +9,7 @@ import { IconComponent } from '../../shared/components/icon/icon.component';
 import { RefreshOnEnterDirective } from '../../shared/directives/refresh-on-enter.directive';
 import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../shared/pipes/date-format.pipe';
+import { WsEmptyStateComponent } from '../../shared/ui';
 import { HasPermissionPipe } from '../../shared/pipes/has-permission.pipe';
 import { DashboardStore, currentMonthRange, type DashboardRange } from './store/dashboard.store';
 import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, DealLostAlertItem, AmbiguousAttributionPayee, PlanWithoutLiveRules, DashboardActivityItem } from './models/dashboard.models';
@@ -52,6 +53,7 @@ import {
     CurrencyFormatPipe,
     DateFormatPipe,
     HasPermissionPipe,
+    WsEmptyStateComponent,
     WsCardComponent,
     WsBadgeComponent,
     WsPageLayoutComponent,

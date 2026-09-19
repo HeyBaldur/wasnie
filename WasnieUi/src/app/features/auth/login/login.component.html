@@ -10,7 +10,7 @@
 
     <div class="auth-page__form-body">
       <div class="auth-page__brand">
-        <img src="wasnie_logo.png" alt="Incentra" class="auth-page__brand-logo" />
+        <img src="incentra_logo.png" alt="Incentra" class="auth-page__brand-logo" />
       </div>
 
       <div class="auth-page__card">
@@ -42,6 +42,24 @@
             <div class="auth-form__error">{{ error() }}</div>
           }
 
+          <!-- Tipo de usuario primero: decide qué formulario se rellena debajo. -->
+          <div class="login__user-type">
+            <span class="login__user-type-label">{{ 'AUTH.USER_TYPE' | translate }}</span>
+            <ws-tabs
+              [tabs]="userTypeTabs"
+              [value]="userType()"
+              [selectedCheck]="true"
+              (valueChange)="selectUserType($event)"
+            />
+            <p class="login__user-type-desc">
+              @if (userType() === 'admin') {
+                {{ 'AUTH.USER_TYPE_ADMIN_DESC' | translate }}
+              } @else {
+                {{ 'AUTH.USER_TYPE_MEMBER_DESC' | translate }}
+              }
+            </p>
+          </div>
+
           <ws-input
             formControlName="email"
             [label]="'AUTH.EMAIL' | translate"
@@ -57,6 +75,29 @@
             [error]="fieldError('password')"
             placeholder="••••••••"
           />
+
+          <!-- KAN-91 lo puso siempre visible y opcional, porque aparecer a mitad del acceso leía
+               como que el formulario cambiaba de idea. La pestaña resuelve lo mismo sin el campo
+               huérfano: quien fue invitado lo elige y lo escribe (se le dio con la invitación), y
+               quien administra no lo ve nunca. Si la API pide el identificador de todos modos
+               (`ORGANIZATION_REQUIRED`), la pestaña cambia sola y el campo aparece aquí. -->
+          @if (userType() === 'member') {
+            <div class="login__organization">
+              <ws-input
+                formControlName="organizationId"
+                [label]="'AUTH.ORGANIZATION_ID' | translate"
+                [error]="fieldError('organizationId')"
+                placeholder="acme-corp"
+              />
+              <p class="login__hint">
+                {{ 'AUTH.ORGANIZATION_ID_HINT' | translate }}
+                <!-- KAN-93. The recovery link sits under the field it is about, not in the footer beside
+                     "Forgot password". Somebody who cannot remember this is looking AT this input, and a
+                     link two blocks away is a link they do not find. -->
+                <a routerLink="/auth/forgot-organization" class="login__hint-link">{{ 'AUTH.FORGOT_ORGANIZATION_ID' | translate }}</a>
+              </p>
+            </div>
+          }
 
           <ws-button
             type="submit"
@@ -85,12 +126,15 @@
 
   <!-- RIGHT: hero panel -->
   <div class="auth-page__hero">
-    <img class="auth-page__hero-bg" src="/auth/sign-in.jpg" alt="" aria-hidden="true" />
+    <!-- POC. La fotografía de archivo deja el sitio a un campo de nodos enlazados girando: es lo
+         que hace este producto — cuentas, planes y pagos conectados — dicho sin una foto de banco
+         de imágenes. El degradado de encima sigue siendo el que garantiza que el texto se lea. -->
+    <app-topology-field class="auth-page__hero-bg" />
     <div class="auth-page__hero-overlay"></div>
     <div class="auth-page__hero-inner">
 
       <div class="auth-page__hero-brand">
-        <img src="wasnie_logo.png" alt="Incentra" class="auth-page__hero-logo-img" />
+        <img src="incentra_logo.png" alt="Incentra" class="auth-page__hero-logo-img" />
       </div>
 
       <div class="auth-page__hero-bottom">

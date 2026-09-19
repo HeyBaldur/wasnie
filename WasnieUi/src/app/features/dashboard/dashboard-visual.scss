@@ -144,39 +144,27 @@ ws-card[variant="interactive"] ::ng-deep .ws-card--interactive:hover {
 }
 
 // ── Figures fade up when they arrive (after the skeleton) ──
+/* `.trend-card__value` is not in this list any more: it carries its own entrance in
+   styles/_trend-card.scss, so every screen that draws the card gets it. */
 .stat-card__value,
 .kpi-card__value,
-.trend-card__value,
 .commission-card__value {
   animation: dash-figure 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 // ── Bars grow from zero to their real width ──
-.attainment-bar__fill {
-  transform-origin: left;
-  animation: dash-grow 900ms cubic-bezier(0.2, 0.8, 0.2, 1) 250ms both;
-  background-image: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-bg-surface) 35%, transparent), transparent);
-  background-size: 200% 100%;
-}
-
-.attainment-bar {
-  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
-}
+//
+// ★ MOVED to `styles/_attainment-rows.scss` together with the bar itself, under its own keyframes
+// (`attainment-bar-grow`) and its own reduced-motion guard. The growth and the sheen were half of
+// what made this bar look finished and the quota row's look unfinished, and they could never reach
+// that row from here. The reduced-motion list below still names `.attainment-bar__fill`, which
+// remains correct: it switches the shared animation off on this screen.
 
 // ── Trend pill: a soft shine passes over it ──
-.trend-card__delta-pill {
-  position: relative;
-  overflow: hidden;
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--color-bg-surface) 55%, transparent) 50%, transparent 70%);
-    transform: translateX(-120%);
-    animation: dash-shine 3.2s ease-in-out 1s infinite;
-  }
-}
+//
+// ★ MOVED to `styles/_trend-card.scss` with the rest of the card, under its own keyframes. It was
+// half of what made this card look alive and the quota block look flat, and it could never have
+// reached that block from here.
 
 // ── Activity feed: a timeline ──
 .feed__header {

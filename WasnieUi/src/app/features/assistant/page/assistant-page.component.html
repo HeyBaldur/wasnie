@@ -5,11 +5,15 @@
       chat. The topbar trigger simply vanishes for a tenant without the assistant, but a URL can be
       reached from a bookmark or a link kept from a previous plan, so this says what to do about it.
     -->
+    <!-- ★★ ITS OWN KEY, NOT SUBSCRIPTION.UPGRADE_BTN. That one reads "Upgrade to {tier}" and
+         `ws-empty-state` translates an actionKey with NO parameters — so the placeholder rendered
+         literally on screen. A parameterised string reused where nothing can fill it is a template
+         hole with a user looking at it. -->
     <ws-empty-state
       icon="lock"
       titleKey="ASSISTANT.LOCKED_TOOLTIP"
       descKey="ASSISTANT.LOCKED_PAGE_DESC"
-      actionKey="SUBSCRIPTION.UPGRADE_BTN"
+      actionKey="ASSISTANT.LOCKED_CTA"
       actionRoute="/pricing"
       data-testid="assistant-page-locked"
     />

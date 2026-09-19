@@ -33,6 +33,8 @@ public interface IApplicationDbContext
     DbSet<EmailConfirmationToken> EmailConfirmationTokens { get; }
     DbSet<PasswordResetToken> PasswordResetTokens { get; }
     DbSet<EmailChangeToken> EmailChangeTokens { get; }
+    DbSet<Invitation> Invitations { get; }
+    DbSet<TenantUser> TenantUsers { get; }
 
     DbSet<CompensationPlan> CompensationPlans { get; }
     DbSet<Quota> Quotas { get; }

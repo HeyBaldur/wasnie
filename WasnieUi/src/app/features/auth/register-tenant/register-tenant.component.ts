@@ -1,4 +1,4 @@
-import { Component, inject, signal, DestroyRef } from '@angular/core';
+import { Component, computed, inject, signal, DestroyRef } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -6,6 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../../core/services/auth.service';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
+import { HorizonFieldComponent } from '../../../shared/components/auth-field/horizon-field.component';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
 import { LanguageToggleComponent } from '../../../shared/components/language-toggle/language-toggle.component';
 import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
@@ -21,7 +22,8 @@ function passwordStrength(ctrl: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-register-tenant',
   standalone: true,
-  imports: [ReactiveFormsModule, TranslatePipe, RouterLink, ThemeToggleComponent,
+  imports: [
+    HorizonFieldComponent,ReactiveFormsModule, TranslatePipe, RouterLink, ThemeToggleComponent,
     LanguageToggleComponent, WsInputComponent, WsButtonComponent],
   templateUrl: './register-tenant.component.html',
   styleUrl: './register-tenant.component.scss',
@@ -38,6 +40,21 @@ export class RegisterTenantComponent {
   readonly error = signal<string | null>(null);
   private slugUserEdited = false;
 
+  /**
+   * Lo que el equipo tendrá que escribir para entrar, con el ejemplo mientras el campo está vacío.
+   *
+   * ★ ES UNA VISTA PREVIA, NO UN SEGUNDO CAMPO. El identificador no se puede cambiar una vez creado
+   * el espacio de trabajo (`Tenant.Slug` se fija en `Tenant.Create` y ningún endpoint lo modifica),
+   * así que la última oportunidad de leerlo como lo leerá el equipo es ésta.
+   *
+   * ★ LA SEÑAL SE ACTUALIZA EN LOS DOS CAMINOS. El identificador se escribe a mano o se deriva del
+   * nombre, y la derivación usa `emitEvent: false` para no reactivar la detección de edición
+   * manual: escuchando sólo `valueChanges`, la vista previa se quedaría en blanco justo en el caso
+   * normal, que es no tocar el campo.
+   */
+  private readonly slug = signal('');
+  readonly slugPreview = computed(() => this.slug() || 'acme-corp');
+
   readonly form = this.fb.nonNullable.group({
     tenantName: ['', [Validators.required, Validators.maxLength(200)]],
     tenantSlug: ['', [Validators.required, Validators.pattern(/^[a-z0-9-]+$/)]],
@@ -52,7 +69,9 @@ export class RegisterTenantComponent {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(name => {
         if (!this.slugUserEdited) {
-          this.form.controls.tenantSlug.setValue(this.toSlug(name), { emitEvent: false });
+          const derived = this.toSlug(name);
+          this.form.controls.tenantSlug.setValue(derived, { emitEvent: false });
+          this.slug.set(derived);
         }
       });
 
@@ -61,6 +80,7 @@ export class RegisterTenantComponent {
       .subscribe(slug => {
         const derived = this.toSlug(this.form.controls.tenantName.value);
         this.slugUserEdited = slug !== derived && slug !== '';
+        this.slug.set(slug);
       });
   }
 

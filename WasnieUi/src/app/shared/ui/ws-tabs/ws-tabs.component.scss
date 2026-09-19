@@ -122,3 +122,32 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── `[selectedCheck]`: la pestaña abierta es una ELECCIÓN confirmada ────────────────────────────
+   Con la marca encendida, la pestaña abierta deja de leerse como «pulsada» y pasa a leerse como
+   «elegida»: se tiñe del color de marca, lleva su borde y arranca con un check verde. El resto de
+   las pestañas del producto no cambian — esto sólo se enciende donde la elección decide qué
+   formulario se rellena. */
+.ws-tabs--checked {
+  .ws-tabs__tab--active,
+  .ws-tabs__tab--active:hover {
+    /* Por encima del vecino que le solapa el borde: si no, el borde de marca aparecería cortado
+       justo por el lado que toca a la otra pestaña. */
+    position: relative;
+    z-index: 1;
+    background: var(--color-brand-subtle);
+    border-color: var(--color-brand);
+    color: var(--color-text-primary);
+  }
+
+  /* La pestaña que NO está elegida se retira: mismo fondo que la tarjeta y texto secundario. Dos
+     pestañas compitiendo por la vista es lo que hacía que la elegida no se distinguiera. */
+  .ws-tabs__tab:not(.ws-tabs__tab--active) {
+    background: var(--color-bg-surface-sunken);
+  }
+}
+
+.ws-tabs__check {
+  flex-shrink: 0;
+  color: var(--color-success);
+}

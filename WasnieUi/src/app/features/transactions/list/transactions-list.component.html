@@ -90,7 +90,9 @@
       />
     } @else {
       <ws-table>
-        <table>
+        <!-- Spreadsheet-style widths: drag a header edge, double-click to fit (wsResizableColumns).
+             data-width is the starting width until the reader moves it; the last column fills. -->
+        <table wsResizableColumns="transactions">
           <thead>
             <tr>
               <th class="col-check" *hasPermission="'Transactions.Void'">
@@ -103,13 +105,13 @@
                   [attr.aria-label]="'TRANSACTIONS.BULK_VOID.SELECT_ALL' | translate"
                 />
               </th>
-              <th>{{ 'TRANSACTIONS.COL_REFERENCE' | translate }}</th>
-              <th>{{ 'TRANSACTIONS.COL_PAYEE' | translate }}</th>
-              <th>{{ 'TRANSACTIONS.COL_DATE' | translate }}</th>
-              <th>{{ 'TRANSACTIONS.COL_INGESTED' | translate }}</th>
-              <th class="col-num">{{ 'TRANSACTIONS.COL_AMOUNT' | translate }}</th>
-              <th class="col-num">{{ 'TRANSACTIONS.COL_QUANTITY' | translate }}</th>
-              <th>{{ 'TRANSACTIONS.COL_STATUS' | translate }}</th>
+              <th data-col="reference" data-width="260">{{ 'TRANSACTIONS.COL_REFERENCE' | translate }}</th>
+              <th data-col="payee" data-width="220">{{ 'TRANSACTIONS.COL_PAYEE' | translate }}</th>
+              <th data-col="date" data-width="110">{{ 'TRANSACTIONS.COL_DATE' | translate }}</th>
+              <th data-col="ingested" data-width="110">{{ 'TRANSACTIONS.COL_INGESTED' | translate }}</th>
+              <th class="col-num" data-col="amount" data-width="130">{{ 'TRANSACTIONS.COL_AMOUNT' | translate }}</th>
+              <th class="col-num" data-col="quantity" data-width="80">{{ 'TRANSACTIONS.COL_QUANTITY' | translate }}</th>
+              <th data-col="status" data-width="120">{{ 'TRANSACTIONS.COL_STATUS' | translate }}</th>
               <th></th>
             </tr>
           </thead>
@@ -148,20 +150,23 @@
                     }
                   </td>
                   <td class="col-ref" [class.col-ref--voided]="tx.status === TransactionStatus.Cancelled">
-                    <a
-                      class="col-ref__number col-ref__link"
-                      [routerLink]="['/transactions', tx.id]"
-                      [title]="'TRANSACTIONS.OPEN_DETAIL' | translate"
-                    >{{ tx.referenceNumber }}</a><ws-copy-button
-                      [value]="tx.referenceNumber"
-                      label="COMMON.COPY_REFERENCE"
-                      [size]="14"
-                    />
+                    <div class="ws-cell-line">
+                      <a
+                        class="ws-cell-text col-ref__number col-ref__link"
+                        [routerLink]="['/transactions', tx.id]"
+                        [title]="('TRANSACTIONS.OPEN_DETAIL' | translate) + ': ' + tx.referenceNumber"
+                      >{{ tx.referenceNumber }}</a>
+                      <ws-copy-button
+                        [value]="tx.referenceNumber"
+                        label="COMMON.COPY_REFERENCE"
+                        [size]="14"
+                      />
+                    </div>
                     @if (tx.description) {
                       <span class="col-ref__description" [title]="tx.description">{{ tx.description }}</span>
                     }
                     @if (tx.productName || tx.productSku) {
-                      <span class="col-ref__product">
+                      <span class="col-ref__product" [title]="(tx.productName ?? '') + (tx.productSku ? ' ' + tx.productSku : '')">
                         {{ tx.productName }}
                         @if (tx.productSku) {
                           <span class="col-ref__sku">{{ tx.productSku }}</span>
@@ -169,32 +174,35 @@
                       </span>
                     }
                     @if (tx.category) {
-                      <span class="col-ref__category">{{ tx.category }}</span>
+                      <span class="col-ref__category" [title]="tx.category">{{ tx.category }}</span>
                     }
                     @if (tx.status === TransactionStatus.Cancelled && tx.cancelledReason) {
-                      <span class="col-ref__reason">{{ tx.cancelledReason }}</span>
+                      <span class="col-ref__reason" [title]="tx.cancelledReason">{{ tx.cancelledReason }}</span>
                     }
                   </td>
                   <td class="col-secondary">
                     @if (tx.payeeName) {
-                      @if (tx.payeeId) {
-                        <a
-                          class="col-payee-link"
-                          [routerLink]="['/payees', tx.payeeId]"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          [title]="'TRANSACTIONS.OPEN_PAYEE' | translate"
-                        >{{ tx.payeeName }}</a>
-                      } @else {
-                        {{ tx.payeeName }}
-                      }
-                      @if (tx.payeeEmployeeCode) {
-                        <span class="col-code">({{ tx.payeeEmployeeCode }})</span>
-                      }<ws-copy-button
-                        [value]="tx.payeeName"
-                        label="COMMON.COPY_NAME"
-                        [size]="14"
-                      />
+                      <div class="ws-cell-line">
+                        @if (tx.payeeId) {
+                          <a
+                            class="ws-cell-text col-payee-link"
+                            [routerLink]="['/payees', tx.payeeId]"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            [title]="('TRANSACTIONS.OPEN_PAYEE' | translate) + ': ' + tx.payeeName"
+                          >{{ tx.payeeName }}</a>
+                        } @else {
+                          <span class="ws-cell-text" [title]="tx.payeeName">{{ tx.payeeName }}</span>
+                        }
+                        @if (tx.payeeEmployeeCode) {
+                          <span class="col-code ws-cell-text--yield" [title]="tx.payeeEmployeeCode">({{ tx.payeeEmployeeCode }})</span>
+                        }
+                        <ws-copy-button
+                          [value]="tx.payeeName"
+                          label="COMMON.COPY_NAME"
+                          [size]="14"
+                        />
+                      </div>
                     } @else {
                       <span class="col-unassigned">{{ 'TRANSACTIONS.UNASSIGNED' | translate }}</span>
                     }

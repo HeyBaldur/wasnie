@@ -23,6 +23,7 @@ export { WsTableComponent } from './ws-table/ws-table.component';
 export { WsTablePaginationComponent } from './ws-table/ws-table-pagination.component';
 export { WsTableEmptyComponent } from './ws-table/ws-table-empty.component';
 export { WsClickableRowDirective } from './ws-table/ws-clickable-row.directive';
+export { WsResizableColumnsDirective } from './ws-table/ws-resizable-columns.directive';
 export { WsEmptyStateComponent } from './ws-empty-state/ws-empty-state.component';
 export { WsVideoComponent } from './ws-video/ws-video.component';
 export { WsToastContainerComponent } from './ws-toast/ws-toast-container.component';

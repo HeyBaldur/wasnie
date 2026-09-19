@@ -10,6 +10,7 @@ import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { PlansStore } from '../state/plans.store';
 import { PlansApiService, MultiPlanPayees } from '../services/plans.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import {
   Rule,
@@ -75,6 +76,7 @@ export class PlanDetailComponent implements OnInit {
   private readonly router = inject(Router);
   readonly store = inject(PlansStore);
   private readonly toast = inject(ToastService);
+  private readonly currentUser = inject(CurrentUserService);
   private readonly plansApi = inject(PlansApiService);
   private readonly creditsApi = inject(CreditsApiService);
 
@@ -154,6 +156,20 @@ export class PlanDetailComponent implements OnInit {
 
   readonly permissions = computed(() => getPlanPermissions(this.store.selectedPlan()?.status));
 
+  /**
+   * Whether this reader ADMINISTERS plans, as opposed to merely being paid under one (KAN-93, bug 6).
+   *
+   * ★★ `permissions` ABOVE IS ABOUT THE PLAN, THIS IS ABOUT THE READER, and conflating the two is how
+   * the page would leak. `getPlanPermissions` answers "may an Active plan be archived" — a question
+   * about STATUS, identical for everybody looking at it. It has never known who is asking, so a rep
+   * admitted to this page would have been offered Archive and Clone on any Active plan.
+   *
+   * ★★ IT KEYS ON `Plans.Read`, THE CATALOGUE PERMISSION. A rep holds `Plans.ReadOwn` and nothing
+   * else, so this is false for them and true for every administrator — the one line that separates
+   * "check the arithmetic on my commission" from "configure how the company pays".
+   */
+  readonly canAdminister = computed(() => this.currentUser.hasPermission('Plans.Read'));
+
   /** Re-reads the plan after the clawback policy is saved, so the tab shows the stored state. */
   reloadPlan(): void {
     void this.store.loadPlan(this.planId);
@@ -187,8 +203,13 @@ export class PlanDetailComponent implements OnInit {
     bindFiltersToUrl(this.route, this.destroyRef, {
       apply: qp => {
         const urlTab = qp['tab'] as Tab | undefined;
-        const tab: Tab = urlTab && (['rules', 'versions', 'assignments'] as Tab[]).includes(urlTab)
-          ? urlTab : 'rules';
+        // ★ AND THE URL CANNOT PUT THEM ON AN ADMINISTRATION TAB EITHER. `?tab=assignments` is a link
+        // somebody can paste; for a reader who may not administer, every tab but Rules collapses to
+        // Rules rather than rendering a panel whose data the server will refuse.
+        const allowed: Tab[] = this.canAdminister()
+          ? (['rules', 'versions', 'assignments'] as Tab[])
+          : (['rules'] as Tab[]);
+        const tab: Tab = urlTab && allowed.includes(urlTab) ? urlTab : 'rules';
         if (tab !== this.activeTab()) this.setTab(tab);
       },
       // No ?tab= means the default tab, not whatever the last visit left behind.
@@ -196,7 +217,10 @@ export class PlanDetailComponent implements OnInit {
     });
     this.store.loadPlan(this.planId).then(() => {
       const name = this.store.selectedPlan()?.name;
-      if (name) this.store.loadVersions(name);
+      // ★★ VERSIONS ARE ADMINISTRATION AND THE CALL IS GUARDED, NOT JUST THE TAB. ListPlanVersions
+      // requires `Plans.Read`; a rep reaching this page would have fired it on load and taken a 403
+      // toast on a screen that had otherwise worked. Hiding the tab alone would have left the request.
+      if (name && this.canAdminister()) this.store.loadVersions(name);
     });
   }
 

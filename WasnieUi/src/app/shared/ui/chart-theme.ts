@@ -10,6 +10,9 @@ export interface ChartPalette {
   violet: string;
   blue: string;
   success: string;
+  /** Added for ws-gauge's attainment ladder, which carried these two as hardcoded hex. */
+  warning: string;
+  danger: string;
   text: string;
   tick: string;
   label: string;
@@ -26,6 +29,8 @@ export function readChartPalette(host: HTMLElement, ctx: CanvasRenderingContext2
     violet: token('--color-accent-violet', '#8b5cf6'),
     blue: token('--color-accent-blue', '#3b82f6'),
     success: token('--color-success', '#10b981'),
+    warning: token('--color-warning', '#f59e0b'),
+    danger: token('--color-danger', '#ef4444'),
     text: token('--color-text-primary', '#111827'),
     tick: token('--color-text-tertiary', '#9ca3af'),
     label: token('--color-text-secondary', '#4b5563'),

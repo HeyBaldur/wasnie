@@ -281,6 +281,20 @@ export class AuthService {
       .pipe(map(() => undefined));
   }
 
+  /**
+   * KAN-93. Asks for the Organization identifier to be MAILED to this address.
+   *
+   * ★ IT RETURNS NOTHING, AND THAT IS THE POINT. The server answers the same way whether the address
+   * is unknown, known but not an administrator, or an administrator of three workspaces — the
+   * identifier leaves only by email. A method with a return value here would be a client inviting
+   * somebody to build the enumeration oracle the endpoint was designed not to be.
+   */
+  requestOrganizationIdentifier(email: string): Observable<void> {
+    return this.http
+      .post<unknown>(`${environment.apiBaseUrl}/auth/request-organization-identifier`, { email })
+      .pipe(map(() => undefined));
+  }
+
   resetPassword(userId: string, token: string, newPassword: string): Observable<void> {
     return this.http
       .post<unknown>(`${environment.apiBaseUrl}/auth/reset-password`, { userId, token, newPassword })

@@ -97,6 +97,8 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>, IApplicatio
     public Microsoft.EntityFrameworkCore.DbSet<EmailConfirmationToken> EmailConfirmationTokens => Set<EmailConfirmationToken>();
     public Microsoft.EntityFrameworkCore.DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public Microsoft.EntityFrameworkCore.DbSet<EmailChangeToken> EmailChangeTokens => Set<EmailChangeToken>();
+    public Microsoft.EntityFrameworkCore.DbSet<Invitation> Invitations => Set<Invitation>();
+    public Microsoft.EntityFrameworkCore.DbSet<TenantUser> TenantUsers => Set<TenantUser>();
 
     public Microsoft.EntityFrameworkCore.DbSet<Plan> CompensationPlans => Set<Plan>();
     public Microsoft.EntityFrameworkCore.DbSet<Quota> Quotas => Set<Quota>();
@@ -142,6 +144,8 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>, IApplicatio
         builder.ApplyConfiguration(new EmailConfirmationTokenConfiguration());
         builder.ApplyConfiguration(new PasswordResetTokenConfiguration());
         builder.ApplyConfiguration(new EmailChangeTokenConfiguration());
+        builder.ApplyConfiguration(new InvitationConfiguration());
+        builder.ApplyConfiguration(new TenantUserConfiguration());
 
         builder.ApplyConfiguration(new CompensationPlanConfiguration());
         builder.ApplyConfiguration(new PlanRuleConfiguration());
@@ -197,6 +201,16 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>, IApplicatio
         builder.Entity<Wasnie.Domain.Compensation.Reconciliation.ReconciliationClosure>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<BackgroundJobRecord>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<UserSubscription>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        // ★★ KAN-32. Both are filtered by tenant like everything else, and both have exactly ONE
+        // caller each that must bypass it with IgnoreQueryFilters(), for reasons no filter can express:
+        //   Invitation  — accepting is a PUBLIC endpoint. The caller has no session and therefore no
+        //                 tenant; the token IS the authorisation, and the tenant is read OFF the row
+        //                 that the token found. Filtering there would match nothing, always.
+        //   TenantUser  — the sign-in check runs before any claim exists, so there is no current
+        //                 tenant yet. It looks the row up by UserId, which is unique across tenants.
+        // Every other read of either table goes through the filter.
+        builder.Entity<Invitation>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<TenantUser>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         // Assistant chat. The tenant filter is a FLOOR, not the isolation: a conversation also belongs
         // to one user, and every query adds `UserId == currentUser` on top of this. A query filter
         // cannot express the user half — ITenantContext knows the tenant, not the principal — so the

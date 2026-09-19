@@ -1,4 +1,4 @@
-namespace Wasnie.Infrastructure.Services.Email;
+﻿namespace Wasnie.Infrastructure.Services.Email;
 
 internal static class EmailTemplates
 {
@@ -75,6 +75,50 @@ internal static class EmailTemplates
             "Prawie gotowe. Potwierdź swój adres e-mail, aby aktywować swoją przestrzeń roboczą w Incentrze.",
             "Potwierdź adres e-mail", url,
             "Link jest ważny przez 48 godzin. Jeśli nie zakładałeś konta w Incentrze, możesz zignorować tę wiadomość."));
+
+    /// <summary>
+    /// The invitation to join a tenant (KAN-32).
+    ///
+    /// ★ IT NAMES THE INVITER AND THE COMPANY. The recipient may have no idea what Incentra is, and an
+    /// unexplained "set your password" link from an unknown product is indistinguishable from phishing.
+    /// Saying who asked for them by name is what makes it legible.
+    ///
+    /// ★ IT DOES NOT NAME THE ROLE. What "CompManager" means is a matter for the person's first day,
+    /// not for an email they read before they have an account, and a role name out of context reads as
+    /// jargon rather than as information.
+    /// </summary>
+    public static (string Subject, string Html) Invitation(
+        string inviterName, string companyName, string acceptUrl, int expiryDays, string language) =>
+        language switch
+        {
+            "es" => InvitationEs(inviterName, companyName, acceptUrl, expiryDays),
+            "pl" => InvitationPl(inviterName, companyName, acceptUrl, expiryDays),
+            _ => InvitationEn(inviterName, companyName, acceptUrl, expiryDays),
+        };
+
+    private static (string, string) InvitationEn(string inviter, string company, string url, int days) => (
+        $"{Escape(inviter)} invited you to {Escape(company)} on Incentra",
+        Layout("Hello,",
+            $"{Escape(inviter)} has invited you to join <strong>{Escape(company)}</strong> on Incentra, "
+            + "where the company manages its sales commissions. Use the button below to set your password and sign in.",
+            "Accept the invitation", url,
+            $"This invitation expires in {days} days. If you were not expecting it, you can ignore this email — no account is created until you accept."));
+
+    private static (string, string) InvitationEs(string inviter, string company, string url, int days) => (
+        $"{Escape(inviter)} le ha invitado a {Escape(company)} en Incentra",
+        Layout("Hola:",
+            $"{Escape(inviter)} le ha invitado a unirse a <strong>{Escape(company)}</strong> en Incentra, "
+            + "la plataforma donde la empresa gestiona sus comisiones de ventas. Use el botón para establecer su contraseña y acceder.",
+            "Aceptar la invitación", url,
+            $"Esta invitación caduca en {days} días. Si no la esperaba, puede ignorar este mensaje: no se crea ninguna cuenta hasta que la acepte."));
+
+    private static (string, string) InvitationPl(string inviter, string company, string url, int days) => (
+        $"{Escape(inviter)} zaprasza Cię do {Escape(company)} w Incentrze",
+        Layout("Witaj,",
+            $"{Escape(inviter)} zaprasza Cię do dołączenia do firmy <strong>{Escape(company)}</strong> w Incentrze, "
+            + "gdzie firma zarządza prowizjami sprzedażowymi. Użyj przycisku poniżej, aby ustawić hasło i się zalogować.",
+            "Przyjmij zaproszenie", url,
+            $"To zaproszenie wygasa za {days} dni. Jeśli się go nie spodziewałeś, zignoruj tę wiadomość — konto powstaje dopiero po jego przyjęciu."));
 
     private static (string, string) PasswordResetEn(string firstName, string url) => (
         "Reset your Incentra password",
@@ -171,6 +215,80 @@ internal static class EmailTemplates
             "Otrzymaliśmy prośbę o zmianę adresu e-mail przypisanego do Twojego konta w Incentrze. Kliknij przycisk, aby potwierdzić nowy adres e-mail.",
             "Potwierdź nowy adres e-mail", url,
             "Link jest ważny przez 24 godziny. Jeśli nie prosiłeś o tę zmianę, zignoruj tę wiadomość — Twój obecny adres e-mail pozostaje bez zmian."));
+
+    /// <summary>
+    /// The Organization identifier(s) an administrator asked to be reminded of (KAN-93).
+    /// </summary>
+    /// <param name="loginUrl">
+    /// The ordinary sign-in page — no token, no one-off link. The identifier in the body IS the answer
+    /// and nothing here needs to be clicked; the button only saves the reader finding the tab again.
+    /// The same reasoning as <see cref="AccountLocked"/>: a security email carrying a freshly minted
+    /// action link is the exact shape phishing imitates.
+    /// </param>
+    public static (string Subject, string Html) OrganizationIdentifier(
+        string firstName,
+        IReadOnlyList<(string Name, string Slug)> organizations,
+        string loginUrl,
+        string language) =>
+        language switch
+        {
+            "es" => OrganizationIdentifierEs(firstName, organizations, loginUrl),
+            "pl" => OrganizationIdentifierPl(firstName, organizations, loginUrl),
+            _ => OrganizationIdentifierEn(firstName, organizations, loginUrl),
+        };
+
+    /// <summary>
+    /// The workspaces as lines inside the body paragraph.
+    ///
+    /// ★ INLINE MARKUP, NOT A NESTED TABLE. <c>Layout</c> drops the body inside a &lt;p&gt;, and a
+    /// table inside a paragraph is invalid HTML that mail clients render at their own discretion.
+    /// Breaks and a monospace span survive everywhere.
+    ///
+    /// ★ BOTH VALUES ARE ESCAPED. A workspace name is whatever its founder typed at registration —
+    /// untrusted text on its way into an HTML document.
+    /// </summary>
+    private static string OrganizationLines(IReadOnlyList<(string Name, string Slug)> organizations) =>
+        string.Join("<br /><br />", organizations.Select(o =>
+            $"""<strong style="color:#1a1a2e;">{Escape(o.Name)}</strong><br /><span style="display:inline-block;margin-top:4px;padding:6px 10px;background:#f4f5f7;border:1px solid #e2e8f0;border-radius:4px;font-family:monospace;font-size:15px;color:#1a1a2e;">{Escape(o.Slug)}</span>"""));
+
+    private static (string, string) OrganizationIdentifierEn(
+        string firstName, IReadOnlyList<(string Name, string Slug)> organizations, string url) => (
+        organizations.Count == 1
+            ? "Your Incentra Organization identifier"
+            : "Your Incentra Organization identifiers",
+        Layout($"Hi {Escape(firstName)},",
+            (organizations.Count == 1
+                ? "You asked us to remind you of the Organization identifier for the workspace you administer. Type it into the Organization identifier field when you sign in:<br /><br />"
+                : "You asked us to remind you of your Organization identifiers. You administer more than one workspace, so here is each of them — type the right one into the Organization identifier field when you sign in:<br /><br />")
+            + OrganizationLines(organizations),
+            "Go to sign in", url,
+            "If you did not ask for this, you can ignore this message — nothing about your account has changed. Only administrators can request this reminder."));
+
+    private static (string, string) OrganizationIdentifierEs(
+        string firstName, IReadOnlyList<(string Name, string Slug)> organizations, string url) => (
+        organizations.Count == 1
+            ? "Su Organization identifier de Incentra"
+            : "Sus Organization identifiers de Incentra",
+        Layout($"Hola {Escape(firstName)},",
+            (organizations.Count == 1
+                ? "Ha solicitado que le recordemos el Organization identifier del espacio de trabajo que administra. Escríbalo en el campo «Organization identifier» al iniciar sesión:<br /><br />"
+                : "Ha solicitado que le recordemos sus Organization identifiers. Administra más de un espacio de trabajo, así que aquí está cada uno — escriba el que corresponda en el campo «Organization identifier» al iniciar sesión:<br /><br />")
+            + OrganizationLines(organizations),
+            "Ir al inicio de sesión", url,
+            "Si no ha solicitado esto, puede ignorar este mensaje: no ha cambiado nada en su cuenta. Solo los administradores pueden pedir este recordatorio."));
+
+    private static (string, string) OrganizationIdentifierPl(
+        string firstName, IReadOnlyList<(string Name, string Slug)> organizations, string url) => (
+        organizations.Count == 1
+            ? "Twój identyfikator organizacji w Incentrze"
+            : "Twoje identyfikatory organizacji w Incentrze",
+        Layout($"Cześć {Escape(firstName)},",
+            (organizations.Count == 1
+                ? "Poprosiłeś o przypomnienie identyfikatora organizacji (Organization identifier) obszaru roboczego, którym administrujesz. Wpisz go w pole „Organization identifier” podczas logowania:<br /><br />"
+                : "Poprosiłeś o przypomnienie swoich identyfikatorów organizacji. Administrujesz więcej niż jednym obszarem roboczym, więc poniżej jest każdy z nich — wpisz właściwy w pole „Organization identifier” podczas logowania:<br /><br />")
+            + OrganizationLines(organizations),
+            "Przejdź do logowania", url,
+            "Jeśli nie prosiłeś o tę wiadomość, możesz ją zignorować — nic w Twoim koncie się nie zmieniło. Tylko administratorzy mogą poprosić o to przypomnienie."));
 
     private static string Escape(string s) =>
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");

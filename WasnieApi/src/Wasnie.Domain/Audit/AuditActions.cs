@@ -194,4 +194,52 @@ public static class AuditActions
     // ReconciliationClosures, never by this entry: an audit log that has been known to record
     // actions that did not happen may not be what hides money from a CFO. See KAN-34.
     public const string ReconciliationRowClosed = "RECONCILIATION_ROW_CLOSED";
+
+    // ── KAN-32, user administration ──────────────────────────────────────────
+    //
+    // ★ THE INVITE AND THE ACCEPT ARE TWO ENTRIES, NOT ONE. They are done by two different people,
+    // possibly days apart, and the question an auditor asks — "who let this person in" — is answered
+    // by the first while "when did they actually get in" is answered by the second. One entry would
+    // have to pick a single actor and would get the other one wrong.
+    public const string UserInvited = "USER_INVITED";
+    public const string InvitationAccepted = "INVITATION_ACCEPTED";
+    public const string InvitationResent = "INVITATION_RESENT";
+    public const string InvitationRevoked = "INVITATION_REVOKED";
+    public const string UserDeactivated = "USER_DEACTIVATED";
+    public const string UserReactivated = "USER_REACTIVATED";
+    public const string UserRoleChanged = "USER_ROLE_CHANGED";
+
+    /// <summary>
+    /// KAN-91. Somebody was taken out of a workspace entirely.
+    ///
+    /// ★ THE ROW GOES, THE PERSON DOES NOT. Deactivating keeps them listed with access closed;
+    /// removing ends their membership of THIS workspace and leaves the account, their sign-in and
+    /// everything they ever approved untouched. This entry is what remembers the membership existed,
+    /// which is why removal writes one before it deletes anything.
+    /// </summary>
+    public const string UserRemoved = "USER_REMOVED";
+
+    /// <summary>
+    /// KAN-93. An administrator attached a login to a payee record, or detached one.
+    ///
+    /// ★★ IT IS A MONEY EVENT WEARING AN ADMIN VERB, which is why it is audited at all. The link is
+    /// what decides whose commissions, whose balance and whose ledger a person may read; moving it
+    /// moves who can see somebody's pay. "Who gave this person access to that person's earnings" has
+    /// to be answerable, and this entry is the answer.
+    ///
+    /// ★ ONE ACTION FOR BOTH DIRECTIONS, with the payee in Before/After. Two actions would make
+    /// "was this link ever moved" a query over two tables of entries instead of one.
+    /// </summary>
+    public const string UserPayeeLinkChanged = "USER_PAYEE_LINK_CHANGED";
+
+    /// <summary>
+    /// KAN-93. Somebody asked for a workspace's Organization identifier to be mailed to them.
+    ///
+    /// ★ IT IS RECORDED EVEN THOUGH NOTHING CHANGED. The identifier is half of what gets somebody
+    /// into a workspace, so "who asked for ours, and when" is a question an administrator may need to
+    /// answer after the fact. An entry is written per workspace the message named, and only when a
+    /// message was actually sent — the silent refusals leave a log line, not an audit row, because
+    /// they concern an address that proved nothing.
+    /// </summary>
+    public const string OrganizationIdentifierRequested = "ORGANIZATION_IDENTIFIER_REQUESTED";
 }

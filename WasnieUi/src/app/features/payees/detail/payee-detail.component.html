@@ -277,61 +277,72 @@
                 @if (!dashboard()?.attainmentItems?.length) {
                   <p class="bento-empty">{{ 'DASHBOARD.ATTAINMENT_EMPTY' | translate }} {{ 'DASHBOARD.COUNTER_IN_RANGE' | translate }}</p>
                 } @else {
+                  <!-- ★★ THE SAME CARD AS /my-dashboard AND THE COMPANY DASHBOARD, from
+                       `styles/_trend-card.scss`. It was a gauge dial plus a 4px bar; the dial's four
+                       states were hardcoded hex that never matched the bar beside them, and none of
+                       the trend-card rules could reach this screen while they lived inside the
+                       dashboard component.
+
+                       ★★ THE ROW IS STILL A LINK. Opening the quota from here is the reason this
+                       block exists on the payee page, and a card that stopped being clickable would
+                       trade one thing for another. `variant="interactive"` is the card language's own
+                       answer to that, so the affordance comes from the primitive. -->
+                  <!-- ★★ THE CHART IS BUILT ONLY WHILE THE BLOCK IS OPEN, AND THAT IS NOT AN
+                       OPTIMISATION. This body stays in the DOM under `[hidden]` when collapsed, and a
+                       Chart.js canvas created inside a hidden element sizes itself to 0×0 and never
+                       recovers: the container measured 426×100 once expanded while the canvas was
+                       still 0×0, so the card rendered with an empty hole where the bars belong. The
+                       bar it replaced was pure CSS and had no such problem. Guarding on the open
+                       state means the canvas is first measured when it has a size. -->
+                  @if (isBlockOpen('attainment')) {
                   @for (a of dashboard()!.attainmentItems; track a.quotaId) {
-                    <a class="bento-gauge-row"
-                       [class.bento-gauge-row--invalid]="!a.isCurrencyValid"
-                       [routerLink]="['/quotas', a.quotaId]"
-                       target="_blank" rel="noopener noreferrer">
-                      <div class="bento-gauge-wrap" [class.bento-gauge-wrap--faded]="!a.isCurrencyValid">
-                        <ws-gauge
-                          [value]="a.attainmentValue"
-                          [pacingValue]="computePacing(a.periodStart, a.periodEnd)"
-                        />
-                      </div>
-                      <div class="bento-gauge-info">
-                        <span class="bento-gauge-info__plan">{{ a.planName }}</span>
-                        @if (!a.isCurrencyValid) {
-                          <ws-badge
-                            variant="warning"
-                            size="sm"
-                            [wsTooltip]="currencyMismatchTooltip(a.currency, a.planCurrency)"
-                            tooltipPlacement="top"
-                          >
-                            ⚠ {{ 'DASHBOARD.CHIP_INVALID' | translate }}
-                          </ws-badge>
-                        }
-                        <span class="bento-gauge-info__period">{{ a.periodStart | dateFormat }} – {{ a.periodEnd | dateFormat }}</span>
-                        <div class="bento-gauge-info__amounts">
-                          <div class="bento-gauge-info__stat">
-                            <span class="bento-stat-lbl">{{ 'ATTAINMENT.TARGET' | translate }}</span>
-                            @if (a.measurementType === QuotaMeasurementType.Units) {
-                              {{ a.targetAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
-                            } @else {
-                              {{ a.targetAmount | currencyFormat: a.currency }}
-                            }
+                    <ws-card variant="interactive" padding="md" class="trend-card-item">
+                      <a class="trend-card"
+                         [routerLink]="['/quotas', a.quotaId]"
+                         target="_blank" rel="noopener noreferrer">
+                        <div class="trend-card__head">
+                          <div class="min-w-0 flex-1">
+                            <span class="trend-card__label">
+                              {{ a.planName }} · {{ a.periodStart | dateFormat }} – {{ a.periodEnd | dateFormat }}
+                            </span>
+                            <div class="trend-card__value">
+                              @if (a.measurementType === QuotaMeasurementType.Units) {
+                                {{ a.achievedAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
+                              } @else {
+                                {{ a.achievedAmount | currencyFormat: a.currency }}
+                              }
+                            </div>
                           </div>
-                          <div class="bento-gauge-info__stat">
-                            <span class="bento-stat-lbl">{{ 'ATTAINMENT.ACHIEVED' | translate }}</span>
-                            @if (a.measurementType === QuotaMeasurementType.Units) {
-                              {{ a.achievedAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
-                            } @else {
-                              {{ a.achievedAmount | currencyFormat: a.currency }}
-                            }
-                          </div>
+
+                          @if (!a.isCurrencyValid) {
+                            <!-- ★ THE MISMATCH KEEPS ITS OWN BADGE AND ITS TOOLTIP. It is not a
+                                 performance verdict, so it must not borrow the pill that carries
+                                 one — a warning dressed as an attainment figure reads as a bad
+                                 result rather than a broken configuration. -->
+                            <ws-badge
+                              variant="warning"
+                              size="sm"
+                              class="flex-shrink-0"
+                              [wsTooltip]="currencyMismatchTooltip(a.currency, a.planCurrency)"
+                              tooltipPlacement="top"
+                            >
+                              ⚠ {{ 'DASHBOARD.CHIP_INVALID' | translate }}
+                            </ws-badge>
+                          } @else {
+                            <span class="trend-card__delta-pill flex-shrink-0" [class]="attainmentPillClass(a.attainmentValue)">
+                              {{ 'ATTAINMENT.PCT_OF_TARGET' | translate: { pct: attainmentPct(a.attainmentValue) } }}
+                            </span>
+                          }
                         </div>
-                        <div class="bento-mini-bar">
-                          <div class="bento-mini-bar__track">
-                            <div class="bento-mini-bar__fill"
-                                 [class]="a.isCurrencyValid ? gaugeColorClass(a.attainmentValue) : 'bento-bar--amber'"
-                                 [style.width.%]="(a.attainmentValue > 1 ? 1 : a.attainmentValue) * 100"></div>
-                          </div>
-                          <span class="bento-mini-bar__pct"
-                                [class]="a.isCurrencyValid ? gaugeColorClass(a.attainmentValue) : 'bento-bar--amber'">
-                            {{ a.attainmentPercent }}
-                          </span>
+
+                        <div class="trend-card__chart">
+                          <ws-hbar-chart [points]="attainmentPoints(a)" />
                         </div>
-                      </div>
-                    </a>
+
+                        <p class="trend-card__note">{{ 'ATTAINMENT.NOTE' | translate }}</p>
+                      </a>
+                    </ws-card>
+                  }
                   }
                 }
               </div>

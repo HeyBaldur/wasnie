@@ -1,0 +1,83 @@
+@reference "../../../../styles.scss";
+
+// Accepting an invitation (KAN-32). Mirrors the reset-password shell so the two public
+// token screens are the same screen with different words.
+//
+// ★ --color-base, NOT --color-bg-page. The latter is documented in DESIGN_SYSTEM but never
+//   DEFINED in styles.scss, so it resolves to nothing and the background falls through
+//   transparent. The auth pages that use it are wrong in a way nobody notices on white.
+
+.auth-centered {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-base);
+  padding: var(--space-6);
+}
+
+.auth-centered__card {
+  width: 100%;
+  max-width: 26rem;
+  padding: var(--space-8);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+}
+
+.auth-centered__icon {
+  width: 3rem;
+  height: 3rem;
+  margin: 0 auto var(--space-4);
+  color: var(--color-brand);
+
+  svg { width: 100%; height: 100%; }
+}
+
+.auth-centered__icon--error {
+  color: var(--color-danger);
+}
+
+.auth-centered__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-20);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.auth-centered__muted {
+  margin: 0 0 var(--space-5);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.auth-centered__error {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+  font-size: var(--font-size-13);
+}
+
+.auth-centered__back-link {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-size: var(--font-size-13);
+  color: var(--color-text-link);
+}
+
+.accept-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  text-align: left;
+}
+
+.accept-form__hint {
+  margin: calc(var(--space-2) * -1) 0 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}

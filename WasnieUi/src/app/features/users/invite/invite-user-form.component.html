@@ -1,0 +1,73 @@
+<form [formGroup]="form" (ngSubmit)="submit()" class="invite-form">
+  <div class="invite-form__field">
+    <ws-input
+      formControlName="email"
+      type="email"
+      [label]="'USERS.INVITE.EMAIL_LABEL' | translate"
+      [placeholder]="'USERS.INVITE.EMAIL_PLACEHOLDER' | translate"
+      [error]="form.controls.email.touched && form.controls.email.invalid
+        ? ('USERS.INVITE.EMAIL_ERROR' | translate) : ''"
+      (valueChange)="onEmailChange($event)"
+    />
+  </div>
+
+  <!-- Relationship-style dropdown: full row, per §5.6. -->
+  <div class="invite-form__field">
+    <ws-select
+      formControlName="role"
+      [options]="roleOptions()"
+      [label]="'USERS.INVITE.ROLE_LABEL' | translate"
+      [placeholder]="'USERS.INVITE.ROLE_PLACEHOLDER' | translate"
+      [error]="form.controls.role.touched && form.controls.role.invalid
+        ? ('USERS.INVITE.ROLE_ERROR' | translate) : ''"
+    />
+  </div>
+
+  @if (grantsAdmin()) {
+    <app-admin-grant-warning />
+  }
+
+  <!-- KAN-92. Which payee this person IS. Optional: an administrator or a finance user does not get
+       paid and has no payee, and a required picker would force whoever invites them to attach
+       somebody at random. -->
+  <div class="invite-form__field">
+    <!-- ★★ SEARCHED ON THE SERVER (KAN-93). `[searchable]` filtered a list already loaded in full,
+         which stopped being a picker at a few hundred payees; `searchFn` sends the query instead and
+         the handler caps the answer. `initialOption` is what keeps an accepted suggestion's name on
+         the trigger when it is not in the last page of results. -->
+    <ws-select
+      formControlName="payeeId"
+      [searchFn]="payeeSearchFn"
+      [initialOption]="pickedPayee()"
+      [label]="'USERS.INVITE.PAYEE_LABEL' | translate"
+      [placeholder]="'USERS.INVITE.PAYEE_PLACEHOLDER' | translate"
+      noResultsLabel="USERS.LINK_PAYEE.NO_MATCH"
+    />
+    <p class="invite-form__hint">{{ 'USERS.INVITE.PAYEE_HINT' | translate }}</p>
+
+    <!-- ★ THE SUGGESTION IS A QUESTION, NOT A DEFAULT. The server found a payee with this exact
+         address; addresses coincide for boring reasons, and a match accepted by reflex shows one
+         person another person's pay. So it asks, and the admin answers. -->
+    @if (suggested(); as match) {
+      @if (form.controls.payeeId.value !== match.id) {
+        <div class="invite-form__suggestion">
+          <span>{{ 'USERS.INVITE.PAYEE_SUGGESTED' | translate:{ name: match.fullName } }}</span>
+          <ws-button variant="ghost" size="sm" type="button" (click)="acceptSuggestion()">
+            {{ 'COMMON.YES' | translate }}
+          </ws-button>
+        </div>
+      }
+    }
+  </div>
+
+  <p class="invite-form__hint">{{ 'USERS.INVITE.HINT' | translate }}</p>
+
+  <div class="invite-form__actions">
+    <ws-button variant="ghost" type="button" [disabled]="submitting()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" type="submit" [disabled]="submitting()">
+      {{ 'USERS.INVITE.SUBMIT' | translate }}
+    </ws-button>
+  </div>
+</form>

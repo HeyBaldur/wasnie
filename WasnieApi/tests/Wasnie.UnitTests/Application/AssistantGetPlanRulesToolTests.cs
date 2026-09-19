@@ -20,6 +20,7 @@ using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Infrastructure.Persistence;
 using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
+using Wasnie.UnitTests.TestDoubles;
 
 namespace Wasnie.UnitTests.Application;
 
@@ -80,7 +81,7 @@ public sealed class AssistantGetPlanRulesToolTests
 
                 case GetPlanByIdQuery q:
                     PlanDetailQueries++;
-                    return (TResponse)(object)await new GetPlanByIdHandler(db, auth).Handle(q, cancellationToken);
+                    return (TResponse)(object)await new GetPlanByIdHandler(db, auth, FakePlanAccessGuard.SeesEverything()).Handle(q, cancellationToken);
 
                 default:
                     throw new NotSupportedException($"Unexpected query {request.GetType().Name}.");

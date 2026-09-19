@@ -60,8 +60,14 @@ public sealed class SimulateRuleHandlerTests : IDisposable
         var guid = Substitute.For<IGuidGenerator>();
         guid.NewGuid().Returns(_ => Guid.NewGuid());
 
+        // The guard is a double here: what these tests exercise is the ENGINE behind the simulator, and
+        // a refusal would read as an arithmetic failure. Who may simulate is decided in
+        // SimulateRulePermissionTests, against the real guard.
+        var planAccess = Substitute.For<IPlanAccessGuard>();
+        planAccess.CanReadAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
+
         _handler = new SimulateRuleHandler(
-            _db, auth,
+            _db, auth, planAccess,
             new RuleCalculationExplainer(NullLogger<RuleCalculationExplainer>.Instance),
             guid, clock);
 

@@ -19,6 +19,7 @@ import { firstValueFrom } from 'rxjs';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { OverlapRow } from '../../../shared/models/overlap-row.model';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 import {
   WsButtonComponent,
   WsInputComponent,
@@ -26,7 +27,8 @@ import {
   WsSegmentedControlComponent,
   WsPageLayoutComponent,
   WsTableComponent,
-  WsTableEmptyComponent,
+  WsTableEmptyComponent,
+
   WsConfirmationModalComponent,
   WsPaginationComponent,
   type SegOption,
@@ -63,6 +65,23 @@ import {
 })
 export class AssignmentsListComponent implements OnInit {
   readonly store = inject(AssignmentsStore);
+  private readonly currentUser = inject(CurrentUserService);
+
+  /**
+   * Whether this reader has anything to DO with a selection.
+   *
+   * ★★ IT IS AN "OR", AND IT HAS TO BE. The bar carries activate/deactivate (Assignments.Update) and
+   * delete (Assignments.Delete), and a role holding one but not the other still has a use for the
+   * checkboxes. Gating on either permission alone would take the column away from somebody who can
+   * act — the opposite mistake, and a quieter one.
+   *
+   * ★ `*hasPermission` cannot express this: it takes one key. That is why the condition is a computed
+   * here rather than a directive on the column.
+   */
+  readonly canBulkEdit = computed(() =>
+    this.currentUser.hasPermission('Assignments.Update') ||
+    this.currentUser.hasPermission('Assignments.Delete')
+  );
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
@@ -119,6 +138,23 @@ export class AssignmentsListComponent implements OnInit {
     const first = this.store.assignments()[0];
     return first ? `${first.payeeFullName} (${first.payeeEmployeeCode})` : null;
   });
+
+  /**
+   * Where a payee's name in this list should lead.
+   *
+   * ★★ THE SAME DEAD END THE QUOTA PAGE HAD. A Sales Rep legitimately sees their own row here
+   * (`ListAssignmentsHandler` narrows by PayeeAccessGuard), and clicking their own name sent them to
+   * Access Denied — Payees is hidden from them entirely. The list collapses to their own row, so the
+   * payee is themselves and their record is /profile.
+   *
+   * ★ A Manager sees their reports here and holds `Payees.Read`, so they keep the payee page — which
+   * is the right answer for them and the reason this keys on the permission rather than on the role.
+   */
+  payeeLink(payeeId: string): unknown[] {
+    return this.currentUser.hasPermission('Payees.Read')
+      ? ['/payees', payeeId]
+      : ['/profile'];
+  }
 
   ngOnInit(): void {
     // Deep-link from a payee's Assignments card ("View all") arrives pre-filtered. SUBSCRIBE, don't

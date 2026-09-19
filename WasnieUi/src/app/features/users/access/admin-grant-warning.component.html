@@ -1,0 +1,19 @@
+<ws-card variant="flat" accent="warning" padding="sm">
+  <div class="admin-grant-warning" role="note" aria-live="polite">
+    <p class="admin-grant-warning__title">{{ 'USERS.ADMIN_WARNING.TITLE' | translate }}</p>
+    <p class="admin-grant-warning__lead">
+      @if (name(); as who) {
+        {{ 'USERS.ADMIN_WARNING.LEAD_NAMED' | translate:{ name: who } }}
+      } @else {
+        {{ 'USERS.ADMIN_WARNING.LEAD_INVITE' | translate }}
+      }
+    </p>
+    <ul class="admin-grant-warning__list">
+      <li>{{ 'USERS.ADMIN_WARNING.ITEM_USERS' | translate }}</li>
+      <li>{{ 'USERS.ADMIN_WARNING.ITEM_PLANS' | translate }}</li>
+      <li>{{ 'USERS.ADMIN_WARNING.ITEM_PAYOUTS' | translate }}</li>
+      <li>{{ 'USERS.ADMIN_WARNING.ITEM_BILLING' | translate }}</li>
+    </ul>
+    <p class="admin-grant-warning__foot">{{ 'USERS.ADMIN_WARNING.FOOT' | translate }}</p>
+  </div>
+</ws-card>

@@ -174,7 +174,20 @@ public sealed class AssistantConfinementTests
         // A truncated or placeholder file would still "load". Real guidance runs to tens of thousands
         // of characters; anything far below that means the copy step silently produced a stub.
         knowledge.Documentation.Length.Should().BeGreaterThan(20_000);
-        knowledge.Documentation.Should().Contain("Wasnie");
+
+        // KAN-96. THE BRAND IS "INCENTRA" HERE, AND THE DISTINCTION IS THE WHOLE POINT OF THE LINE.
+        // This asserted "Wasnie" until the rebranding commit renamed the guide's CONTENTS and left the
+        // test behind, which is how it became the suite's only permanent red — and a suite that is
+        // never wholly green stops working as a signal, because the next real failure reads as "the
+        // usual one".
+        //
+        // ★ THE CODE IS STILL WASNIE ON PURPOSE (namespaces, projects, the database) and that has not
+        // changed. What this file is, is USER-FACING TEXT: the handbook a customer reads and the
+        // assistant quotes. The brand boundary runs exactly there, so "Incentra" is what belongs in it.
+        //
+        // ★ AND IT IS STILL A REAL GUARD, not a word swapped to get to green. A 20,000-character
+        // document that never once names the product is a document something went wrong with.
+        knowledge.Documentation.Should().Contain("Incentra");
     }
 
     // ── 4. Degrading without the documentation ────────────────────────────────

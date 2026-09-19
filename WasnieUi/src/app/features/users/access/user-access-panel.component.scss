@@ -1,0 +1,346 @@
+// The access panel — what one person can and cannot do, in a panel that fits on a screen.
+//
+// ★★ THE WHOLE POINT OF THIS FILE IS DENSITY. The first version stacked 31 capability lines and came
+//    to roughly 1,300px: a list to scroll, not a summary to read. Eight rows with meters, one hero
+//    band instead of three stacked blocks, and the named lines behind a disclosure.
+//
+// ★ TOKENS ONLY. No hex, no rgba, no Tailwind palette. `--shadow-card` does NOT exist in this project
+//   despite being named in DESIGN_SYSTEM; the elevation comes from `ws-card` itself.
+
+.access-panel {
+  display: block;
+}
+
+// ── Who ──────────────────────────────────────────────────────────────────
+
+.access-panel__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.access-panel__avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand-subtle);
+  color: var(--color-brand);
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.access-panel__who {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.access-panel__name {
+  margin: 0;
+  font-size: var(--font-size-15);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  // The panel is narrow by design; a long name wraps rather than pushing the close button off.
+  overflow-wrap: anywhere;
+}
+
+.access-panel__email {
+  display: block;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.access-panel__close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  // 28, not 26: WCAG 2.2 Target Size (Minimum) is 24 CSS px for web, and 26 cleared it by two
+  // pixels — a margin that any future padding change would spend without anybody noticing.
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover { background: var(--color-bg-surface-hover); color: var(--color-text-primary); }
+
+  // The design system's focus is a token, not a Tailwind ring.
+  &:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
+}
+
+// ── The hero band ────────────────────────────────────────────────────────
+//
+// Ring, role and status on ONE line. They were three stacked blocks, which spent most of a screen
+// saying who somebody is before the panel got to what they can do.
+
+.access-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  // Sunken relative to the card it sits in — the surface rule for an inset block.
+  background: var(--color-bg-surface-sunken);
+}
+
+.access-hero__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.access-hero__role {
+  font-size: var(--font-size-15);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+}
+
+.access-hero__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+// ★★ SECONDARY, NOT TERTIARY, AND THE REASON IS MEASURED. Tertiary text clears 4.5:1 on the card
+//    (4.55) but only reaches 4.18 on this band, because the band is a sunken surface and the two
+//    tokens were never paired against each other. Same token, different background, different answer —
+//    which is why contrast is checked where the text actually sits and not where it usually sits.
+.access-hero__payee {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.access-hero__payee-warn {
+  color: var(--color-warning);
+}
+
+// ── The ring ─────────────────────────────────────────────────────────────
+//
+// ★★ EVERY RULE THAT WAS HERE IS GONE, and that is the fix. It was a hand-rolled `<circle>` pair with
+//    its own dash-offset keyframe, its own three colour classes and its own reduced-motion guard —
+//    an ad-hoc element (§5.4) reimplementing a primitive that already existed, and drawing its own
+//    sweep beside charts that get theirs from Chart.js. `ws-gauge` owns all of it now: the arc, the
+//    animation, the centre figure and the tokens, read through `chart-theme.ts`.
+//
+// ★ ALL THAT IS LEFT IS THE SIZE, which is this screen's business and not the primitive's.
+
+.access-hero__gauge {
+  flex-shrink: 0;
+  width: 84px;
+}
+
+// ── Actions ──────────────────────────────────────────────────────────────
+
+.access-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.access-panel__self-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+
+  app-icon { flex-shrink: 0; margin-top: 1px; }
+}
+
+.access-panel__unknown {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+
+  app-icon { flex-shrink: 0; margin-top: 1px; color: var(--color-warning); }
+}
+
+// ── The eight rows ───────────────────────────────────────────────────────
+
+.access-groups {
+  margin-top: var(--space-5);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.access-row + .access-row {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+// The whole row is the disclosure control — a real button, so it is reachable and announces its
+// state. A div with a click handler is how a panel like this stops working for half its readers.
+.access-row__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+
+  &:hover .access-row__title { color: var(--color-text-primary); }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: -2px;
+    border-radius: var(--radius-sm);
+  }
+}
+
+.access-row__icon {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+// ★ IT TRUNCATES RATHER THAN PUSHING THE METER. With the title free to grow, "Sales and commissions"
+//   started its meter further right than "Targets" did, so the eight meters never formed a column and
+//   the one thing they are for — being compared down the list — did not work.
+.access-row__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: color var(--transition-fast);
+}
+
+// ── The meter ────────────────────────────────────────────────────────────
+//
+// ★★ ONE SEGMENT PER CAPABILITY, so "1 of 5" and "5 of 5" are told apart without reading either
+//    number. It is the detail, not decoration — the count beside it is the same fact in words.
+
+// ★ A FIXED WIDTH, SIZED TO THE LARGEST AREA (Payments, 7). Every meter then starts and ends on the
+//   same two columns, whatever its area is called, and the shortest one is still read against the
+//   longest. `flex-end` keeps them right-aligned against the count.
+.access-row__meter {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  width: 54px;
+  gap: 2px;
+}
+
+.access-seg {
+  width: 6px;
+  height: 14px;
+  border-radius: var(--radius-xs);
+  // An empty segment has to be legible as a segment, or an area at 0 of 4 looks like an area with no
+  // meter at all. The surface here is the card's, not the sunken one the meter used to borrow.
+  background: var(--color-bg-surface-hover);
+  box-shadow: inset 0 0 0 1px var(--color-border-default);
+  // Grows from the bottom with a per-segment delay, which is what makes the panel read as alive
+  // rather than printed. The delay is bound inline: row index first, then segment.
+  transform-origin: bottom;
+  animation: access-seg-rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.access-seg--on {
+  background: var(--color-brand);
+  box-shadow: none;
+}
+
+.access-row__count {
+  flex-shrink: 0;
+  min-width: 30px;
+  margin-left: var(--space-2);
+  text-align: right;
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+}
+
+.access-row__chevron {
+  flex-shrink: 0;
+  color: var(--color-text-placeholder);
+  transition: transform var(--transition-fast);
+}
+
+.access-row__chevron--open { transform: rotate(180deg); }
+
+// A whole area they hold nothing in fades back, so the eye lands on what they DO hold first. It
+// still renders: "what they cannot do" was half the question.
+.access-row--empty .access-row__title { color: var(--color-text-tertiary); }
+
+@keyframes access-seg-rise {
+  from { transform: scaleY(0.25); opacity: 0; }
+  to   { transform: scaleY(1);    opacity: 1; }
+}
+
+// ── The named lines, on demand ───────────────────────────────────────────
+
+.access-row__detail {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 var(--space-3) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  animation: access-detail-open 200ms ease-out both;
+}
+
+.access-cap {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+  color: var(--color-text-primary);
+}
+
+.access-cap__mark {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-success);
+}
+
+// ★ DENIED IS MUTED, NOT RED. Not holding something is the ordinary case, not an error; a column of
+//   red crosses reads as a list of problems to fix.
+.access-cap--denied {
+  color: var(--color-text-tertiary);
+
+  .access-cap__mark { color: var(--color-text-placeholder); }
+}
+
+@keyframes access-detail-open {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .access-ring__value,
+  .access-seg,
+  .access-row__detail {
+    animation: none;
+    transition: none;
+  }
+}

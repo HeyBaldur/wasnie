@@ -100,6 +100,14 @@
               {{ 'TOPBAR.AUDIT_LOGS' | translate }}
             </button>
           }
+          <!-- KAN-32. Users.Read, so a CompManager sees the roster; the actions inside the page are
+               gated separately on Users.Manage. Same rule as above: hidden, never greyed. -->
+          @if ('Users.Read' | hasPermission) {
+            <button class="topbar__dropdown-item" (click)="goToUsers()">
+              <app-icon name="users" [size]="15" />
+              {{ 'TOPBAR.USERS' | translate }}
+            </button>
+          }
           <div class="topbar__dropdown-divider"></div>
           <button class="topbar__dropdown-item topbar__dropdown-item--danger" (click)="logout()">
             <app-icon name="log-out" [size]="15" />

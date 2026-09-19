@@ -1,4 +1,14 @@
-<div class="ws-gauge" role="img" [attr.aria-label]="percentText() + ' attainment'">
+<!-- ★ THE CENTRE IS OVERLAID WITH `grid-area`, NOT `position: absolute`. Absolute takes it out of the
+     grid's flow, so `place-items: center` stops centring it and the figure sits off the middle —
+     which is exactly what happened the first time this was drawn by hand. -->
+<div class="ws-gauge" [class.ws-gauge--ring]="circumference() === 360"
+     role="img" [attr.aria-label]="describedAs()">
   <canvas #canvas></canvas>
-  <p class="ws-gauge__pct" [style.color]="fillColor()">{{ percentText() }}</p>
+
+  <div class="ws-gauge__centre">
+    <span class="ws-gauge__figure">{{ centreText() }}</span>
+    @if (sublabel()) {
+      <span class="ws-gauge__sublabel">{{ sublabel() }}</span>
+    }
+  </div>
 </div>

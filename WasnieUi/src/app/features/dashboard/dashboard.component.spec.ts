@@ -1,4 +1,5 @@
 ﻿import { TestBed, ComponentFixture } from '@angular/core/testing';
+import { CurrentUserService } from '../../core/auth/current-user.service';
 import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -18,7 +19,14 @@ describe('DashboardComponent helpers', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [DashboardComponent, TranslateModule.forRoot()],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
+        // KAN-92. THE READER HAS Reports.ViewAll, because this is the company-wide dashboard and
+        // these tests are about what an administrator sees. Without it the screen now renders the
+        // "this overview is for administrators" state instead — which is the point of that change,
+        // and six of these went red for exercising a page their test user was not allowed to open.
+        { provide: CurrentUserService, useValue: { hasPermission: (p: string) => p === 'Reports.ViewAll' } },
+      ],
     });
     component = TestBed.createComponent(DashboardComponent).componentInstance;
   });
@@ -753,7 +761,14 @@ describe('Action band payout card routing', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [DashboardComponent, TranslateModule.forRoot()],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
+        // KAN-92. THE READER HAS Reports.ViewAll, because this is the company-wide dashboard and
+        // these tests are about what an administrator sees. Without it the screen now renders the
+        // "this overview is for administrators" state instead — which is the point of that change,
+        // and six of these went red for exercising a page their test user was not allowed to open.
+        { provide: CurrentUserService, useValue: { hasPermission: (p: string) => p === 'Reports.ViewAll' } },
+      ],
     });
     fixture = TestBed.createComponent(DashboardComponent);
     fixture.detectChanges();
@@ -839,7 +854,14 @@ describe('Dashboard deal-lost alerts', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [DashboardComponent, TranslateModule.forRoot()],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
+        // KAN-92. THE READER HAS Reports.ViewAll, because this is the company-wide dashboard and
+        // these tests are about what an administrator sees. Without it the screen now renders the
+        // "this overview is for administrators" state instead — which is the point of that change,
+        // and six of these went red for exercising a page their test user was not allowed to open.
+        { provide: CurrentUserService, useValue: { hasPermission: (p: string) => p === 'Reports.ViewAll' } },
+      ],
     });
     fixture = TestBed.createComponent(DashboardComponent);
     component = fixture.componentInstance;

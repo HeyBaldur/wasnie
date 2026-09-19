@@ -1,4 +1,4 @@
-namespace Wasnie.Application.Common.Interfaces;
+﻿namespace Wasnie.Application.Common.Interfaces;
 
 public interface IIdentityService
 {
@@ -39,6 +39,35 @@ public interface IIdentityService
 
     Task<bool> ChangeEmailAsync(string userId, string newEmail);
 
+    // ── KAN-32, user administration ──────────────────────────────────────────
+
+    /// <summary>
+    /// Puts the user in exactly the roles given, removing every other one.
+    ///
+    /// ★ REPLACE, NOT ADD. A role change that only added would quietly leave the old authority in
+    /// place, so demoting somebody would grant nothing and take nothing away — the most dangerous
+    /// shape this operation could have.
+    /// </summary>
+    Task<(bool Succeeded, IList<string> Errors)> ReplaceUserRolesAsync(string userId, IList<string> roles);
+
+    /// <summary>
+    /// Email, first name, last name and role for each id, in one round trip.
+    ///
+    /// ★ ONE CALL FOR THE WHOLE PAGE. The users list needs all four for every row, and asking per row
+    /// is how a twenty-person tenant turns into eighty queries.
+    /// </summary>
+    Task<IReadOnlyList<IdentityUserSummary>> GetUserSummariesAsync(IReadOnlyCollection<string> userIds);
+
+    /// <summary>
+    /// Every user id carrying this tenant's <c>tenant_id</c> claim.
+    ///
+    /// ★★ IDENTITY IS ASKED, NOT TenantUsers, AND THE ORDER MATTERS. Membership lives in the claim —
+    /// that is what a sign-in reads — while TenantUsers records access decisions. Tenants created
+    /// before KAN-32 have the claim and no access row, so a roster built from the access table would
+    /// be empty for every customer that exists today.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetTenantUserIdsAsync(string tenantId);
+
     // Two-factor authentication (TOTP via ASP.NET Identity built-in)
     Task<bool> IsTwoFactorEnabledAsync(string userId);
     Task<string?> GetOrCreateTotpSecretAsync(string userId);
@@ -49,3 +78,12 @@ public interface IIdentityService
     Task<bool> RedeemRecoveryCodeAsync(string userId, string code);
     Task<int> CountRecoveryCodesAsync(string userId);
 }
+
+/// <summary>What the users screen needs about a person, gathered from Identity's tables.</summary>
+public sealed record IdentityUserSummary(
+    string UserId,
+    string Email,
+    string? FirstName,
+    string? LastName,
+    string? Role,
+    bool EmailConfirmed);

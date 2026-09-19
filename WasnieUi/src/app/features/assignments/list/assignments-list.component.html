@@ -32,7 +32,7 @@
       />
     </div>
 
-    @if (store.selectedCount() > 0) {
+    @if (canBulkEdit() && store.selectedCount() > 0) {
       <div class="assignments-list__bulk-bar">
         <span class="bulk-bar__count">
           {{ 'ASSIGNMENTS.BULK_SELECTED' | translate: { count: store.selectedCount() } }}
@@ -67,14 +67,20 @@
         <table>
           <thead>
             <tr>
-              <th class="col-check">
-                <input
-                  type="checkbox"
-                  [checked]="store.allSelected()"
-                  [indeterminate]="store.someSelected()"
-                  (change)="store.toggleSelectAll()"
-                />
-              </th>
+              <!-- ★★ THE COLUMN EXISTS ONLY FOR THE BULK BAR, SO IT GOES WHEN THE BULK BAR CANNOT. Every
+                   action in that bar is gated on Assignments.Update or Assignments.Delete; a reader
+                   with neither could tick rows all day and watch a bar appear with nothing in it but
+                   "Cancel". That is the disabled-control pattern §5.8 forbids, wearing a checkbox. -->
+              @if (canBulkEdit()) {
+                <th class="col-check">
+                  <input
+                    type="checkbox"
+                    [checked]="store.allSelected()"
+                    [indeterminate]="store.someSelected()"
+                    (change)="store.toggleSelectAll()"
+                  />
+                </th>
+              }
               <th>{{ 'ASSIGNMENTS.COL_PAYEE' | translate }}</th>
               <th>{{ 'ASSIGNMENTS.COL_PLAN' | translate }}</th>
               <th>{{ 'ASSIGNMENTS.COL_PERIOD' | translate }}</th>
@@ -86,7 +92,7 @@
             @if (store.loading()) {
               @for (row of skeletonRows; track row) {
                 <tr class="skeleton-row">
-                  <td></td>
+                  @if (canBulkEdit()) { <td></td> }
                   <td><span class="skeleton skeleton--text-wide"></span></td>
                   <td><span class="skeleton skeleton--text"></span></td>
                   <td><span class="skeleton skeleton--text"></span></td>
@@ -96,25 +102,35 @@
               }
             } @else if (store.pagedAssignments().length === 0) {
               <tr>
-                <td colspan="6">
+                <!-- ★ THE SPAN FOLLOWS THE COLUMN COUNT. Hardcoded at 6 it would overrun the table by one
+                     the moment the checkbox column goes, and an empty row is exactly the state nobody
+                     screenshots before shipping. -->
+                <td [attr.colspan]="canBulkEdit() ? 6 : 5">
                   <ws-table-empty messageKey="ASSIGNMENTS.EMPTY_FILTER_TITLE" />
                 </td>
               </tr>
             } @else {
               @for (assignment of store.pagedAssignments(); track assignment.id) {
                 <tr [class.is-selected]="store.selectedIds().has(assignment.id)">
-                  <td class="col-check" (click)="$event.stopPropagation()">
-                    <input
-                      type="checkbox"
-                      [checked]="store.selectedIds().has(assignment.id)"
-                      (change)="store.toggleSelect(assignment.id)"
-                    />
-                  </td>
+                  @if (canBulkEdit()) {
+                    <td class="col-check" (click)="$event.stopPropagation()">
+                      <input
+                        type="checkbox"
+                        [checked]="store.selectedIds().has(assignment.id)"
+                        (change)="store.toggleSelect(assignment.id)"
+                      />
+                    </td>
+                  }
                   <td class="col-name">
                     <div class="payee-identity">
                       <span class="payee-avatar">{{ initialsFor(assignment.payeeFullName) }}</span>
                       <div class="payee-identity__text">
-                        <a class="payee-name" [routerLink]="['/payees', assignment.payeeId]">{{ assignment.payeeFullName }}</a>
+                        <!-- ★ SAME RULE AS THE QUOTA PAGE. Payees is hidden from a Sales Rep entirely
+                             (KAN-93 bug 1), and this list collapses to their own row, so the payee
+                             named here IS them — their record is /profile, not a payee page. Whoever
+                             holds `Payees.Read` keeps the payee page; it is the key the /payees route
+                             guard asks for, so the link cannot offer a page that guard then refuses. -->
+                        <a class="payee-name" [routerLink]="payeeLink(assignment.payeeId)">{{ assignment.payeeFullName }}</a>
                         <span class="payee-code">{{ assignment.payeeEmployeeCode }}</span>
                       </div>
                     </div>

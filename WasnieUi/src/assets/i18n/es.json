@@ -17,6 +17,15 @@
     "CONFIRM_PASSWORD": "Confirmar contraseña",
     "TENANT_NAME": "Nombre de la organización",
     "TENANT_SLUG": "Identificador de la organización",
+    "SECTION_ORGANIZATION": "Su organización",
+    "SECTION_ORGANIZATION_DESC": "El espacio de trabajo donde su equipo gestionará los planes de compensación, los pagos y los resultados.",
+    "SECTION_ADMIN": "Cuenta de administrador",
+    "SECTION_ADMIN_DESC": "El primer usuario del espacio de trabajo, con acceso completo a planes, pagos y gestión de usuarios.",
+    "TENANT_NAME_HINT": "El nombre de su empresa, tal como debe aparecer en todo el espacio de trabajo.",
+    "TENANT_SLUG_HINT": "Letras minúsculas, números y guiones. No se puede cambiar una vez creado el espacio de trabajo.",
+    "TENANT_SLUG_PREVIEW": "Su equipo accederá con",
+    "ADMIN_EMAIL_HINT": "Sirve para acceder y para recibir el mensaje de confirmación.",
+    "ADMIN_PASSWORD_HINT": "Al menos 8 caracteres, con una mayúscula y un número.",
     "FIRST_NAME": "Nombre",
     "LAST_NAME": "Apellido",
     "FULL_NAME": "Nombre completo",
@@ -40,8 +49,25 @@
     "RESEND_CONFIRMATION": "Reenviar correo de confirmación",
     "ALREADY_CONFIRMED": "Tu cuenta ya está confirmada. Inicia sesión a continuación.",
     "FORGOT_PASSWORD": "¿Olvidaste tu contraseña?",
+    "FORGOT_ORGANIZATION_ID": "¿Lo ha olvidado?",
     "PASSWORD_RESET_SUCCESS": "Contraseña actualizada. Inicia sesión con tu nueva contraseña.",
-    "BACK_TO_LOGIN": "Volver a iniciar sesión"
+    "BACK_TO_LOGIN": "Volver a iniciar sesión",
+    "ORGANIZATION_ID": "Identificador de organización",
+    "ORGANIZATION_ID_HINT": "El identificador del espacio de trabajo al que le invitaron. Está en el correo de invitación.",
+    "USER_TYPE": "Tipo de usuario",
+    "USER_TYPE_ADMIN": "Administrador",
+    "USER_TYPE_ADMIN_DESC": "Para el titular de la cuenta que administra el espacio de trabajo: planes de compensación, pagos y accesos. Acceda con su correo electrónico y su contraseña.",
+    "USER_TYPE_MEMBER": "Miembro del equipo",
+    "USER_TYPE_MEMBER_DESC": "Para representantes y responsables que operan dentro de un espacio de trabajo ya existente. Acceda con su correo electrónico, su contraseña y el identificador de organización que consta en su invitación.",
+    "ORGANIZATION_REQUIRED": "Este correo se usa en más de un espacio de trabajo. Introduzca el identificador de organización para continuar."
+  },
+  "FORGOT_ORGANIZATION": {
+    "TITLE": "¿Ha olvidado su Organization identifier?",
+    "DESC": "Escriba su correo electrónico y le enviaremos el Organization identifier del espacio de trabajo que administra. Por seguridad nunca se muestra en pantalla, y solo los administradores pueden solicitarlo.",
+    "SUBMIT": "Envíamelo",
+    "SENT_TITLE": "Revise su bandeja de entrada",
+    "SENT_DESC": "Si esa dirección administra un espacio de trabajo, se le ha enviado allí su Organization identifier.",
+    "SENT_NON_ADMIN": "Solo los administradores lo reciben. Si no lo es, pídaselo a su administrador — él puede consultarlo desde su propia cuenta."
   },
   "FORGOT_PASSWORD": {
     "TITLE": "Restablece tu contraseña",
@@ -197,7 +223,8 @@
     "UPGRADE_BTN": "Mejorar plan",
     "UPGRADE_TOOLTIP": "Estás en el plan Gratuito — mejora al Profesional",
     "PLAN_BADGE_TOOLTIP": "Gestionar suscripción",
-    "AUDIT_LOGS": "Registros de auditoría"
+    "AUDIT_LOGS": "Registros de auditoría",
+    "USERS": "Usuarios"
   },
   "NAV": {
     "TOGGLE": "Contraer barra lateral",
@@ -228,7 +255,9 @@
     "AUDIT_LOGS": "Registros de auditoría",
     "GUIDED_TOUR": "Sandbox",
     "PRICING": "Precios",
-    "MANAGE_BILLING": "Facturación"
+    "MANAGE_BILLING": "Facturación",
+    "USERS": "Usuarios",
+    "MY_DASHBOARD": "Mi panel"
   },
   "WELCOME": {
     "EYEBROW": "Tu espacio está listo",
@@ -511,6 +540,7 @@
     "EXPORT": "Exportar",
     "COPY": "Copiar",
     "COPY_NAME": "Copiar nombre",
+    "RESIZE_COLUMN": "Cambiar el ancho de la columna: {{name}}",
     "COPY_REFERENCE": "Copiar referencia",
     "COPY_ID": "Copiar ID",
     "COPIED": "¡Copiado!",
@@ -524,7 +554,8 @@
     "RETRY": "Intentar de nuevo",
     "NO_RESULTS": "Sin resultados",
     "DISMISS": "Descartar",
-    "CLOSE": "Cerrar"
+    "CLOSE": "Cerrar",
+    "YES": "Sí"
   },
   "ERRORS": {
     "GENERIC": "Algo salió mal. Por favor, inténtalo de nuevo.",
@@ -922,6 +953,8 @@
     }
   },
   "ATTAINMENT": {
+    "PCT_OF_TARGET": "{{pct}}% del objetivo",
+    "NOTE": "La barra compara lo conseguido en este período con el objetivo fijado para él. Lo conseguido es lo que el motor ha medido hasta ahora; el objetivo es lo que pide la cuota.",
     "TARGET": "Objetivo",
     "ACHIEVED": "Logrado",
     "MEASURE_REVENUE": "Ingresos",
@@ -1047,7 +1080,9 @@
     "COUNTER_IN_RANGE": "en este rango",
     "COMMISSIONS_UNREACHABLE_NOTE": "De lo no pagado, ningún pay run puede alcanzar:",
     "COMMISSIONS_UNREACHABLE_LINK": "Ver qué está bloqueado y por qué",
-    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Revisar asignaciones desactivadas"
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Revisar asignaciones desactivadas",
+    "NOT_YOURS_TITLE": "Este resumen es para administradores",
+    "NOT_YOURS_DESC": "Muestra las comisiones de toda la empresa, que su rol no incluye. Sus propias cifras llegarán a esta pantalla en breve; mientras tanto, use el menú de la izquierda para lo que sí tiene disponible."
   },
   "QUOTAS": {
     "TITLE": "Cuotas",
@@ -2121,7 +2156,7 @@
     "SUBTITLE": "Gestiona tus datos personales y la seguridad de tu cuenta.",
     "LOAD_ERROR": "No pudimos cargar tu perfil. Por favor, inténtalo de nuevo.",
     "SECTION_YOUR_PROFILE": "Datos personales",
-    "SECTION_ORGANIZATION": "Organización",
+    "SECTION_ORGANIZATION": "Su organización",
     "NAME_HEADING": "Nombre completo",
     "NAME_MISSING_NOTICE": "Aún no tienes nombre configurado. Por favor, introduce tu nombre y apellido y guarda los cambios.",
     "SAVE_NAME": "Guardar nombre",
@@ -2153,7 +2188,10 @@
     "CONFIRM_EMAIL_LOADING": "Confirmando tu nueva dirección de correo electrónico…",
     "CONFIRM_EMAIL_SUCCESS_TITLE": "¡Correo electrónico actualizado!",
     "CONFIRM_EMAIL_SUCCESS_DESC": "Tu correo ha sido actualizado. Por favor, inicia sesión con tu nueva dirección. Redirigiendo…",
-    "CONFIRM_EMAIL_ERROR_TITLE": "Enlace expirado o inválido"
+    "CONFIRM_EMAIL_ERROR_TITLE": "Enlace expirado o inválido",
+    "ORGANIZATION_ID_HEADING": "Identificador de organización",
+    "ORGANIZATION_ID_HINT": "Déselo a quien invite. Lo necesitan para iniciar sesión cuando su correo se usa en más de un espacio de trabajo.",
+    "ORGANIZATION_ID_COPY": "Copiar identificador"
   },
   "TWO_FACTOR": {
     "SECTION_TITLE": "Seguridad",
@@ -2239,9 +2277,9 @@
     "CLOSE_FIGURE_CREDITS": "{{count}} crédito(s)",
     "CLOSE_FIGURE_BALANCE": "Balance del ledger",
     "CLOSE_RESOLUTION_LABEL": "¿Qué pasó con el dinero?",
-    "CLOSE_RESOLUTION_SETTLED": "Saldado fuera de Wasnie",
+    "CLOSE_RESOLUTION_SETTLED": "Saldado fuera de Incentra",
     "CLOSE_RESOLUTION_WRITTEN_OFF": "Dado de baja",
-    "CLOSE_RESOLUTION_SETTLED_HINT": "Lo resolvió nómina, RRHH o finanzas — el dinero llegó a la persona, o se recuperó de ella, en un lugar que Wasnie no ve.",
+    "CLOSE_RESOLUTION_SETTLED_HINT": "Lo resolvió nómina, RRHH o finanzas — el dinero llegó a la persona, o se recuperó de ella, en un lugar que Incentra no ve.",
     "CLOSE_RESOLUTION_WRITTEN_OFF_HINT": "La empresa lo absorbe. Nadie va a cobrar esto, y queda registrado como un costo.",
     "CLOSE_NOTE_LABEL": "Por qué (obligatorio)",
     "CLOSE_NOTE_PLACEHOLDER": "Qué se decidió, y quién.",
@@ -2416,7 +2454,8 @@
     "TOKENS_EXHAUSTED_BUY": "Añadir tokens",
     "ERROR_TRIAL_LIMIT_REACHED": "Ha usado todos los tokens del asistente incluidos en su prueba gratuita. Suscríbase para seguir usando Zeke sin límites.",
     "WELCOME_EYEBROW": "Zeke · tu asistente de Incentra",
-    "WELCOME_TRY_ASKING": "Prueba a preguntar"
+    "WELCOME_TRY_ASKING": "Prueba a preguntar",
+    "LOCKED_CTA": "Ver los planes"
   },
   "RECONCILIATION": {
     "TITLE": "Centro de Reconciliación",
@@ -3007,5 +3046,241 @@
     "LABEL": "Prueba gratuita",
     "ENDS_ON": "Tu prueba termina el {{date}}",
     "CTA": "Mejorar plan"
+  },
+  "USERS": {
+    "TITLE": "Usuarios",
+    "SUBTITLE": "Quién tiene acceso a este espacio y qué invitaciones siguen abiertas.",
+    "PAYEE": {
+      "NOT_LINKED": "Sin vincular"
+    },
+    "LINK_PAYEE": {
+      "NO_MATCH": "Ningún payee sin vincular coincide.",
+      "TITLE": "Vincular a un payee",
+      "MESSAGE": "Elija la ficha de payee que corresponde a {{name}}. A partir de entonces verá sus propias comisiones, su saldo y sus objetivos.",
+      "PLACEHOLDER": "Elija un payee",
+      "SUBMIT": "Vincular",
+      "SUGGESTION": "Existe un payee con el mismo correo: {{name}}.",
+      "USE_SUGGESTION": "Usar este",
+      "NONE_AVAILABLE": "Todos los payees de este espacio ya pertenecen a un usuario. Desvincule uno primero o cree la ficha de payee."
+    },
+    "UNLINK_PAYEE": {
+      "TITLE": "Desvincular payee",
+      "MESSAGE": "{{name}} dejará de ver las comisiones, el saldo y los objetivos de {{payee}}. No se borra ni el usuario ni la ficha de payee, y el vínculo puede rehacerse."
+    },
+    "SECTION": {
+      "PEOPLE": "Personas",
+      "PENDING": "Invitaciones pendientes",
+      "HISTORY": "Invitaciones cerradas ({{count}})"
+    },
+    "TABLE": {
+      "PAYEE": "Ficha de payee",
+      "NAME": "Nombre",
+      "EMAIL": "Correo",
+      "ROLE": "Rol",
+      "STATUS": "Estado",
+      "INVITED_BY": "Invitado por",
+      "SENT": "Enviada",
+      "EXPIRES": "Caduca",
+      "FOUNDER": "Creó el espacio",
+      "RESENT": "Reenviada {{count}}x"
+    },
+    "STATUS": {
+      "ACTIVE": "Activo",
+      "DEACTIVATED": "Desactivado",
+      "UNCONFIRMED": "Correo sin confirmar"
+    },
+    "INVITATION_STATUS": {
+      "PENDING": "Pendiente",
+      "ACCEPTED": "Aceptada",
+      "EXPIRED": "Caducada",
+      "REVOKED": "Revocada"
+    },
+    "ROLES": {
+      "TENANT_ADMIN": "Administrador",
+      "COMP_MANAGER": "Responsable de compensación",
+      "MANAGER": "Manager",
+      "REP": "Comercial",
+      "UNKNOWN": "Sin rol"
+    },
+    "ACTION": {
+      "LINK_PAYEE": "Vincular a un payee",
+      "UNLINK_PAYEE": "Desvincular payee",
+      "SELF_NOTE": "Es usted — su propio rol y acceso no se cambian desde aquí.",
+      "DEACTIVATE": "Desactivar",
+      "REACTIVATE": "Reactivar",
+      "RESEND": "Reenviar",
+      "REVOKE": "Revocar",
+      "CHANGE_ROLE": "Cambiar rol",
+      "REMOVE": "Quitar del espacio de trabajo"
+    },
+    "SEATS": {
+      "USED": "{{used}} de {{limit}} asientos usados",
+      "FULL": "Los {{limit}} asientos están ocupados. Desactive a alguien o retire una invitación para liberar uno."
+    },
+    "INVITE": {
+      "BUTTON": "Invitar usuario",
+      "TITLE": "Invitar a alguien a este espacio",
+      "EMAIL_LABEL": "Dirección de correo",
+      "EMAIL_PLACEHOLDER": "nombre@empresa.com",
+      "EMAIL_ERROR": "Introduzca una dirección de correo válida.",
+      "ROLE_LABEL": "Rol",
+      "ROLE_PLACEHOLDER": "Elija un rol",
+      "ROLE_ERROR": "Elija un rol.",
+      "HINT": "Recibirá un correo con un enlace para establecer su contraseña. El enlace es válido 7 días.",
+      "SUBMIT": "Enviar invitación",
+      "PAYEE_LABEL": "Payee vinculado",
+      "PAYEE_PLACEHOLDER": "Nadie - esta persona no cobra comisiones",
+      "PAYEE_HINT": "Elija la ficha de payee que ES esta persona, para que pueda ver sus propias comisiones. Déjelo vacío para un administrador o un usuario de finanzas.",
+      "PAYEE_SUGGESTED": "{{name}} tiene el mismo correo. ¿Es la misma persona?"
+    },
+    "DEACTIVATE": {
+      "TITLE": "¿Desactivar a este usuario?",
+      "MESSAGE": "{{name}} dejará de poder iniciar sesión. No se borra nada: su nombre sigue en todo lo que aprobó o modificó, y puede reactivarlo cuando quiera."
+    },
+    "REVOKE": {
+      "TITLE": "¿Retirar esta invitación?",
+      "MESSAGE": "El enlace enviado a {{email}} dejará de funcionar. Puede volver a invitarle más adelante."
+    },
+    "EMPTY": {
+      "TITLE": "Todavía no hay nadie",
+      "MESSAGE": "Invite a un compañero para darle acceso a este espacio."
+    },
+    "CHANGE_ROLE": {
+      "TITLE": "Cambiar rol",
+      "MESSAGE": "Elija el nuevo rol para {{name}}.",
+      "SUBMIT": "Guardar rol"
+    },
+    "ADMIN_WARNING": {
+      "TITLE": "El acceso de administrador es total",
+      "LEAD_NAMED": "{{name}} podrá hacer todo lo que usted puede hacer en este espacio de trabajo, sin ninguna restricción:",
+      "LEAD_INVITE": "Esta persona podrá hacer todo lo que usted puede hacer en este espacio de trabajo, sin ninguna restricción:",
+      "ITEM_USERS": "Invitar, desactivar y eliminar personas, y cambiar el rol de cualquiera — incluso quitarle a usted el rol de administrador.",
+      "ITEM_PLANS": "Crear, editar, activar y archivar planes de compensación, cuotas y asignaciones.",
+      "ITEM_PAYOUTS": "Calcular, aprobar y marcar pagos como pagados, y ajustar cualquier saldo del ledger.",
+      "ITEM_BILLING": "Gestionar la suscripción, la facturación, las integraciones y la configuración del espacio de trabajo.",
+      "FOOT": "Asigne este rol solo a alguien a quien confiaría todo el espacio de trabajo."
+    },
+    "REFUSAL": {
+      "ALREADY_MEMBER": "Esa persona ya está en este espacio de trabajo.",
+      "ALREADY_INVITED": "Esa dirección ya tiene una invitación abierta. Reenvíela en lugar de crear otra.",
+      "NO_SEATS": "Los {{limit}} asientos están ocupados. Libere uno antes de invitar a nadie más.",
+      "ROLE_UNKNOWN": "Ese rol no existe.",
+      "ROLE_NOT_ASSIGNABLE": "Ese rol no se puede asignar por ahora. Elija Administrador o Comercial.",
+      "ALREADY_USED": "Esa invitación ya fue aceptada.",
+      "EXPIRED": "Esa invitación ha caducado. Envíe una nueva.",
+      "REVOKED": "Esa invitación fue retirada.",
+      "LAST_ADMIN": "Es el único administrador que queda. Asigne antes el rol de administrador a otra persona, o nadie podrá gestionar usuarios.",
+      "CANNOT_ACT_ON_SELF": "No puede cambiar su propio acceso. Pídaselo a otro administrador.",
+      "PAYEE_NOT_FOUND": "Ese payee ya no existe.",
+      "PAYEE_ALREADY_LINKED": "{{payee}} ya pertenece a otro inicio de sesión. Desvincúlelo primero."
+    },
+    "REMOVE": {
+      "TITLE": "¿Quitar a esta persona del espacio de trabajo?",
+      "MESSAGE": "{{name}} dejará de pertenecer a este espacio y desaparecerá de esta lista. Su cuenta, su acceso a cualquier otro espacio y su nombre en todo lo que aprobó quedan exactamente igual. Puede volver a invitarle cuando quiera."
+    }
+  },
+  "ACCEPT_INVITATION": {
+    "TITLE_PLAIN": "Aceptar invitación",
+    "TITLE": "Únase a {{company}}",
+    "SUBTITLE": "Le han invitado en {{email}}. Elija una contraseña para terminar.",
+    "CHECKING": "Comprobando su invitación...",
+    "FIRST_NAME": "Nombre",
+    "LAST_NAME": "Apellidos",
+    "PASSWORD": "Contraseña",
+    "PASSWORD_HINT": "Al menos 10 caracteres, con una mayúscula, un dígito y un símbolo.",
+    "CONFIRM_PASSWORD": "Confirmar contraseña",
+    "PASSWORDS_MISMATCH": "Las contraseñas no coinciden.",
+    "SUBMIT": "Crear mi cuenta",
+    "GO_TO_LOGIN": "Ir al inicio de sesión",
+    "DONE_TITLE": "Todo listo",
+    "DONE_MESSAGE": "Su cuenta está creada. Inicie sesión para empezar.",
+    "ERROR_GENERIC": "No se ha podido completar. Inténtelo de nuevo.",
+    "REFUSAL": {
+      "TITLE": "Esta invitación no se puede usar",
+      "INVALID": "Este enlace no es válido. Pida a quien le invitó que le envíe uno nuevo.",
+      "ALREADY_USED": "Esta invitación ya se aceptó. Pruebe a iniciar sesión.",
+      "EXPIRED": "Esta invitación ha caducado. Pida a quien le invitó que le envíe una nueva.",
+      "REVOKED": "Esta invitación fue retirada. Contacte con quien le invitó.",
+      "ALREADY_MEMBER": "Esa dirección ya tiene una cuenta. Pruebe a iniciar sesión.",
+      "GENERIC": "Esta invitación no se puede usar. Pida a quien le invitó que le envíe una nueva."
+    }
+  },
+  "MY_DASHBOARD": {
+    "AWAITING_SETUP_TITLE": "{{count}} de tus ventas todavía no pueden generar comisión",
+    "AWAITING_SETUP_DESC": "Estas ventas están registradas a tu nombre, pero la configuración de tu plan no está completa, así que todavía no cuentan para tu comisión. Pedí a tu administrador que la termine — mientras tanto no se pierde nada.",
+    "SUBTITLE": "Sus comisiones, su saldo y cómo van sus objetivos.",
+    "ERROR_TITLE": "No se pudieron cargar sus cifras",
+    "ERROR_DESC": "No falta nada en su cuenta: la consulta falló. Recargue la página y avise al administrador si vuelve a ocurrir.",
+    "UNLINKED_TITLE": "Su cuenta aún no está vinculada a un payee",
+    "UNLINKED_DESC": "Las comisiones se registran sobre una ficha de payee, y la suya no está asociada a este inicio de sesión. Pida a un administrador que la vincule: hasta entonces no hay cifras que mostrar, lo cual no significa que no haya ganado nada.",
+    "MONEY_TITLE": "Sus comisiones",
+    "EARNED": "Generado",
+    "PAID": "Pagado",
+    "AWAITING": "Pendiente de cobro",
+    "DEBT": "Usted debe",
+    "DISPUTED_NOTE": "En disputa y no incluido arriba:",
+    "NO_MONEY_YET": "Aún no hay nada registrado a su nombre.",
+    "STATE_NOTHING_RECORDED": "No hay pagos ni deuda registrados.",
+    "STATE_EARNINGS_NO_DEBT": "Tiene ingresos y no debe nada.",
+    "STATE_EARNINGS_WITH_DEBT": "Tiene ingresos y una deuda, con pendiente suficiente para cubrirla.",
+    "STATE_DEBT_ONLY": "Tiene una deuda y nada pendiente que compensarla.",
+    "STATE_DEBT_EXCEEDS": "Su deuda supera todo lo pendiente, así que la diferencia se arrastra.",
+    "STATE_UNKNOWN": "Su saldo se muestra arriba.",
+    "QUOTAS_TITLE": "Sus objetivos",
+    "QUOTAS_EMPTY": "No tiene ningún objetivo que cubra estas fechas.",
+    "NO_TARGET": "No se ha fijado objetivo para este plan.",
+    "SCOPE_ALL_TIME": "Histórico",
+    "EARNED_DESC": "Todo lo que las reglas del plan dicen que ha generado.",
+    "PAID_DESC": "De eso, lo que ya ha cobrado.",
+    "AWAITING_DESC": "Generado y todavía sin pagar.",
+    "DEBT_DESC": "Lo que debe a la empresa ahora mismo.",
+    "SCOPE_RANGE": "Fechas seleccionadas",
+    "SCOPE_TODAY": "A día de hoy"
+  },
+  "ACCESS": {
+    "UNKNOWN": "No se pudo cargar lo que este rol puede hacer. La lista no se muestra, en vez de mostrarse mal.",
+    "AREA": {
+      "SELF": "Lo suyo",
+      "PEOPLE": "Personas",
+      "PLANS": "Planes y reglas",
+      "TARGETS": "Objetivos",
+      "ASSIGNMENTS": "Asignaciones",
+      "SALES": "Ventas y comisiones",
+      "PAY": "Pagos",
+      "ADMIN": "Administración"
+    },
+    "CAP": {
+      "OWN_PAY": "Ver su propio saldo y sus comisiones",
+      "PAYEES_READ": "Ver las fichas de todas las personas",
+      "PAYEES_CREATE": "Dar de alta a un payee",
+      "PAYEES_UPDATE": "Editar un payee",
+      "PAYEES_TERMINATE": "Dar de baja a un payee",
+      "PLANS_READ": "Ver todos los planes de compensación",
+      "PLANS_READ_OWN": "Ver los planes bajo los que cobra",
+      "PLANS_CREATE": "Crear un plan",
+      "PLANS_ACTIVATE": "Activar un plan",
+      "PLANS_STOP_RULE": "Detener una regla a mitad de período",
+      "QUOTAS_READ": "Ver objetivos",
+      "QUOTAS_SET": "Fijar y cerrar objetivos",
+      "ASSIGNMENTS_READ": "Ver quién está en qué plan",
+      "ASSIGNMENTS_CREATE": "Asignar a alguien a un plan",
+      "ASSIGNMENTS_DELETE": "Quitar a alguien de un plan",
+      "TRANSACTIONS_READ": "Ver las ventas registradas",
+      "TRANSACTIONS_CREATE": "Registrar una venta",
+      "TRANSACTIONS_VOID": "Anular una venta",
+      "CREDITS_READ": "Ver las comisiones calculadas",
+      "PAYOUTS_READ": "Ver pay runs y pagos",
+      "PAYOUTS_CALCULATE": "Ejecutar un pay run",
+      "PAYOUTS_APPROVE": "Aprobar un pago",
+      "PAYOUTS_MARK_PAID": "Marcar un pago como pagado",
+      "LEDGER_READ": "Ver saldos y deuda",
+      "LEDGER_ADJUST": "Ajustar un saldo a mano",
+      "RECONCILIATION_CLOSE": "Cerrar una partida en Reconciliación",
+      "REPORTS_VIEW_ALL": "Ver el dashboard de toda la empresa",
+      "USERS_MANAGE": "Invitar y gestionar usuarios",
+      "SETTINGS_UPDATE": "Cambiar la configuración del espacio",
+      "SUBSCRIPTION_MANAGE": "Gestionar la facturación",
+      "AUDIT_READ": "Leer el registro de auditoría"
+    }
   }
 }
