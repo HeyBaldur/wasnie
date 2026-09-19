@@ -63,5 +63,7 @@
 
   @if (error()) {
     <span class="ws-input__error">{{ error() | translate }}</span>
+  } @else if (hint()) {
+    <span class="ws-input__hint">{{ hint() | translate }}</span>
   }
 </div>

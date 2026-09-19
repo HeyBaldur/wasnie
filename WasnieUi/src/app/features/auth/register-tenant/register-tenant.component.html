@@ -22,19 +22,44 @@
             <div class="auth-form__error">{{ error() }}</div>
           }
 
+          <!-- El alta crea DOS cosas a la vez: el espacio de trabajo y la cuenta que lo administra.
+               Sin separarlas, los seis campos se leen como una lista plana y nadie entiende por qué
+               le piden un nombre de empresa y un apellido en el mismo sitio. -->
+          <div class="register__section">
+            <h2 class="register__section-title">{{ 'AUTH.SECTION_ORGANIZATION' | translate }}</h2>
+            <p class="register__section-desc">{{ 'AUTH.SECTION_ORGANIZATION_DESC' | translate }}</p>
+          </div>
+
           <ws-input
             formControlName="tenantName"
             [label]="'AUTH.TENANT_NAME' | translate"
             [error]="fieldError('tenantName')"
+            [hint]="'AUTH.TENANT_NAME_HINT' | translate"
             placeholder="Acme Corp"
           />
 
-          <ws-input
-            formControlName="tenantSlug"
-            [label]="'AUTH.TENANT_SLUG' | translate"
-            [error]="fieldError('tenantSlug')"
-            placeholder="acme-corp"
-          />
+          <!-- EL CAMPO MÁS IMPORTANTE DE ESTA PANTALLA, y el que menos se entiende: es lo que cada
+               miembro del equipo tendrá que escribir para entrar, y no se puede cambiar después
+               (`Tenant.Slug` se fija en la creación y ningún endpoint lo toca). Por eso lleva
+               explicación Y una vista previa de lo que el equipo verá. -->
+          <div class="register__identifier">
+            <ws-input
+              formControlName="tenantSlug"
+              [label]="'AUTH.TENANT_SLUG' | translate"
+              [error]="fieldError('tenantSlug')"
+              [hint]="'AUTH.TENANT_SLUG_HINT' | translate"
+              placeholder="acme-corp"
+            />
+            <div class="register__preview">
+              <span class="register__preview-label">{{ 'AUTH.TENANT_SLUG_PREVIEW' | translate }}</span>
+              <code class="register__preview-value">{{ slugPreview() }}</code>
+            </div>
+          </div>
+
+          <div class="register__section">
+            <h2 class="register__section-title">{{ 'AUTH.SECTION_ADMIN' | translate }}</h2>
+            <p class="register__section-desc">{{ 'AUTH.SECTION_ADMIN_DESC' | translate }}</p>
+          </div>
 
           <div class="form-row">
             <ws-input
@@ -56,6 +81,7 @@
             [label]="'AUTH.EMAIL' | translate"
             type="email"
             [error]="fieldError('adminEmail')"
+            [hint]="'AUTH.ADMIN_EMAIL_HINT' | translate"
             placeholder="you@example.com"
           />
 
@@ -64,6 +90,7 @@
             [label]="'AUTH.PASSWORD' | translate"
             type="password"
             [error]="fieldError('adminPassword')"
+            [hint]="'AUTH.ADMIN_PASSWORD_HINT' | translate"
             placeholder="••••••••"
           />
 
@@ -91,7 +118,9 @@
 
   <!-- RIGHT: hero panel -->
   <div class="auth-page__hero">
-    <img class="auth-page__hero-bg" src="/auth/sign-up.jpg" alt="" aria-hidden="true" />
+    <!-- REGISTRO. El amanecer sobre el borde de un planeta: algo empieza. Sustituye a la fotografía
+         de archivo. -->
+    <app-horizon-field class="auth-page__hero-bg" />
     <div class="auth-page__hero-overlay"></div>
     <div class="auth-page__hero-inner">
 

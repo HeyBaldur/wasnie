@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
+import { SweepFieldComponent } from '../../../shared/components/auth-field/sweep-field.component';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
 import { LanguageToggleComponent } from '../../../shared/components/language-toggle/language-toggle.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -12,6 +13,7 @@ import { IconComponent } from '../../../shared/components/icon/icon.component';
   selector: 'app-forgot-password',
   standalone: true,
   imports: [
+    SweepFieldComponent,
     ReactiveFormsModule,
     TranslatePipe,
     RouterLink,

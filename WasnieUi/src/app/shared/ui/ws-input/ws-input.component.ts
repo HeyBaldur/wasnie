@@ -49,6 +49,17 @@ export class WsInputComponent implements ControlValueAccessor, AfterViewInit {
   readonly clearable = input(false);
   readonly error = input('');
   readonly label = input('');
+
+  /**
+   * Una línea que explica el campo, bajo el control.
+   *
+   * ★ EL ERROR LA SUSTITUYE, no se apilan. Dos mensajes a la vez bajo el mismo campo obligan a leer
+   * los dos para saber cuál manda; cuando hay algo que corregir, lo único que importa es eso.
+   *
+   * ★ NO ES UN `placeholder`. El placeholder desaparece justo cuando se empieza a escribir, que es
+   * cuando la explicación hace falta, y no lo lee ningún lector de pantalla como descripción.
+   */
+  readonly hint = input('');
   readonly inputId = input('');
   readonly autocomplete = input('');
   readonly maxlength = input<number | null>(null);

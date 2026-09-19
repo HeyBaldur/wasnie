@@ -8,6 +8,7 @@ import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
 import { LanguageToggleComponent } from '../../../shared/components/language-toggle/language-toggle.component';
 import { WsInputComponent, WsButtonComponent, WsTabsComponent, type WsTab } from '../../../shared/ui';
+import { TopologyFieldComponent } from '../../../shared/components/topology-field/topology-field.component';
 import { ToastService } from '../../../shared/services/toast.service';
 import { SESSION_EXPIRED_NOTICE_KEY } from '../../../core/services/session-exit.service';
 
@@ -18,7 +19,8 @@ export type LoginUserType = 'admin' | 'member';
   selector: 'app-login',
   standalone: true,
   imports: [ReactiveFormsModule, TranslatePipe, RouterLink, ThemeToggleComponent,
-    LanguageToggleComponent, WsInputComponent, WsButtonComponent, WsTabsComponent],
+    LanguageToggleComponent, WsInputComponent, WsButtonComponent, WsTabsComponent,
+    TopologyFieldComponent],
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss',
 })

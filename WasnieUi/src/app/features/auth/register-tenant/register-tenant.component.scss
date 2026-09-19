@@ -128,7 +128,27 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-}
+  // POC. El fondo lo pintaba una fotografía; ahora lo pinta el propio panel y el campo animado va
+  // encima.
+  //
+  // ★ OSCURO EN LOS TRES TEMAS, A PROPÓSITO. Este panel nunca siguió al tema: llevaba una foto con
+  // un velo negro y texto blanco encima. Montado sobre `--color-base`, en tema claro saldría casi
+  // blanco y el dibujo (blanco) desaparecería. El tono mezcla el azul de marca con negro: cambia de
+  // matiz con el tema, nunca de luminosidad.
+  //
+  // ★ EL RESPLANDOR VA DONDE ESTÁ EL DIBUJO. Centrado, ilumina el lado vacío y la silueta se pierde
+  // en el lavado.
+  // ★ AQUÍ EL COLOR LO PONE EL DIBUJO, NO EL PANEL. Las otras pantallas llevan un lavado del azul
+  // de marca detrás de su campo; aquí el resplandor del horizonte es violeta, y las dos luces
+  // juntas ensuciaban el cielo. El panel se queda en negro con un rastro violeta mínimo por arriba,
+  // que es por donde entra el arco.
+  background:
+    radial-gradient(
+      circle at 78% 6%,
+      color-mix(in srgb, var(--color-accent-violet) 18%, transparent) 0%,
+      transparent 55%
+    ),
+    black;}
 
 .auth-page__hero-bg {
   position: absolute;
@@ -144,10 +164,10 @@
   inset: 0;
   background: linear-gradient(
     to bottom,
-    rgba(0, 0, 0, 0.18) 0%,
-    rgba(0, 0, 0, 0.10) 40%,
-    rgba(0, 0, 0, 0.65) 75%,
-    rgba(0, 0, 0, 0.82) 100%
+    rgba(0, 0, 0, 0.10) 0%,
+    rgba(0, 0, 0, 0.06) 40%,
+    rgba(0, 0, 0, 0.62) 75%,
+    rgba(0, 0, 0, 0.84) 100%
   );
 }
 
@@ -261,4 +281,66 @@
     background: transparent;
     padding: 0;
   }
+}
+
+/* ─── Guía del formulario de alta ─── */
+
+// Encabezado de bloque. El alta crea dos cosas —el espacio de trabajo y la cuenta que lo
+// administra— y sin decirlo, los seis campos se leen como una lista plana.
+.register__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  // Se separa del campo anterior y se pega al suyo: el encabezado pertenece a lo que viene debajo.
+  margin-top: var(--space-2);
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+.register__section-title {
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.register__section-desc {
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.register__identifier {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+// La vista previa de lo que el equipo escribirá al entrar. Va en una caja hundida, como un dato
+// devuelto por el sistema y no como otro campo que rellenar.
+.register__preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+}
+
+.register__preview-label {
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+.register__preview-value {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  word-break: break-all;
 }
