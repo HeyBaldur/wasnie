@@ -63,9 +63,15 @@ public sealed class InviteUserHandler(
         var normalised = Invitation.Normalise(email);
         var now = clock.UtcNowOffset;
 
-        if (!Roles.IsAssignable(request.Role))
+        if (!Roles.IsKnown(request.Role))
             throw new DomainCodedException(InvitationRefusal.RoleUnknown,
                 new Dictionary<string, object?> { ["role"] = request.Role });
+
+        // ★ THE SCREEN HIDES THE ROLE AND THIS REFUSES IT. Hiding alone is a suggestion: anybody with
+        // Users.Manage and a terminal could still send "CompManager".
+        if (!Roles.IsAssignable(request.Role))
+            throw new DomainCodedException(InvitationRefusal.RoleNotAssignable,
+                new Dictionary<string, object?> { ["role"] = Roles.Canonical(request.Role) });
 
         // ── Already one of us? ────────────────────────────────────────────────
         // KAN-91. AN ADDRESS THAT BELONGS TO ANOTHER WORKSPACE IS PERFECTLY INVITABLE, and the first

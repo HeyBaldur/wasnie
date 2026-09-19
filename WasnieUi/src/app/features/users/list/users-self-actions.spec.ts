@@ -112,6 +112,7 @@ describe('UsersListComponent — what a row offers', () => {
       // renders — these tests are about the ACTION strip, and a panel stuck on "unknown" would still
       // draw it, but a double that lies about the shape is how a spec stops resembling the product.
       rolesLoaded: jasmine.createSpy('rolesLoaded').and.returnValue(true),
+      roleOptions: jasmine.createSpy('roleOptions').and.returnValue([]),
       permissionsFor: jasmine.createSpy('permissionsFor')
         .and.returnValue(new Set(['Users.Manage', 'LedgerSummary.Read'])),
     } as unknown as Partial<UsersStore>;

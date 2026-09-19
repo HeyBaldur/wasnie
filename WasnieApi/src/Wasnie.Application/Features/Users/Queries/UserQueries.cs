@@ -38,7 +38,7 @@ public sealed record ListUnlinkedPayeesQuery(string? EmailHint = null, string? S
     : IRequest<Result<UnlinkedPayeesResponse>>;
 
 /// <summary>
-/// What every assignable role can do. See <see cref="Handlers.ListRolePermissionsHandler"/> for why
+/// What every role can do, and which of them may be granted today. See <see cref="Handlers.ListRolePermissionsHandler"/> for why
 /// this is served rather than mirrored in the browser.
 /// </summary>
 public sealed record ListRolePermissionsQuery : IRequest<Result<IReadOnlyList<RolePermissionsDto>>>;
@@ -48,4 +48,8 @@ public sealed record ListRolePermissionsQuery : IRequest<Result<IReadOnlyList<Ro
 /// explicit whitelist (§C1/§C2). A key this screen does not recognise is simply not shown: printing an
 /// unknown one would put an internal identifier in front of an administrator.
 /// </param>
-public sealed record RolePermissionsDto(string Role, IReadOnlyList<string> Permissions);
+/// <param name="Assignable">
+/// Whether an administrator may grant this role today (<see cref="Domain.Authorization.Roles.Assignable"/>).
+/// The role pickers are built from this flag; the access panel reads every role, assignable or not.
+/// </param>
+public sealed record RolePermissionsDto(string Role, IReadOnlyList<string> Permissions, bool Assignable);

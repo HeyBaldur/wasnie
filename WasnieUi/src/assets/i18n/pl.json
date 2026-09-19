@@ -3149,11 +3149,22 @@
       "MESSAGE": "Wybierz nową rolę dla {{name}}.",
       "SUBMIT": "Zapisz rolę"
     },
+    "ADMIN_WARNING": {
+      "TITLE": "Dostęp administratora jest pełny",
+      "LEAD_NAMED": "{{name}} będzie mieć możliwość robienia wszystkiego, co Ty możesz robić w tej przestrzeni roboczej, bez żadnych ograniczeń:",
+      "LEAD_INVITE": "Ta osoba będzie mieć możliwość robienia wszystkiego, co Ty możesz robić w tej przestrzeni roboczej, bez żadnych ograniczeń:",
+      "ITEM_USERS": "Zapraszać, dezaktywować i usuwać osoby oraz zmieniać rolę każdego — w tym odebrać Ci rolę administratora.",
+      "ITEM_PLANS": "Tworzyć, edytować, aktywować i archiwizować plany wynagrodzeń, cele i przypisania.",
+      "ITEM_PAYOUTS": "Obliczać, zatwierdzać i oznaczać wypłaty jako opłacone oraz korygować dowolne saldo w księdze.",
+      "ITEM_BILLING": "Zarządzać subskrypcją, rozliczeniami, integracjami i ustawieniami przestrzeni roboczej.",
+      "FOOT": "Przyznaj tę rolę tylko komuś, komu ufasz na tyle, by powierzyć mu całą przestrzeń roboczą."
+    },
     "REFUSAL": {
       "ALREADY_MEMBER": "Ta osoba jest już w tej przestrzeni roboczej.",
       "ALREADY_INVITED": "Ten adres ma już otwarte zaproszenie. Wyślij je ponownie zamiast tworzyć nowe.",
       "NO_SEATS": "Wszystkie {{limit}} miejsc jest zajętych. Zwolnij jedno, zanim zaprosisz kogoś jeszcze.",
       "ROLE_UNKNOWN": "Taka rola nie istnieje.",
+      "ROLE_NOT_ASSIGNABLE": "Tej roli nie można obecnie przypisać. Wybierz rolę Administrator lub Handlowiec.",
       "ALREADY_USED": "To zaproszenie zostało już przyjęte.",
       "EXPIRED": "To zaproszenie wygasło. Wyślij nowe.",
       "REVOKED": "To zaproszenie zostało cofnięte.",

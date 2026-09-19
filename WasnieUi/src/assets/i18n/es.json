@@ -3149,11 +3149,22 @@
       "MESSAGE": "Elija el nuevo rol para {{name}}.",
       "SUBMIT": "Guardar rol"
     },
+    "ADMIN_WARNING": {
+      "TITLE": "El acceso de administrador es total",
+      "LEAD_NAMED": "{{name}} podrá hacer todo lo que usted puede hacer en este espacio de trabajo, sin ninguna restricción:",
+      "LEAD_INVITE": "Esta persona podrá hacer todo lo que usted puede hacer en este espacio de trabajo, sin ninguna restricción:",
+      "ITEM_USERS": "Invitar, desactivar y eliminar personas, y cambiar el rol de cualquiera — incluso quitarle a usted el rol de administrador.",
+      "ITEM_PLANS": "Crear, editar, activar y archivar planes de compensación, cuotas y asignaciones.",
+      "ITEM_PAYOUTS": "Calcular, aprobar y marcar pagos como pagados, y ajustar cualquier saldo del ledger.",
+      "ITEM_BILLING": "Gestionar la suscripción, la facturación, las integraciones y la configuración del espacio de trabajo.",
+      "FOOT": "Asigne este rol solo a alguien a quien confiaría todo el espacio de trabajo."
+    },
     "REFUSAL": {
       "ALREADY_MEMBER": "Esa persona ya está en este espacio de trabajo.",
       "ALREADY_INVITED": "Esa dirección ya tiene una invitación abierta. Reenvíela en lugar de crear otra.",
       "NO_SEATS": "Los {{limit}} asientos están ocupados. Libere uno antes de invitar a nadie más.",
       "ROLE_UNKNOWN": "Ese rol no existe.",
+      "ROLE_NOT_ASSIGNABLE": "Ese rol no se puede asignar por ahora. Elija Administrador o Comercial.",
       "ALREADY_USED": "Esa invitación ya fue aceptada.",
       "EXPIRED": "Esa invitación ha caducado. Envíe una nueva.",
       "REVOKED": "Esa invitación fue retirada.",

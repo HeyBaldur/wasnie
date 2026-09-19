@@ -41,6 +41,15 @@ public static class InvitationRefusal
     /// <summary>The role asked for is not one this product has.</summary>
     public const string RoleUnknown = "INVITATION_ROLE_UNKNOWN";
 
+    /// <summary>
+    /// The role exists but may not be granted today (CompManager, Manager). Carries <c>role</c>.
+    ///
+    /// ★ A DIFFERENT CODE FROM <see cref="RoleUnknown"/> ON PURPOSE. "That role does not exist" would be
+    /// false — it exists, memberships may hold it, the permission map describes it — and telling an
+    /// administrator something false about their own product is how a screen stops being trusted.
+    /// </summary>
+    public const string RoleNotAssignable = "INVITATION_ROLE_NOT_ASSIGNABLE";
+
     /// <summary>The payee chosen for this invitation is not in this workspace, or no longer exists.</summary>
     public const string PayeeNotFound = "INVITATION_PAYEE_NOT_FOUND";
 

@@ -300,6 +300,10 @@
         [placeholder]="'USERS.INVITE.ROLE_PLACEHOLDER' | translate"
       />
 
+      @if (grantsAdmin()) {
+        <app-admin-grant-warning [name]="displayName(user)" />
+      }
+
       <div class="users__role-form-actions">
         <ws-button variant="ghost" type="button" [disabled]="store.saving()"
                    (click)="changeRoleFor.set(null)">

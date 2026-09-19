@@ -11,7 +11,9 @@ import {
   TenantUser,
   TenantUsersResponse,
   UnlinkedPayeesResponse,
+  roleTranslationKey,
 } from '../models/user.model';
+import type { SelectOption } from '../../../shared/ui';
 
 /**
  * KAN-32 — the users screen's state.
@@ -70,6 +72,20 @@ export class UsersStore {
   private readonly roles = signal<RolePermissions[]>([]);
 
   readonly rolesLoaded = computed(() => this.roles().length > 0);
+
+  /**
+   * The options of BOTH role pickers — invite and change role — in the server's order.
+   *
+   * ★★ ONE SOURCE, AND IT IS THE SERVER'S. The two pickers each had a hard-coded list of the four
+   * roles; hiding CompManager and Manager (KAN-92/KAN-99) would have meant editing both and hoping
+   * the handler agreed. They now offer exactly what `ChangeUserRoleHandler` and `InviteUserHandler`
+   * accept, because the flag comes from the same `Roles.Assignable` those handlers check.
+   */
+  readonly roleOptions = computed<SelectOption[]>(() =>
+    this.roles()
+      .filter((r) => r.assignable)
+      .map((r) => ({ value: r.role, label: roleTranslationKey(r.role) })),
+  );
 
   /**
    * The permission keys a role holds. Unknown role, or nothing loaded yet → an empty set, which the
@@ -220,6 +236,7 @@ export class UsersStore {
       case 'INVITATION_EMAIL_ALREADY_INVITED': return 'USERS.REFUSAL.ALREADY_INVITED';
       case 'INVITATION_NO_SEATS_AVAILABLE': return 'USERS.REFUSAL.NO_SEATS';
       case 'INVITATION_ROLE_UNKNOWN': return 'USERS.REFUSAL.ROLE_UNKNOWN';
+      case 'INVITATION_ROLE_NOT_ASSIGNABLE': return 'USERS.REFUSAL.ROLE_NOT_ASSIGNABLE';
       case 'INVITATION_PAYEE_NOT_FOUND': return 'USERS.REFUSAL.PAYEE_NOT_FOUND';
       case 'INVITATION_PAYEE_ALREADY_LINKED': return 'USERS.REFUSAL.PAYEE_ALREADY_LINKED';
       case 'INVITATION_TOKEN_ALREADY_USED': return 'USERS.REFUSAL.ALREADY_USED';

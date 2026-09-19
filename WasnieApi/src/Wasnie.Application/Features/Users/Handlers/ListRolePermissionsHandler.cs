@@ -31,25 +31,24 @@ namespace Wasnie.Application.Features.Users.Handlers;
 public sealed class ListRolePermissionsHandler(IAuthorizationService authorizationService)
     : IRequestHandler<ListRolePermissionsQuery, Result<IReadOnlyList<RolePermissionsDto>>>
 {
-    /// <summary>
-    /// The roles an administrator can actually assign, in the order the screen shows them — widest
-    /// authority first, so the list reads as a ladder rather than as an alphabet.
-    ///
-    /// ★ SPELLED OUT RATHER THAN REFLECTED OFF THE MAP. Its key order is a dictionary's, which is not
-    /// a product decision, and a role added for internal use would appear in a picker by accident.
-    /// </summary>
-    private static readonly string[] AssignableRoles =
-        ["TenantAdmin", "CompManager", "Manager", "Rep"];
-
     public async Task<Result<IReadOnlyList<RolePermissionsDto>>> Handle(
         ListRolePermissionsQuery request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.UsersRead, cancellationToken);
 
-        var roles = AssignableRoles
+        // ★★ EVERY ROLE THAT EXISTS, EACH FLAGGED WITH WHETHER IT MAY BE GRANTED. The access panel has to
+        // describe a person who already holds a hidden role (CompManager, Manager) — dropping those
+        // would paint them as "unknown" — while the pickers must offer only what the handlers accept.
+        // One answer serves both, and the pickers keep no list of their own: reactivating a role is a
+        // change to Roles.Assignable and nothing else.
+        //
+        // ★ ORDER COMES FROM Roles.All, not from the permission map, whose key order is a dictionary's
+        // and not a product decision.
+        var roles = Roles.All
             .Select(role => new RolePermissionsDto(
                 Role: role,
-                Permissions: RolePermissions.GetPermissions(role).OrderBy(p => p, StringComparer.Ordinal).ToList()))
+                Permissions: RolePermissions.GetPermissions(role).OrderBy(p => p, StringComparer.Ordinal).ToList(),
+                Assignable: Roles.IsAssignable(role)))
             .ToList();
 
         return Result<IReadOnlyList<RolePermissionsDto>>.Success(roles);

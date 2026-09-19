@@ -1,8 +1,10 @@
-import { Component, computed, inject, output, signal } from '@angular/core';
+import { Component, inject, output, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { TranslateModule } from '@ngx-translate/core';
 import { Observable, from, map } from 'rxjs';
 import { UsersStore } from '../state/users.store';
+import { AdminGrantWarningComponent } from '../access/admin-grant-warning.component';
 import { TenantRole, UnlinkedPayee } from '../models/user.model';
 import {
   WsButtonComponent,
@@ -48,6 +50,7 @@ function payeeOption(p: UnlinkedPayee): SelectOption {
   imports: [
     ReactiveFormsModule, TranslateModule,
     WsButtonComponent, WsInputComponent, WsSelectComponent,
+    AdminGrantWarningComponent,
   ],
   templateUrl: './invite-user-form.component.html',
   styleUrl: './invite-user-form.component.scss',
@@ -76,17 +79,19 @@ export class InviteUserFormComponent {
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email, Validators.maxLength(256)]],
     // ★ No default role. Picking one for the admin is picking an authority level on their behalf,
-    // and the cheapest of the four is as wrong a guess as the most powerful.
+    // and the cheapest one is as wrong a guess as the most powerful.
     role: ['' as TenantRole | '', [Validators.required]],
     payeeId: [''],
   });
 
-  readonly roleOptions = computed<SelectOption[]>(() => [
-    { value: 'TenantAdmin', label: 'USERS.ROLES.TENANT_ADMIN' },
-    { value: 'CompManager', label: 'USERS.ROLES.COMP_MANAGER' },
-    { value: 'Manager', label: 'USERS.ROLES.MANAGER' },
-    { value: 'Rep', label: 'USERS.ROLES.REP' },
-  ]);
+  /** Only the roles that may be granted today — from the server, see `UsersStore.roleOptions`. */
+  readonly roleOptions = this.store.roleOptions;
+
+  /** Inviting somebody straight in as an administrator gets the same warning as promoting them. */
+  readonly grantsAdmin = toSignal(
+    this.form.controls.role.valueChanges.pipe(map((r) => r === 'TenantAdmin')),
+    { initialValue: false },
+  );
 
   /**
    * The picker's query, answered by the server.

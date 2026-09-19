@@ -1,5 +1,6 @@
 import { Component, HostListener, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { TranslateModule } from '@ngx-translate/core';
 import { Observable, from, map } from 'rxjs';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
@@ -13,6 +14,7 @@ import { UsersStore } from '../state/users.store';
 import { Invitation, InvitationStatus, TenantRole, TenantUser, UnlinkedPayee, roleTranslationKey } from '../models/user.model';
 import { InviteUserFormComponent } from '../invite/invite-user-form.component';
 import { UserAccessPanelComponent } from '../access/user-access-panel.component';
+import { AdminGrantWarningComponent } from '../access/admin-grant-warning.component';
 import {
   WsButtonComponent,
   WsBadgeComponent,
@@ -74,6 +76,7 @@ function payeeOption(p: UnlinkedPayee): SelectOption {
     HasPermissionDirective, HasPermissionPipe,
     InviteUserFormComponent,
     UserAccessPanelComponent,
+    AdminGrantWarningComponent,
     WsButtonComponent, WsBadgeComponent, WsPageLayoutComponent,
     WsTableComponent, WsTableEmptyComponent, WsModalComponent,
     WsConfirmationModalComponent, WsSelectComponent,
@@ -134,13 +137,25 @@ export class UsersListComponent implements OnInit {
   readonly confirmRevoke = signal<Invitation | null>(null);
   readonly showClosedInvitations = signal(false);
 
-  /** The role picker's options, translated. Labels live in i18n, values are Identity's names. */
-  readonly roleOptions = computed<SelectOption[]>(() => [
-    { value: 'TenantAdmin', label: 'USERS.ROLES.TENANT_ADMIN' },
-    { value: 'CompManager', label: 'USERS.ROLES.COMP_MANAGER' },
-    { value: 'Manager', label: 'USERS.ROLES.MANAGER' },
-    { value: 'Rep', label: 'USERS.ROLES.REP' },
-  ]);
+  /** Only the roles that may be granted today — from the server, see `UsersStore.roleOptions`. */
+  readonly roleOptions = this.store.roleOptions;
+
+  /** The role currently picked in the modal, as a signal so the template can react to it. */
+  private readonly pickedRole = toSignal(this.roleForm.controls.role.valueChanges, {
+    initialValue: this.roleForm.controls.role.value,
+  });
+
+  /**
+   * Whether saving would make somebody ELSE an administrator.
+   *
+   * ★ ONLY ON A PROMOTION. Re-saving an existing admin as admin changes nothing and warning about it
+   * would teach the reader that the warning is noise. Your own row never gets here: the change-role
+   * action is hidden on it (KAN-93).
+   */
+  readonly grantsAdmin = computed(() => {
+    const user = this.changeRoleFor();
+    return !!user && this.pickedRole() === 'TenantAdmin' && user.role !== 'TenantAdmin';
+  });
 
   // ── The payee link (KAN-93) ───────────────────────────────────────────────────────────────────
   //

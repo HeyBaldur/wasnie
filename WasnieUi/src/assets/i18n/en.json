@@ -3149,11 +3149,22 @@
       "MESSAGE": "Choose the new role for {{name}}.",
       "SUBMIT": "Save role"
     },
+    "ADMIN_WARNING": {
+      "TITLE": "Administrator access is total",
+      "LEAD_NAMED": "{{name}} will be able to do everything you can do in this workspace, with nothing held back:",
+      "LEAD_INVITE": "This person will be able to do everything you can do in this workspace, with nothing held back:",
+      "ITEM_USERS": "Invite, deactivate and remove people, and change anyone's role — including taking the administrator role away from you.",
+      "ITEM_PLANS": "Create, edit, activate and archive compensation plans, quotas and assignments.",
+      "ITEM_PAYOUTS": "Calculate, approve and mark payouts as paid, and adjust any balance in the ledger.",
+      "ITEM_BILLING": "Manage the subscription, billing, integrations and workspace settings.",
+      "FOOT": "Only give this role to someone you would trust with the whole workspace."
+    },
     "REFUSAL": {
       "ALREADY_MEMBER": "That person is already in this workspace.",
       "ALREADY_INVITED": "That address already has an invitation open. Resend it instead.",
       "NO_SEATS": "All {{limit}} seats are in use. Free one before inviting anybody else.",
       "ROLE_UNKNOWN": "That role does not exist.",
+      "ROLE_NOT_ASSIGNABLE": "That role cannot be assigned right now. Choose Administrator or Sales rep.",
       "ALREADY_USED": "That invitation has already been accepted.",
       "EXPIRED": "That invitation has expired. Send a new one.",
       "REVOKED": "That invitation was withdrawn.",

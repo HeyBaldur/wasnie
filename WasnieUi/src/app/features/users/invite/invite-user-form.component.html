@@ -23,6 +23,10 @@
     />
   </div>
 
+  @if (grantsAdmin()) {
+    <app-admin-grant-warning />
+  }
+
   <!-- KAN-92. Which payee this person IS. Optional: an administrator or a finance user does not get
        paid and has no payee, and a required picker would force whoever invites them to attach
        somebody at random. -->

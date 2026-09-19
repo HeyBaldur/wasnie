@@ -11,6 +11,10 @@ namespace Wasnie.Application.Features.Users.Validators;
 /// invited", "no seats" and "last admin" all need the database and all have to reach the reader as
 /// CODES so three languages can render them (§C1). FluentValidation produces English sentences, so it
 /// gets the questions that can be answered from the request alone and nothing else.
+///
+/// ★ IsKnown, NOT IsAssignable. A hidden role (CompManager, Manager) is refused by the handler with
+/// INVITATION_ROLE_NOT_ASSIGNABLE, a code the screen translates; refusing it here would answer in an
+/// English sentence instead.
 /// </summary>
 public sealed class InviteUserCommandValidator : AbstractValidator<InviteUserCommand>
 {
@@ -23,7 +27,7 @@ public sealed class InviteUserCommandValidator : AbstractValidator<InviteUserCom
 
         RuleFor(x => x.Role)
             .NotEmpty().WithMessage("Role is required.")
-            .Must(Roles.IsAssignable).WithMessage("Role is not one this product has.");
+            .Must(Roles.IsKnown).WithMessage("Role is not one this product has.");
     }
 }
 
@@ -35,7 +39,7 @@ public sealed class ChangeUserRoleCommandValidator : AbstractValidator<ChangeUse
 
         RuleFor(x => x.Role)
             .NotEmpty().WithMessage("Role is required.")
-            .Must(Roles.IsAssignable).WithMessage("Role is not one this product has.");
+            .Must(Roles.IsKnown).WithMessage("Role is not one this product has.");
     }
 }
 

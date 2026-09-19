@@ -1,0 +1,37 @@
+// The "you are making somebody an administrator" warning. Tokens only; the numeric font scale,
+// because --font-size-sm does not exist. The card's warning accent carries the colour, so the text
+// stays in the ordinary text tokens and remains readable in all three themes.
+
+:host {
+  display: block;
+  margin-bottom: var(--space-4);
+}
+
+.admin-grant-warning__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.admin-grant-warning__lead,
+.admin-grant-warning__foot {
+  margin: 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+.admin-grant-warning__list {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-4);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+
+  li + li {
+    margin-top: var(--space-1);
+  }
+}
+
+.admin-grant-warning__foot {
+  font-weight: 600;
+}

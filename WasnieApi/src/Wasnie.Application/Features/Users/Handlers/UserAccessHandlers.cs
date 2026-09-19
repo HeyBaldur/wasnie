@@ -229,6 +229,13 @@ public sealed class ChangeUserRoleHandler(
             ?? throw new DomainCodedException(InvitationRefusal.RoleUnknown,
                 new Dictionary<string, object?> { ["role"] = request.Role });
 
+        // ★ REFUSED BEFORE THE "SAME ROLE" SHORT-CUT BELOW, so the answer does not depend on what the
+        // person holds today. Somebody already in a hidden role keeps it until an admin moves them to
+        // an assignable one; nobody is moved INTO one.
+        if (!Roles.IsAssignable(role))
+            throw new DomainCodedException(InvitationRefusal.RoleNotAssignable,
+                new Dictionary<string, object?> { ["role"] = role });
+
         if (string.Equals(request.UserId, currentUser.UserId, StringComparison.Ordinal))
             throw new DomainCodedException(InvitationRefusal.CannotActOnSelf);
 

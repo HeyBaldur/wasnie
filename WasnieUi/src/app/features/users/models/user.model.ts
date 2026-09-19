@@ -10,13 +10,6 @@ export type InvitationStatus = 'Pending' | 'Accepted' | 'Expired' | 'Revoked';
 /** The role names exactly as Identity stores them. */
 export type TenantRole = 'TenantAdmin' | 'CompManager' | 'Manager' | 'Rep';
 
-export const ASSIGNABLE_ROLES: readonly TenantRole[] = [
-  'TenantAdmin',
-  'CompManager',
-  'Manager',
-  'Rep',
-];
-
 /**
  * What one role may do, as the server spells it.
  *
@@ -49,6 +42,16 @@ export function roleTranslationKey(role: TenantRole | null): string {
 export interface RolePermissions {
   role: TenantRole;
   permissions: string[];
+
+  /**
+   * Whether an administrator may grant this role today (KAN-92/KAN-99: TenantAdmin and Rep).
+   *
+   * ★★ THE ROLE PICKERS ARE BUILT FROM THIS AND FROM NOTHING ELSE. CompManager and Manager are hidden,
+   * not deleted: the server still describes them — the access panel must explain somebody who already
+   * holds one — and says here that they cannot be handed out. Reactivating a role is a change to
+   * `Roles.Assignable` in C#; no screen keeps its own list to fall out of step with the handler.
+   */
+  assignable: boolean;
 }
 
 export interface TenantUser {

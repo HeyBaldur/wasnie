@@ -189,9 +189,74 @@ public sealed class UserAccessInvariantTests
             (AdminUser, Roles.TenantAdmin), (OtherAdminUser, Roles.TenantAdmin));
 
         var result = await h.ChangeRole.Handle(
-            new ChangeUserRoleCommand(OtherAdminUser, Roles.CompManager), default);
+            new ChangeUserRoleCommand(OtherAdminUser, Roles.Rep), default);
 
         result.IsSuccess.Should().BeTrue();
         h.Db.TenantUsers.Count(u => u.Role == Roles.TenantAdmin).Should().Be(1);
+    }
+
+    /// <summary>
+    /// ★★ ROLE SIMPLIFICATION (KAN-92/KAN-99): HIDING THE ROLE IN THE PICKER IS NOT ENOUGH. Anybody with
+    /// Users.Manage and a terminal can still send "CompManager"; the handler is what refuses it.
+    /// </summary>
+    [Theory]
+    [InlineData(Roles.CompManager)]
+    [InlineData(Roles.Manager)]
+    [InlineData("compmanager")]
+    public async Task Nobody_can_be_moved_into_a_hidden_role(string hidden)
+    {
+        var h = Seed(nameof(Nobody_can_be_moved_into_a_hidden_role) + hidden,
+            (AdminUser, Roles.TenantAdmin), (RepUser, Roles.Rep));
+
+        var code = await RefusalCodeOf(() =>
+            h.ChangeRole.Handle(new ChangeUserRoleCommand(RepUser, hidden), default));
+
+        code.Should().Be(InvitationRefusal.RoleNotAssignable);
+        h.Db.TenantUsers.Single(u => u.UserId == RepUser).Role.Should().Be(Roles.Rep);
+    }
+
+    /// <summary>
+    /// ★ AND THE REFUSAL DOES NOT DEPEND ON WHAT THE PERSON HOLDS TODAY. "Change to the role you already
+    /// have" is normally a quiet no-op; for a hidden role it is refused like any other request for it.
+    /// </summary>
+    [Fact]
+    public async Task Re_asserting_a_hidden_role_is_refused_too()
+    {
+        var h = Seed(nameof(Re_asserting_a_hidden_role_is_refused_too),
+            (AdminUser, Roles.TenantAdmin), (RepUser, Roles.Manager));
+
+        var code = await RefusalCodeOf(() =>
+            h.ChangeRole.Handle(new ChangeUserRoleCommand(RepUser, Roles.Manager), default));
+
+        code.Should().Be(InvitationRefusal.RoleNotAssignable);
+    }
+
+    /// <summary>
+    /// ★★ THE WAY OUT STAYS OPEN (§D4). Somebody who already holds a hidden role must be movable to an
+    /// assignable one — otherwise the simplification would freeze them where they are.
+    /// </summary>
+    [Fact]
+    public async Task Somebody_in_a_hidden_role_can_be_moved_to_an_assignable_one()
+    {
+        var h = Seed(nameof(Somebody_in_a_hidden_role_can_be_moved_to_an_assignable_one),
+            (AdminUser, Roles.TenantAdmin), (RepUser, Roles.CompManager));
+
+        var result = await h.ChangeRole.Handle(new ChangeUserRoleCommand(RepUser, Roles.Rep), default);
+
+        result.IsSuccess.Should().BeTrue();
+        h.Db.TenantUsers.Single(u => u.UserId == RepUser).Role.Should().Be(Roles.Rep);
+    }
+
+    /// <summary>An unknown role keeps its own, different answer: "does not exist" is true for it.</summary>
+    [Fact]
+    public async Task An_unknown_role_is_still_unknown_not_hidden()
+    {
+        var h = Seed(nameof(An_unknown_role_is_still_unknown_not_hidden),
+            (AdminUser, Roles.TenantAdmin), (RepUser, Roles.Rep));
+
+        var code = await RefusalCodeOf(() =>
+            h.ChangeRole.Handle(new ChangeUserRoleCommand(RepUser, "Auditor"), default));
+
+        code.Should().Be(InvitationRefusal.RoleUnknown);
     }
 }

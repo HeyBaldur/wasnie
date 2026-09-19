@@ -216,11 +216,26 @@ public sealed class Kan32RolesTests
     [Theory]
     [InlineData("TenantAdmin")]
     [InlineData("tenantadmin")]
-    [InlineData("  CompManager  ")]
+    [InlineData("  Rep  ")]
     [InlineData("REP")]
-    public void Known_roles_are_assignable_whatever_the_casing(string role)
+    public void The_two_granted_roles_are_assignable_whatever_the_casing(string role)
     {
         Roles.IsAssignable(role).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Role simplification (KAN-92/KAN-99): CompManager and Manager are HIDDEN — they exist and are
+    /// known, but nobody may be granted one. Known and assignable are two different questions now.
+    /// </summary>
+    [Theory]
+    [InlineData("CompManager")]
+    [InlineData("  compmanager ")]
+    [InlineData("Manager")]
+    [InlineData("MANAGER")]
+    public void The_hidden_roles_are_known_but_not_assignable(string role)
+    {
+        Roles.IsKnown(role).Should().BeTrue();
+        Roles.IsAssignable(role).Should().BeFalse();
     }
 
     [Theory]
@@ -230,6 +245,7 @@ public sealed class Kan32RolesTests
     [InlineData(null)]
     public void Everything_else_is_refused(string? role)
     {
+        Roles.IsKnown(role).Should().BeFalse();
         Roles.IsAssignable(role).Should().BeFalse();
     }
 
@@ -241,14 +257,38 @@ public sealed class Kan32RolesTests
     }
 
     /// <summary>
-    /// The Auditor role of KAN-33 does not exist yet, and this test says so out loud: when that
-    /// ticket lands it will fail, which is the reminder to add it to the picker.
+    /// ★ Spelling a hidden role correctly is not granting it: the handler needs the canonical name to
+    /// say WHICH role it refused, and a membership that already holds one must keep resolving.
     /// </summary>
     [Fact]
-    public void There_are_exactly_four_roles_today()
+    public void Canonical_still_resolves_the_hidden_roles()
     {
-        Roles.Assignable.Should().HaveCount(4);
-        Roles.Assignable.Should().NotContain("Auditor");
+        Roles.Canonical("compmanager").Should().Be(Roles.CompManager);
+        Roles.Canonical(" manager ").Should().Be(Roles.Manager);
+    }
+
+    /// <summary>
+    /// ★★ HIDDEN, NOT DELETED. The decision was to keep CompManager and Manager so they can come back
+    /// without a rewrite; this is the test that fails the day somebody "cleans them up".
+    /// </summary>
+    [Fact]
+    public void The_hidden_roles_still_exist_with_their_permissions()
+    {
+        Roles.All.Should().Equal(Roles.TenantAdmin, Roles.CompManager, Roles.Manager, Roles.Rep);
+        Enum.GetNames<Role>().Should().Contain(["CompManager", "Manager"]);
+        RolePermissions.GetPermissions(Roles.CompManager).Should().NotBeEmpty();
+        RolePermissions.GetPermissions(Roles.Manager).Should().NotBeEmpty();
+    }
+
+    /// <summary>
+    /// The one configurable list. When the Auditor role of KAN-33 lands, or a hidden role is
+    /// reactivated, this is the test that has to change — and nothing on the screens does.
+    /// </summary>
+    [Fact]
+    public void Exactly_admin_and_rep_are_assignable_today()
+    {
+        Roles.Assignable.Should().Equal(Roles.TenantAdmin, Roles.Rep);
+        Roles.All.Should().NotContain("Auditor");
     }
 }
 
