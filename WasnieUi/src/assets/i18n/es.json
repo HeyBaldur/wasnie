@@ -540,6 +540,7 @@
     "EXPORT": "Exportar",
     "COPY": "Copiar",
     "COPY_NAME": "Copiar nombre",
+    "RESIZE_COLUMN": "Cambiar el ancho de la columna: {{name}}",
     "COPY_REFERENCE": "Copiar referencia",
     "COPY_ID": "Copiar ID",
     "COPIED": "¡Copiado!",

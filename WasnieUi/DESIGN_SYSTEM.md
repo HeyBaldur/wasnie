@@ -502,6 +502,31 @@ Inputs: `wsTooltip` (text) · `tooltipPlacement` (top | bottom | left | right, d
 `<ws-table-pagination>` — Inputs: `page` · `totalCount` · `pageSize` (default 20). Outputs: `pageChange`  
 `<ws-table-empty>` — Inputs: `titleKey` · `descKey`
 
+#### Resizable columns — `wsResizableColumns` (2026-09-19)
+Spreadsheet-style widths, opt-in per table. Chosen over AG Grid: resizing was the only grid feature
+needed, and AG Grid would be a second table system themed by hand. **Adopted today only in
+`/transactions`**; extending it to the other tables is a pending product decision.
+
+```html
+<ws-table>
+  <table wsResizableColumns="transactions">          <!-- storage key, unique per table -->
+    <thead><tr>
+      <th data-col="reference" data-width="260">…</th>  <!-- resizable; 260px until moved -->
+      <th>…</th>                                        <!-- no data-col: fixed, natural width -->
+      <th></th>                                         <!-- LAST column: fills the rest, never resizable -->
+```
+
+- **Drag** a header's right edge · **double-click** (or Enter on the focused handle) fits the content,
+  capped at 640px · **←/→** on the focused handle ±16px · minimum 56px.
+- Widths are remembered per table **in this browser** (localStorage, guarded); nothing goes to the server.
+- The table switches to `table-layout: fixed`: a cell that does not fit **truncates with an ellipsis**
+  instead of rearranging the table. Put the full value in `[title]`.
+- A cell that combines text with trailing items (copy button, employee code) wraps them in
+  `.ws-cell-line`: the text is `.ws-cell-text` (truncates), secondary text is `.ws-cell-text--yield`
+  (gives way first), everything else stays pinned on the same line.
+- Forbidden: inline widths on `<th>` in the template (the directive owns them); a `max-width` on a
+  cell line (it would stop widening from revealing more).
+
 ### WsEmptyState `<ws-empty-state>`
 Inputs: `illustration` (plans-empty | payees-empty | transactions-empty | payouts-empty | quotas-empty | assignments-empty) · `icon` · `titleKey` (required) · `descKey` · `actionKey` · `actionRoute` · `secondaryActionKey` · `secondaryActionRoute`  
 Outputs: `actionClick`

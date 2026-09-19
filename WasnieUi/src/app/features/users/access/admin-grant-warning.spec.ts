@@ -54,9 +54,18 @@ describe('Admin grant warning', () => {
     loadUnlinkedPayees: () => Promise.resolve({ items: [], total: 0 }),
   } as unknown as UsersStore;
 
-  const warnings = (): number => document.querySelectorAll('app-admin-grant-warning').length;
+  /**
+   * Live warnings only. ★ A closing `ws-modal` leaves an exit copy (`.ws-modal--leaving`) in
+   * `document.body` for its 220 ms animation, and Karma runs specs in random order: a "does not warn"
+   * test that ran right after a "warns" one counted the previous test's ghost. Excluded here, and
+   * swept before each test the same way `ws-modal-exit-styles.spec.ts` does.
+   */
+  const warnings = (): number =>
+    Array.from(document.querySelectorAll('app-admin-grant-warning'))
+      .filter(w => !w.closest('.ws-modal--leaving')).length;
 
   beforeEach(async () => {
+    document.body.querySelectorAll('.ws-modal--leaving').forEach(n => n.remove());
     await TestBed.configureTestingModule({
       imports: [UsersListComponent, InviteUserFormComponent, TranslateModule.forRoot()],
       providers: [
@@ -68,6 +77,10 @@ describe('Admin grant warning', () => {
       ],
     }).compileComponents();
   });
+
+  // And after: `fixture.destroy()` on an open modal is what CREATES the ghost, and another spec that
+  // looks for its own ghost (ws-modal-exit-styles) must not find ours instead.
+  afterEach(() => document.body.querySelectorAll('.ws-modal--leaving').forEach(n => n.remove()));
 
   describe('changing a role', () => {
     function openFor(target: TenantUser, picked: TenantRole) {
@@ -84,7 +97,7 @@ describe('Admin grant warning', () => {
 
       expect(warnings()).toBe(1);
       // Named, so the admin reads WHO gets the keys, not an abstract sentence.
-      expect(document.querySelector('app-admin-grant-warning')?.textContent)
+      expect(document.querySelector('app-admin-grant-warning:not(.ws-modal--leaving *)')?.textContent)
         .toContain('USERS.ADMIN_WARNING.LEAD_NAMED');
       fixture.destroy();
     });

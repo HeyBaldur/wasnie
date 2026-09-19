@@ -540,6 +540,7 @@
     "EXPORT": "Export",
     "COPY": "Copy",
     "COPY_NAME": "Copy name",
+    "RESIZE_COLUMN": "Resize column: {{name}}",
     "COPY_REFERENCE": "Copy reference",
     "COPY_ID": "Copy ID",
     "COPIED": "Copied!",

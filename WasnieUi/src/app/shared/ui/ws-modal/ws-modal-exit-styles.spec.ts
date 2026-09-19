@@ -89,6 +89,11 @@ describe('WsModal — the exit ghost keeps its styling', () => {
       .map((a) => a.name)
       .filter((n) => n.startsWith('_ngcontent'));
 
+    // ★ Any OTHER spec that closed a modal in the last 220 ms left its own ghost in the body, and
+    // `querySelector` returns the first one — which is not ours and holds no ws-select. Swept here so
+    // the only ghost left to find is the one this close creates.
+    document.body.querySelectorAll('.ws-modal--leaving').forEach((n) => n.remove());
+
     fixture.componentInstance.open.set(false);
     fixture.detectChanges();
 

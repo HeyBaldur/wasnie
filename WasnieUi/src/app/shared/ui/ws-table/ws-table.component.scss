@@ -127,3 +127,124 @@
   white-space: nowrap;
   text-align: right;
 }
+
+// ── Resizable columns (`wsResizableColumns`) ──────────────────────────────────────────────────────
+//
+// ★★ OPT-IN, PER TABLE. Only a table carrying the directive switches to fixed layout; every other
+// `<ws-table>` keeps the automatic layout it was designed with. See `ws-resizable-columns.directive.ts`.
+//
+// ★ UNDER FIXED LAYOUT A CELL THAT DOES NOT FIT TRUNCATES. Plain text gets the ellipsis from the cell
+// itself; a cell that stacks several lines (a reference with its description underneath) truncates
+// each line with `.ws-cell-line` / `.ws-cell-text` below. The last column is the filler that holds
+// the row's buttons, so it never clips.
+.ws-table-wrap table.ws-table--resizable {
+  table-layout: fixed;
+}
+
+.ws-table-wrap table.ws-table--resizable th,
+.ws-table-wrap table.ws-table--resizable td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// border-box, so the width the directive writes IS the column's width, padding included — the same
+// number it measured with getBoundingClientRect.
+.ws-table-wrap table.ws-table--resizable th {
+  position: relative;
+  box-sizing: border-box;
+}
+
+.ws-table-wrap table.ws-table--resizable th:last-child,
+.ws-table-wrap table.ws-table--resizable td:last-child {
+  overflow: visible;
+}
+
+// While the directive measures natural widths: automatic layout and nothing capped, for the span of
+// one synchronous read. Never painted. `!important` because it has to beat whatever a screen declares
+// on its own cells, for exactly that instant.
+.ws-table-wrap table.ws-table--measuring {
+  table-layout: auto !important;
+  width: auto !important;
+}
+
+.ws-table-wrap table.ws-table--measuring :is(th, td),
+.ws-table-wrap table.ws-table--measuring :is(th, td) * {
+  max-width: none !important;
+}
+
+// One line inside a cell: text that truncates, followed by things that must stay visible (an
+// employee code, a copy button). The text gives way first; the trailing items never wrap below it.
+.ws-table-wrap .ws-cell-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.ws-table-wrap .ws-cell-line > * {
+  flex: none;
+}
+
+.ws-table-wrap .ws-cell-line > .ws-cell-text,
+.ws-table-wrap .ws-cell-text {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Secondary text on the same line (an employee code next to a name) that gives way FIRST. Flex shrink
+// is weighted by basis, so the factor has to be huge for the main text to lose not even a pixel
+// (a subpixel loss is enough to paint an ellipsis) until the code is gone.
+.ws-table-wrap .ws-cell-line > .ws-cell-text--yield {
+  display: block;
+  flex: 0 100000 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The drag handle: a hairline at the header's right edge that turns brand-coloured and full-height
+// when hovered, dragged or focused. The hit area is wider than the line, as in a spreadsheet.
+.ws-col-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--space-2);
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 25%;
+    bottom: 25%;
+    right: calc(var(--space-1) - 1px);
+    width: 1px;
+    background: var(--color-border-strong);
+    transition: background var(--transition-fast);
+  }
+
+  &:hover::after,
+  &:focus-visible::after,
+  &.ws-col-resizer--active::after {
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--color-brand);
+  }
+}
+
+// During a drag the cursor stays a resize cursor wherever the pointer wanders, and no text is selected.
+body.ws-col-resizing,
+body.ws-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
