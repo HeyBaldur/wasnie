@@ -44,7 +44,12 @@
     "PASSWORD_RESET_SUCCESS": "Password updated. Sign in with your new password.",
     "BACK_TO_LOGIN": "Back to sign in",
     "ORGANIZATION_ID": "Organization identifier",
-    "ORGANIZATION_ID_HINT": "Only needed if your email is used in more than one workspace.",
+    "ORGANIZATION_ID_HINT": "The identifier of the workspace you were invited to. It is in your invitation email.",
+    "USER_TYPE": "User type",
+    "USER_TYPE_ADMIN": "Administrator",
+    "USER_TYPE_ADMIN_DESC": "For the account owner who administers the workspace — compensation plans, payouts and user access. Sign in with your email address and password.",
+    "USER_TYPE_MEMBER": "Team member",
+    "USER_TYPE_MEMBER_DESC": "For representatives and managers who operate inside an existing workspace. Sign in with your email address, password and the Organization identifier issued in your invitation.",
     "ORGANIZATION_REQUIRED": "This email is used in more than one workspace. Enter the organization identifier to continue."
   },
   "FORGOT_ORGANIZATION": {

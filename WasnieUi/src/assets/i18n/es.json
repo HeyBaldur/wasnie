@@ -44,7 +44,12 @@
     "PASSWORD_RESET_SUCCESS": "Contraseña actualizada. Inicia sesión con tu nueva contraseña.",
     "BACK_TO_LOGIN": "Volver a iniciar sesión",
     "ORGANIZATION_ID": "Identificador de organización",
-    "ORGANIZATION_ID_HINT": "Solo hace falta si su correo se usa en más de un espacio de trabajo.",
+    "ORGANIZATION_ID_HINT": "El identificador del espacio de trabajo al que le invitaron. Está en el correo de invitación.",
+    "USER_TYPE": "Tipo de usuario",
+    "USER_TYPE_ADMIN": "Administrador",
+    "USER_TYPE_ADMIN_DESC": "Para el titular de la cuenta que administra el espacio de trabajo: planes de compensación, pagos y accesos. Acceda con su correo electrónico y su contraseña.",
+    "USER_TYPE_MEMBER": "Miembro del equipo",
+    "USER_TYPE_MEMBER_DESC": "Para representantes y responsables que operan dentro de un espacio de trabajo ya existente. Acceda con su correo electrónico, su contraseña y el identificador de organización que consta en su invitación.",
     "ORGANIZATION_REQUIRED": "Este correo se usa en más de un espacio de trabajo. Introduzca el identificador de organización para continuar."
   },
   "FORGOT_ORGANIZATION": {

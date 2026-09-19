@@ -306,3 +306,42 @@
 
   &:hover { color: var(--color-brand-hover); }
 }
+
+/* ─── Tipo de usuario (pestañas) ─── */
+
+// El bloque se agrupa con menos aire del que separa los campos entre sí: la etiqueta, las pestañas
+// y la descripción son UNA cosa, y el hueco del formulario (`--space-5`) las habría desarmado.
+.login__user-type {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.login__user-type-label {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+// La descripción de la pestaña abierta. Es la mitad que explica QUÉ hace cada una; sin ella las
+// pestañas serían dos palabras y el usuario tendría que adivinar en cuál entra.
+.login__user-type-desc {
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+// El campo del identificador y su pista viajan juntos, igual que el bloque de arriba.
+.login__organization {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.login__hint {
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}

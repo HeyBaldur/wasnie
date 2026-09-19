@@ -92,19 +92,28 @@ describe('LoginComponent — remembering the Organization identifier', () => {
     expect(localStorage.getItem(KEY)).toBe('acme-polska');
   });
 
-  it('forgets the identifier when the field is submitted empty', async () => {
+  it('forgets the identifier when signing in as an administrator', async () => {
     localStorage.setItem(KEY, 'acme-corp');
 
     await mount();
+    // ★ LA PESTAÑA DE ADMINISTRADOR ES AHORA LA FORMA DE DECIR "deja de rellenarme esto". Antes el
+    // usuario vaciaba el campo a mano; hoy el campo sólo existe en la pestaña de miembro, y elegir
+    // la de administrador lo vacía. El efecto que importa es el mismo: el valor recordado se borra,
+    // porque dejarlo lo haría reaparecer en la siguiente visita.
+    fixture.componentInstance.selectUserType('admin');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.form.controls.organizationId.value).toBe('');
+
     signInWith('');
 
-    // ★ Emptying the field is somebody saying "stop filling this in". Leaving the old value would
-    // make it reappear on the next visit, which reads as the form undoing them.
     expect(localStorage.getItem(KEY)).toBeNull();
   });
 
   it('offers a way out to somebody who cannot remember it', async () => {
     await mount();
+    // El enlace vive junto al campo, y el campo vive en la pestaña de miembro.
+    fixture.componentInstance.selectUserType('member');
+    fixture.detectChanges();
 
     const link = (fixture.nativeElement as HTMLElement)
       .querySelector('a[href="/auth/forgot-organization"]');

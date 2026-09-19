@@ -7,15 +7,18 @@ import { AuthService } from '../../../core/services/auth.service';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
 import { LanguageToggleComponent } from '../../../shared/components/language-toggle/language-toggle.component';
-import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
+import { WsInputComponent, WsButtonComponent, WsTabsComponent, type WsTab } from '../../../shared/ui';
 import { ToastService } from '../../../shared/services/toast.service';
 import { SESSION_EXPIRED_NOTICE_KEY } from '../../../core/services/session-exit.service';
+
+/** Quién dice ser quien entra: el dueño del espacio de trabajo, o alguien invitado a uno. */
+export type LoginUserType = 'admin' | 'member';
 
 @Component({
   selector: 'app-login',
   standalone: true,
   imports: [ReactiveFormsModule, TranslatePipe, RouterLink, ThemeToggleComponent,
-    LanguageToggleComponent, WsInputComponent, WsButtonComponent],
+    LanguageToggleComponent, WsInputComponent, WsButtonComponent, WsTabsComponent],
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss',
 })
@@ -50,6 +53,53 @@ export class LoginComponent {
    */
   private static readonly LAST_ORGANIZATION_KEY = 'wasnie:last-organization';
 
+  /**
+   * Quién está entrando: el administrador del espacio de trabajo o alguien invitado a uno.
+   *
+   * ★ DOS PESTAÑAS, NO UN CAMPO QUE APARECE Y DESAPARECE. El identificador de organización sólo
+   * significa algo para quien fue invitado; al administrador le sobra. Separarlo en pestañas dice en
+   * una línea a quién le toca cada formulario, en vez de dejar un campo extra que la mayoría no sabe
+   * si tiene que rellenar.
+   *
+   * ★ ARRANCA EN «ADMINISTRADOR» SALVO QUE ESTE NAVEGADOR RECUERDE UN IDENTIFICADOR. Si lo recuerda,
+   * quien entró la última vez era un miembro del equipo, y abrir en su pestaña le ahorra el clic —
+   * además de que si no, el valor recordado quedaría escondido en una pestaña que no ve.
+   */
+  readonly userType = signal<LoginUserType>(
+    LoginComponent.rememberedOrganization() ? 'member' : 'admin'
+  );
+
+  readonly userTypeTabs: WsTab[] = [
+    { value: 'admin', label: 'AUTH.USER_TYPE_ADMIN' },
+    { value: 'member', label: 'AUTH.USER_TYPE_MEMBER' },
+  ];
+
+  /**
+   * Cambiar de pestaña cambia el formulario, no sólo lo que se ve.
+   *
+   * ★ LA PESTAÑA DE ADMINISTRADOR VACÍA EL CAMPO. Dejar un identificador escrito en un campo que ya
+   * no está en pantalla lo enviaría a ciegas: quien eligió «administrador» vería fallar el acceso
+   * por un valor que no puede ver ni corregir.
+   */
+  selectUserType(value: string): void {
+    const type: LoginUserType = value === 'member' ? 'member' : 'admin';
+    if (type === this.userType()) return;
+
+    this.userType.set(type);
+    this.error.set(null);
+
+    const organizationId = this.form.controls.organizationId;
+    if (type === 'admin') {
+      organizationId.setValue('');
+      organizationId.removeValidators(Validators.required);
+      organizationId.markAsUntouched();
+      this.organizationRequired.set(false);
+    } else {
+      organizationId.addValidators(Validators.required);
+    }
+    organizationId.updateValueAndValidity();
+  }
+
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', Validators.required],
@@ -68,6 +118,13 @@ export class LoginComponent {
   private readonly toast = inject(ToastService);
 
   constructor() {
+    // La pestaña de miembro pide el identificador; si la pantalla abre ya en ella (porque este
+    // navegador recuerda uno), la validación tiene que estar puesta desde el primer render.
+    if (this.userType() === 'member') {
+      this.form.controls.organizationId.addValidators(Validators.required);
+      this.form.controls.organizationId.updateValueAndValidity();
+    }
+
     // ★ EL AVISO DE SESIÓN CADUCADA SE MUESTRA AQUÍ, Y SÓLO UNA VEZ. Terminar una sesión recarga el
     // documento (es lo único que garantiza que no sobreviva en memoria nada del tenant anterior), y
     // esa recarga se lleva por delante cualquier toast pintado antes de salir. Quien terminó la
@@ -132,7 +189,11 @@ export class LoginComponent {
           // appears now rather than on first load, and the answer names no workspace — that list is
           // private, and returning it would tell whoever holds this password every company the
           // person works for.
+          //
+          // La pestaña cambia sola a la de miembro: el campo que falta sólo existe ahí, y dejar el
+          // aviso en la pestaña de administrador pediría algo que no está en pantalla.
           this.organizationRequired.set(true);
+          this.userType.set('member');
           this.form.controls.organizationId.addValidators(Validators.required);
           this.form.controls.organizationId.updateValueAndValidity();
           this.error.set(this.translate.instant('AUTH.ORGANIZATION_REQUIRED'));

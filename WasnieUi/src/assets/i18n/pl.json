@@ -44,7 +44,12 @@
     "PASSWORD_RESET_SUCCESS": "Hasło zostało zaktualizowane. Zaloguj się nowym hasłem.",
     "BACK_TO_LOGIN": "Powrót do logowania",
     "ORGANIZATION_ID": "Identyfikator organizacji",
-    "ORGANIZATION_ID_HINT": "Potrzebny tylko wtedy, gdy Twój adres jest używany w więcej niż jednej przestrzeni roboczej.",
+    "ORGANIZATION_ID_HINT": "Identyfikator przestrzeni roboczej, do której zostałeś zaproszony. Znajdziesz go w e-mailu z zaproszeniem.",
+    "USER_TYPE": "Typ użytkownika",
+    "USER_TYPE_ADMIN": "Administrator",
+    "USER_TYPE_ADMIN_DESC": "Dla właściciela konta, który administruje przestrzenią roboczą: planami wynagrodzeń, wypłatami i dostępem użytkowników. Zaloguj się adresem e-mail i hasłem.",
+    "USER_TYPE_MEMBER": "Członek zespołu",
+    "USER_TYPE_MEMBER_DESC": "Dla przedstawicieli i menedżerów pracujących w istniejącej przestrzeni roboczej. Zaloguj się adresem e-mail, hasłem oraz identyfikatorem organizacji podanym w zaproszeniu.",
     "ORGANIZATION_REQUIRED": "Ten adres e-mail jest używany w więcej niż jednej przestrzeni roboczej. Podaj identyfikator organizacji, aby kontynuować."
   },
   "FORGOT_ORGANIZATION": {

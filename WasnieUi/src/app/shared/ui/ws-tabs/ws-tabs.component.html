@@ -1,4 +1,9 @@
-<div class="ws-tabs" [class.ws-tabs--header]="variant() === 'header'" role="tablist">
+<div
+  class="ws-tabs"
+  [class.ws-tabs--header]="variant() === 'header'"
+  [class.ws-tabs--checked]="selectedCheck()"
+  role="tablist"
+>
   @for (tab of tabs(); track tab.value; let i = $index) {
     <div class="ws-tabs__item">
       <button
@@ -10,7 +15,12 @@
         (click)="select(tab.value)"
         (keydown)="onKeydown($event, i)"
       >
-        @if (tab.icon) {
+        @if (selectedCheck() && value() === tab.value) {
+          <!-- La marca de confirmación de la opción elegida. Va DENTRO del botón, no encima: lo que
+               confirma es esta pestaña, y flotarla sobre el borde la dejaría sin sitio en pantallas
+               estrechas. `aria-hidden` porque `aria-selected` ya lo dice al lector de pantalla. -->
+          <app-icon name="check-circle" [size]="16" class="ws-tabs__check" aria-hidden="true" />
+        } @else if (tab.icon) {
           <app-icon [name]="tab.icon" [size]="16" />
         }
         <span class="ws-tabs__label">{{ translateLabels() ? (tab.label | translate) : tab.label }}</span>
